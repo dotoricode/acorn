@@ -2,3 +2,5 @@
 dist/
 *.js
 *.d.ts
+*.js.map
+.DS_Store
