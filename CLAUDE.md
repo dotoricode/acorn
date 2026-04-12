@@ -81,3 +81,7 @@ npm run build:dev  개발용 전체 빌드
 ## 테스트
 
 npm test
+
+## 기획안
+
+docs/acorn-v1-plan.md 참조. 구현 시 이 문서를 기준으로 한다.
