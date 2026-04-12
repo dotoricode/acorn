@@ -1,19 +1,32 @@
 {
-  "name": "acorn",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "@dotoricode/acorn",
+  "version": "0.0.1",
+  "description": "Claude Code harness manager for OMC, gstack, and ECC",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "acorn": "dist/index.js"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "tsx src/index.ts",
+    "build": "tsc --project tsconfig.build.json",
+    "build:dev": "tsc",
+    "test": "node --test"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dotoricode/acorn.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "keywords": [
+    "claude-code",
+    "harness",
+    "cli",
+    "omc",
+    "gstack",
+    "everything-claude-code"
+  ],
+  "author": "dotoricode",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/dotoricode/acorn/issues"
   },
