@@ -519,7 +519,7 @@ direnv 설정 완료
 
 ### 개발 품질
 - [x] `npm run build` 성공 *(Sprint 0)*
-- [ ] `npm test` 통과 (lock.ts, settings.ts, env.ts 단위테스트)
+- [ ] `npm test` 통과 (lock.ts ✅ Sprint 2, settings.ts·env.ts 미구현)
 - [x] README 3절 (설치·사용·트러블슈팅) *(초안, Sprint 1 기준)*
 - [ ] `.github/workflows/ci.yml` placeholder 커밋
 

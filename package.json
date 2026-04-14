@@ -11,7 +11,7 @@
     "dev": "tsx src/index.ts",
     "build": "tsc --project tsconfig.build.json",
     "build:dev": "tsc",
-    "test": "node --test"
+    "test": "node --test --experimental-strip-types --no-warnings tests/**/*.test.ts"
   },
   "repository": {
     "type": "git",

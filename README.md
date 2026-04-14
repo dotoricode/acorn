@@ -37,9 +37,36 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1 완료)
+## 현재 구현된 기능 (Sprint 1~2 완료)
 
-### `hooks/guard-check.sh` — PreToolUse guard 훅
+### `src/core/lock.ts` — harness.lock 파서 (Sprint 2)
+
+`harness.lock` 파일을 읽고 schema 검증한 뒤 타입 안전한 객체로 반환한다.
+모든 검증 실패는 `LockError`로 throw하며 `code` 필드로 원인을 구분한다.
+
+```ts
+import { readLock, getTool, LockError } from '@dotoricode/acorn/core/lock';
+
+try {
+  const lock = readLock();              // 기본: ~/.claude/skills/harness/harness.lock
+  const omc = getTool(lock, 'omc');     // { repo, commit, verified_at }
+  console.log(lock.guard.mode);         // 'block' | 'warn' | 'log'
+} catch (e) {
+  if (e instanceof LockError) {
+    // e.code: 'NOT_FOUND' | 'PARSE' | 'SCHEMA' | 'IO'
+  }
+}
+```
+
+**검증 항목**
+- `schema_version === 1` (불일치 시 SCHEMA 에러)
+- `tools.{omc,gstack,ecc}` 3개 모두 존재
+- 각 tool: `repo` (`owner/name`), `commit` (40자 SHA1), `verified_at` (`YYYY-MM-DD`)
+- `guard.mode ∈ {block,warn,log}`, `guard.patterns ∈ {strict,moderate,minimal}`
+
+**경로 우선순위**: 함수 인자 > `ACORN_HARNESS_ROOT` env > `~/.claude/skills/harness/`
+
+### `hooks/guard-check.sh` — PreToolUse guard 훅 (Sprint 1)
 
 Claude Code `PreToolUse` 훅으로 Bash 툴 실행을 인터셉트하여 위험 커맨드를 차단한다.
 
@@ -144,7 +171,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 |---|---|---|
 | 0 | Node 24 LTS 전환, TS 안정성 | ✅ 완료 |
 | 1 | `hooks/guard-check.sh` | ✅ 완료 |
-| 2 | `src/core/lock.ts` | 🔲 |
+| 2 | `src/core/lock.ts` | ✅ 완료 |
 | 3 | `src/core/env.ts` | 🔲 |
 | 4 | `src/core/settings.ts` | 🔲 |
 | 5 | `src/core/symlink.ts` | 🔲 |

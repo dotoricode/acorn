@@ -82,6 +82,11 @@ npm run build:dev  개발용 전체 빌드
 
 npm test
 
+테스트는 tests/*.test.ts 에 작성한다.
+Node 24 의 --experimental-strip-types 모드로 직접 실행하므로
+TS 클래스의 parameter properties (constructor(readonly x: T)) 문법은 사용 불가.
+constructor 본문에서 명시적으로 필드 할당하는 방식을 따른다.
+
 ## 기획안
 
 docs/acorn-v1-plan.md 참조. 구현 시 이 문서를 기준으로 한다.
