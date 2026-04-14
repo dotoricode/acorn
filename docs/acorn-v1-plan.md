@@ -509,8 +509,8 @@ direnv 설정 완료
 - [ ] `acorn doctor` — 정상 상태에서 zero-issue
 - [ ] 심링크 하나 수동 삭제 후 `acorn doctor`가 정확 지적
 - [ ] `acorn doctor --json` 머신 판독 가능 구조
-- [ ] settings.json 기존 내용 보존 + env 3키만 추가 + backup 존재
-- [ ] 기존 env 키 충돌 시 에러+중단 (비파괴)
+- [x] settings.json 기존 내용 보존 + env 3키만 추가 + backup 존재 *(Sprint 4 — settings.ts)*
+- [x] 기존 env 키 충돌 시 에러+중단 (비파괴) *(Sprint 4 — SettingsError CONFLICT)*
 
 ### guard 동작
 - [x] `rm -rf /tmp/foo` → 차단 *(Sprint 1)*
@@ -519,7 +519,7 @@ direnv 설정 완료
 
 ### 개발 품질
 - [x] `npm run build` 성공 *(Sprint 0)*
-- [ ] `npm test` 통과 (lock.ts ✅ Sprint 2, env.ts ✅ Sprint 3, settings.ts 미구현)
+- [x] `npm test` 통과 (lock.ts ✅ S2, env.ts ✅ S3, settings.ts ✅ S4 — 43개 테스트)
 - [x] README 3절 (설치·사용·트러블슈팅) *(초안, Sprint 1 기준)*
 - [ ] `.github/workflows/ci.yml` placeholder 커밋
 

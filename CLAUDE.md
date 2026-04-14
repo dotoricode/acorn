@@ -87,6 +87,14 @@ Node 24 의 --experimental-strip-types 모드로 직접 실행하므로
 TS 클래스의 parameter properties (constructor(readonly x: T)) 문법은 사용 불가.
 constructor 본문에서 명시적으로 필드 할당하는 방식을 따른다.
 
+## 모듈 import 규칙
+
+src/ 내 모듈 간 import 는 .ts 확장자를 명시한다.
+  import { x } from './env.ts';
+tsconfig 에 allowImportingTsExtensions + rewriteRelativeImportExtensions 설정으로
+빌드 시 .js 로 자동 재작성된다.
+이 방식이 Node strip-types(직접 실행) 와 tsc 빌드를 동시에 만족시킨다.
+
 ## 기획안
 
 docs/acorn-v1-plan.md 참조. 구현 시 이 문서를 기준으로 한다.

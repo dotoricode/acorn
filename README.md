@@ -37,7 +37,41 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~3 완료)
+## 현재 구현된 기능 (Sprint 1~4 완료)
+
+### `src/core/settings.ts` — settings.json 멱등 머지 (Sprint 4)
+
+`~/.claude/settings.json`(또는 `CLAUDE_CONFIG_DIR/settings.json`)에 env 3키를 **비파괴적으로** 머지한다.
+재실행해도 같은 결과(멱등). 충돌 시 에러 + 중단, 파일 변경 없음.
+
+```ts
+import { installEnv, SettingsError } from '@dotoricode/acorn/core/settings';
+import { computeEnv } from '@dotoricode/acorn/core/env';
+
+try {
+  const r = installEnv({ desired: computeEnv() });
+  // r.action: 'add' | 'noop'
+  // r.added: 추가된 키 목록
+  // r.backupPath: 백업 파일 경로 (원본 부재 시 null)
+} catch (e) {
+  if (e instanceof SettingsError && e.code === 'CONFLICT') {
+    // 기존 env 키가 다른 값 — 사용자가 직접 정리 필요
+  }
+}
+```
+
+#### 머지 동작 매트릭스
+| 현재 상태 | 결과 |
+|---|---|
+| 키 없음 | **추가** |
+| 같은 값 | **no-op** |
+| 다른 값 | **CONFLICT 에러 + 중단** (비파괴) |
+
+#### 안전 장치
+- **원자적 쓰기**: 임시파일에 먼저 쓰고 `rename` (도중 중단되어도 원본 보존)
+- **백업**: `<harness>/backup/{ISO8601}/settings.json.bak`로 복사 후 쓰기
+- **CONFLICT 시 백업도 안 만듦**: 파일을 건드리지 않으므로 백업 불필요
+- **기존 키 보존**: env 외 다른 섹션(theme 등)은 그대로 유지
 
 ### `src/core/env.ts` — 환경변수 계산 (Sprint 3)
 
@@ -200,7 +234,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 | 1 | `hooks/guard-check.sh` | ✅ 완료 |
 | 2 | `src/core/lock.ts` | ✅ 완료 |
 | 3 | `src/core/env.ts` | ✅ 완료 |
-| 4 | `src/core/settings.ts` | 🔲 |
+| 4 | `src/core/settings.ts` | ✅ 완료 |
 | 5 | `src/core/symlink.ts` | 🔲 |
 | 6 | `src/commands/install.ts` | 🔲 |
 | 7 | `src/commands/status.ts` | 🔲 |
