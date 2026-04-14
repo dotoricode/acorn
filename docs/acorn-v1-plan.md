@@ -513,14 +513,14 @@ direnv 설정 완료
 - [ ] 기존 env 키 충돌 시 에러+중단 (비파괴)
 
 ### guard 동작
-- [ ] `rm -rf /tmp/foo` → 차단
-- [ ] `ACORN_GUARD_BYPASS=1` → 허용 + stderr 경고
-- [ ] 파싱 실패 → fail-close
+- [x] `rm -rf /tmp/foo` → 차단 *(Sprint 1)*
+- [x] `ACORN_GUARD_BYPASS=1` → 허용 + stderr 경고 *(Sprint 1)*
+- [x] 파싱 실패 → fail-close *(Sprint 1)*
 
 ### 개발 품질
-- [ ] `npm run build` 성공
+- [x] `npm run build` 성공 *(Sprint 0)*
 - [ ] `npm test` 통과 (lock.ts, settings.ts, env.ts 단위테스트)
-- [ ] README 3절 (설치·사용·트러블슈팅)
+- [x] README 3절 (설치·사용·트러블슈팅) *(초안, Sprint 1 기준)*
 - [ ] `.github/workflows/ci.yml` placeholder 커밋
 
 ---
