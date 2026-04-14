@@ -32,8 +32,10 @@ npm run build
 
 **요구사항**
 - Node.js 24.x (`.nvmrc` 참고, `nvm use` 권장)
-- bash (guard 훅 실행용)
+- bash (guard 훅 실행용 — Windows 는 Git Bash)
 - jq 권장 (없으면 node 폴백)
+
+> 머신 간 인계(Mac ↔ Windows)는 [docs/HANDOVER.md](docs/HANDOVER.md) 참조.
 
 ---
 

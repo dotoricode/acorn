@@ -99,6 +99,15 @@ tsconfig 에 allowImportingTsExtensions + rewriteRelativeImportExtensions 설정
 
 docs/acorn-v1-plan.md 참조. 구현 시 이 문서를 기준으로 한다.
 
+## 머신 간 인계 (Mac ↔ Windows)
+
+집(Windows)/회사(Mac) 머신을 오갈 때마다 docs/HANDOVER.md 를 먼저 읽고
+작업을 떠날 때는 §1 표(마지막 커밋, 진행 중 작업, 다음 작업)를 반드시 갱신한다.
+
+머신 변경 절차:
+  1. 떠나는 쪽: 커밋 + 빌드/테스트 검증 + push + HANDOVER.md §1 갱신
+  2. 받는 쪽: git pull --ff-only + nvm use 24 + npm install + npm test (55개 통과 확인)
+
 ## 작업 완료 시 문서 업데이트 지침
 
 각 Sprint 또는 기능 작업이 끝날 때마다 아래 3가지를 반드시 갱신한다.
