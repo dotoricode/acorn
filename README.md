@@ -37,7 +37,33 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~4 완료)
+## 현재 구현된 기능 (Sprint 1~5 완료)
+
+### `src/core/symlink.ts` — gstack 심링크 관리 (Sprint 5)
+
+gstack은 절대경로를 하드코딩한 부분이 있어 npm/clone 방식 대신 **디렉토리 심링크**로 설치한다.
+`<harness>/vendors/gstack/`을 `~/.claude/skills/gstack/`으로 링크.
+
+```ts
+import { installGstackSymlink, inspectSymlink, SymlinkError } from '@dotoricode/acorn/core/symlink';
+
+const r = installGstackSymlink();
+// r.action: 'created' | 'noop' | 'replaced'
+// r.previousLink: 교체 전 링크 (replaced 인 경우)
+```
+
+#### 동작 매트릭스
+| target 상태 | 결과 |
+|---|---|
+| 없음 | **created** (부모 디렉토리 자동 생성) |
+| 정확한 심링크 | **noop** (멱등) |
+| 다른 곳 가리키는 심링크 | **replaced** (이전 링크 정보 반환) |
+| 일반 디렉토리/파일 | **NOT_SYMLINK 에러** — 자동 교체 거부 (사용자 데이터 보호) |
+
+#### 안전 장치
+- **원자적 생성**: `.tmp` 링크 → `rename` (도중 중단 시 target 보존)
+- **NOT_SYMLINK 시 거부**: 사용자가 의도적으로 만든 디렉토리를 임의 삭제하지 않음
+- **크로스 플랫폼**: macOS/Linux는 `dir`, Windows는 `junction` symlink type
 
 ### `src/core/settings.ts` — settings.json 멱등 머지 (Sprint 4)
 
@@ -235,7 +261,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 | 2 | `src/core/lock.ts` | ✅ 완료 |
 | 3 | `src/core/env.ts` | ✅ 완료 |
 | 4 | `src/core/settings.ts` | ✅ 완료 |
-| 5 | `src/core/symlink.ts` | 🔲 |
+| 5 | `src/core/symlink.ts` | ✅ 완료 |
 | 6 | `src/commands/install.ts` | 🔲 |
 | 7 | `src/commands/status.ts` | 🔲 |
 | 8 | `src/commands/doctor.ts` | 🔲 |
