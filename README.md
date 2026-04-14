@@ -37,7 +37,34 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~2 완료)
+## 현재 구현된 기능 (Sprint 1~3 완료)
+
+### `src/core/env.ts` — 환경변수 계산 (Sprint 3)
+
+`harness.lock`의 vendors 경로로부터 Claude Code에 주입할 환경변수 3키를 계산하고,
+현재 `process.env`와의 차이를 분류한다.
+
+```ts
+import { computeEnv, diffEnv, isEnvFullyMatched } from '@dotoricode/acorn/core/env';
+
+const expected = computeEnv();    // ACORN_HARNESS_ROOT 또는 기본 경로 사용
+// {
+//   CLAUDE_PLUGIN_ROOT: '~/.claude/skills/harness/vendors',
+//   OMC_PLUGIN_ROOT:    '~/.claude/skills/harness/vendors/omc',
+//   ECC_ROOT:           '~/.claude/skills/harness/vendors/ecc',
+// }
+
+const diff = diffEnv(expected);   // 각 키별 status: match | missing | mismatch
+if (!isEnvFullyMatched(diff)) {
+  // status / doctor 가 사용자에게 알려야 할 상태
+}
+```
+
+| 키 | 용도 |
+|---|---|
+| `CLAUDE_PLUGIN_ROOT` | OMC + ECC 공통 플러그인 루트 |
+| `OMC_PLUGIN_ROOT` | OMC 전용 |
+| `ECC_ROOT` | ECC 전용 |
 
 ### `src/core/lock.ts` — harness.lock 파서 (Sprint 2)
 
@@ -172,7 +199,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 | 0 | Node 24 LTS 전환, TS 안정성 | ✅ 완료 |
 | 1 | `hooks/guard-check.sh` | ✅ 완료 |
 | 2 | `src/core/lock.ts` | ✅ 완료 |
-| 3 | `src/core/env.ts` | 🔲 |
+| 3 | `src/core/env.ts` | ✅ 완료 |
 | 4 | `src/core/settings.ts` | 🔲 |
 | 5 | `src/core/symlink.ts` | 🔲 |
 | 6 | `src/commands/install.ts` | 🔲 |
