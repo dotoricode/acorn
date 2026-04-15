@@ -39,7 +39,44 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~7 완료)
+## 현재 구현된 기능 (Sprint 1~8 완료)
+
+### `src/commands/doctor.ts` — 진단 + 권장 조치 (Sprint 8)
+
+`collectStatus()` 위에 FS 재검증과 액션 힌트를 얹어 issue 배열을 생성.
+
+```ts
+import { runDoctor, renderDoctor, renderDoctorJson } from '@dotoricode/acorn/commands/doctor';
+
+const report = runDoctor();
+console.log(renderDoctor(report));
+if (!report.ok) process.exit(1);
+
+// CI·외부 파이프라인용
+const raw = renderDoctorJson(report);
+```
+
+출력 예 (이슈 발견):
+```
+acorn doctor  •  ~/.claude/skills/harness
+발견된 이슈: critical=1 warning=1 info=0
+
+⛔  [vendor] omc
+   vendor 미설치: omc (기대 SHA 04655ee)
+   → acorn install 을 실행하면 자동 clone
+
+⚠️  [vendor] gstack
+   gstack SHA 불일치 (lock=c6e6a21, 실제=abc1234)
+   → 의도적 변경이면 harness.lock 갱신. 아니면 dirty 없음을 확인한 뒤 ...
+```
+
+각 이슈는 `{area, severity, subject, message, hint}` 구조로 — area 는
+`vendor|env|symlink|tx|lock|settings`. `renderDoctorJson` 은 전체 리포트를 JSON 으로.
+
+doctor 는 status 와 달리 다음을 추가 검사:
+- vendor 디렉토리가 실제로 비어있지는 않은지
+- vendor 가 dirty 상태인지 (`git status --porcelain`)
+- 각 이슈별 구체적인 수동 복구 힌트
 
 ### `src/commands/status.ts` — 읽기 전용 상태 요약 (Sprint 7)
 
@@ -392,7 +429,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 | 5 | `src/core/symlink.ts` | ✅ 완료 |
 | 6 | `src/commands/install.ts` + `src/core/vendors.ts` | ✅ 완료 |
 | 7 | `src/commands/status.ts` | ✅ 완료 |
-| 8 | `src/commands/doctor.ts` | 🔲 |
+| 8 | `src/commands/doctor.ts` | ✅ 완료 |
 | 9 | `src/index.ts` (CLI 라우터) | 🔲 |
 | 10 | README 정비 + CI placeholder | 🔲 (본 문서 초안) |
 

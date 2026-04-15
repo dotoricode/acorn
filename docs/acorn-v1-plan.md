@@ -512,9 +512,10 @@ direnv 설정 완료
 - [ ] fresh macOS 실환경 검증 (실 git clone 포함)
 - [x] `acorn status` 오케스트레이션 (`collectStatus` + `renderStatus` + `summarize`) — 3개 툴 + guard + env 3키 + gstack 심링크 *(Sprint 7)*
 - [ ] `acorn status` CLI 래퍼 (Sprint 9)
-- [ ] `acorn doctor` — 정상 상태에서 zero-issue
-- [ ] 심링크 하나 수동 삭제 후 `acorn doctor`가 정확 지적
-- [ ] `acorn doctor --json` 머신 판독 가능 구조
+- [x] `acorn doctor` 오케스트레이션 (`runDoctor`) — 정상 상태에서 zero-issue *(Sprint 8)*
+- [x] 심링크 수동 삭제 후 `runDoctor` 가 critical 로 정확 지적 *(Sprint 8, 테스트 포함)*
+- [x] `renderDoctorJson` 머신 판독 가능 구조 `{ok, issues[], tools, env, ...}` *(Sprint 8)*
+- [ ] `acorn doctor` CLI 래퍼 + `--json` 플래그 (Sprint 9)
 - [x] settings.json 기존 내용 보존 + env 3키만 추가 + backup 존재 *(Sprint 4 — settings.ts)*
 - [x] 기존 env 키 충돌 시 에러+중단 (비파괴) *(Sprint 4 — SettingsError CONFLICT)*
 - [x] preflight 단계에서 settings 충돌 감지 시 vendors 변경 없이 중단 *(Sprint 6)*
@@ -530,7 +531,7 @@ direnv 설정 완료
 
 ### 개발 품질
 - [x] `npm run build` 성공 *(Sprint 0)*
-- [x] `npm test` 통과 (S2~S7 — 94개 테스트)
+- [x] `npm test` 통과 (S2~S8 — 103개 테스트)
 - [x] README 3절 (설치·사용·트러블슈팅) *(초안, Sprint 1 기준)*
 - [ ] `.github/workflows/ci.yml` placeholder 커밋
 
