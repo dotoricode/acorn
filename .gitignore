@@ -1,8 +1,14 @@
-﻿node_modules/
+node_modules/
 dist/
 *.js
 *.d.ts
 *.js.map
 .DS_Store
 .omc/
-.omc/
+
+# 도그푸딩 raw 로그 — 의도적 미추적 (정책: docs/DOGFOOD.md 참조)
+# 절대경로·호스트명·stderr 등 포함, 머신간 머지 분쟁 회피용.
+# 정제된 요약만 docs/DOGFOOD.md § Round N 에 commit.
+acorn-dogfood.log
+acorn-dogfood.*.log
+*.dogfood.log
