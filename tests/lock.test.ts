@@ -54,6 +54,27 @@ test('parseLock: JSON 파싱 실패 → LockError(PARSE)', () => {
   });
 });
 
+test('parseLock: UTF-8 BOM 접두부 자동 제거 (Windows 에디터 저장 대응)', () => {
+  // Windows 메모장 등이 UTF-8 로 저장 시 \uFEFF BOM 을 삽입.
+  // 이 경우에도 정상 파싱되어야 한다.
+  const withBom = '\uFEFF' + JSON.stringify(VALID_LOCK);
+  const lock = parseLock(withBom);
+  assert.equal(lock.schema_version, SCHEMA_VERSION);
+  assert.equal(lock.acorn_version, '0.0.0-dev');
+});
+
+test('readLock: BOM 이 포함된 파일도 정상 읽기', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-lock-bom-'));
+  const path = join(dir, 'harness.lock');
+  writeFileSync(path, '\uFEFF' + JSON.stringify(VALID_LOCK), 'utf8');
+  try {
+    const lock = readLock(path);
+    assert.equal(lock.tools.omc.repo, 'Yeachan-Heo/oh-my-claudecode');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('parseLock: schema_version 불일치 → LockError(SCHEMA)', () => {
   const bad = { ...VALID_LOCK, schema_version: 2 };
   assert.throws(() => parseLock(JSON.stringify(bad)), (e: unknown) => {

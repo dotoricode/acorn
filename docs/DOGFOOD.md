@@ -13,7 +13,7 @@
 
 ### v0.1.1 hotfix 큐 (실사용으로 실증된 것)
 
-1. **lock.ts BOM 처리** — Windows 에디터로 lock 저장 시 UTF-8 BOM 이 `JSON.parse` 터뜨림. `parseLock` 진입부에 `raw = raw.replace(/^\uFEFF/, '');` + 테스트
+1. ~~**lock.ts BOM 처리**~~ ✅ — Windows 에디터로 lock 저장 시 UTF-8 BOM 이 `JSON.parse` 터뜨림. `parseLock` 진입부에서 `\uFEFF` 1바이트 제거 + 테스트 2건 추가 *(v0.1.1-hotfix)*
 2. **schema_version 필드 누락 메시지** — 현재 `"기대 1, 실제 undefined"` 가 혼란. "schema_version 필드 누락" 별도 메시지로 분리
 3. **SETTINGS_CONFLICT / NOT_A_REPO hint 일관성** — doctor 는 hint 를 주지만 install 에러는 "무엇이 문제" 만. 다음 행동(rm / mv / config) 힌트를 install 에러에도 부여
 4. **CLI `--run-gstack-setup` 플래그** — `gstackSetup` 콜백이 프로그램 API 전용. CLI 사용자는 수동 `cd vendors/gstack && ./setup` 필요. defaultGstackSetup 을 `<source>/setup --host auto` spawn 으로 구현

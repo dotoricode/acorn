@@ -94,9 +94,13 @@ function validateGuard(raw: unknown): GuardConfig {
 }
 
 export function parseLock(raw: string): HarnessLock {
+  // Windows 에디터가 UTF-8 BOM 을 삽입한 경우 JSON.parse 가 실패한다.
+  // fail-close 원칙 위반 없이 조용히 제거한다. (DOGFOOD Round 1 §v0.1.1 #1)
+  const stripped = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+
   let data: unknown;
   try {
-    data = JSON.parse(raw);
+    data = JSON.parse(stripped);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     throw new LockError(`JSON 파싱 실패: ${msg}`, 'PARSE');
