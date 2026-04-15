@@ -20,6 +20,7 @@ import {
 import {
   installVendor,
   defaultGitRunner,
+  VendorError,
   type GitRunner,
   type InstallVendorResult,
 } from '../core/vendors.ts';
@@ -36,11 +37,13 @@ export type InstallErrorCode =
 export class InstallError extends Error {
   readonly code: InstallErrorCode;
   readonly cause?: unknown;
-  constructor(message: string, code: InstallErrorCode, cause?: unknown) {
+  readonly hint?: string;
+  constructor(message: string, code: InstallErrorCode, cause?: unknown, hint?: string) {
     super(message);
     this.name = 'InstallError';
     this.code = code;
     this.cause = cause;
+    if (hint !== undefined) this.hint = hint;
   }
 }
 
@@ -74,6 +77,34 @@ function noopLogger(): (_line: string) => void {
   return () => undefined;
 }
 
+/**
+ * vendor 설치 실패 원인별 다음-행동 hint.
+ * install 에러도 doctor 수준의 구체적 조치를 제공하기 위함 (DOGFOOD Round 1 §v0.1.1 #3).
+ */
+function vendorHint(name: ToolName, cause: unknown, vendorsRootPath: string): string | undefined {
+  if (!(cause instanceof VendorError)) return undefined;
+  const vPath = `${vendorsRootPath}/${name}`;
+  switch (cause.code) {
+    case 'NOT_A_REPO':
+      return (
+        `${vPath} 이 git 저장소가 아닙니다. ` +
+        `수동 설치물이면 rm -rf ${vPath} 또는 mv ${vPath} ${vPath}.bak 후 재실행.`
+      );
+    case 'LOCAL_CHANGES':
+      return (
+        `${vPath} 에 커밋되지 않은 변경이 있습니다. ` +
+        `git -C ${vPath} status 확인 후 커밋/stash 또는 restore 후 재실행.`
+      );
+    case 'CLONE':
+      return `네트워크/권한 확인. 재시도: acorn install`;
+    case 'CHECKOUT':
+    case 'REV_PARSE':
+      return `git -C ${vPath} fsck 로 저장소 무결성 확인.`;
+    default:
+      return undefined;
+  }
+}
+
 export function runInstall(opts: InstallOptions = {}): InstallResult {
   const log = opts.logger ?? noopLogger();
   const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
@@ -88,6 +119,8 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
       `이전 설치 미완료 감지 (ts=${pending.ts}, phase=${pending.phase ?? 'begin'}). ` +
         `수동 검사 후 ${harnessRoot}/tx.log 정리 또는 --force 재실행 필요.`,
       'IN_PROGRESS',
+      undefined,
+      `상태 확인: cat ${harnessRoot}/tx.log | tail -20  •  문제 없으면: acorn install --force`,
     );
   }
 
@@ -138,11 +171,15 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   const current = readSettings(settingsPath);
   const plan = planMerge(current, desired);
   if (plan.action === 'conflict') {
+    const keys = plan.conflicts.map((c) => c.key).join(', ');
     throw new InstallError(
       `settings.json 에 env 키 충돌: ${plan.conflicts
         .map((c) => `${c.key} (현재="${c.current}", 기대="${c.desired}")`)
         .join('; ')}`,
       'SETTINGS_CONFLICT',
+      undefined,
+      `${settingsPath} 에서 env.${keys} 를 제거하거나 기대값으로 수정 후 재실행 ` +
+        `(백업: ${settingsPath}.bak 은 install 단계에서 자동 생성)`,
     );
   }
 
@@ -170,6 +207,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
         `vendor 설치 실패 (${name}): ${e instanceof Error ? e.message : String(e)}`,
         'VENDOR',
         e,
+        vendorHint(name, e, vRoot),
       );
     }
   }
@@ -233,12 +271,15 @@ function runInstallInner(ctx: InnerContext): InstallResult {
         `settings.json 충돌 (preflight 이후 변경됨): ${e.message}`,
         'SETTINGS_CONFLICT',
         e,
+        `${settingsPath} 가 preflight 이후 외부에서 수정됐습니다. ` +
+          `충돌 env 키를 수정/제거 후 재실행.`,
       );
     }
     throw new InstallError(
       `settings.json 쓰기 실패: ${e instanceof Error ? e.message : String(e)}`,
       'SETTINGS_WRITE',
       e,
+      `디스크 권한 / 파일시스템 확인 후 재실행. 백업: ${settingsPath}.bak`,
     );
   }
 

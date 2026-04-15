@@ -100,7 +100,10 @@ function parseArgs(args: readonly string[]): ParsedArgs {
 }
 
 function formatError(e: unknown): string {
-  if (e instanceof InstallError) return `[install/${e.code}] ${e.message}`;
+  if (e instanceof InstallError) {
+    const head = `[install/${e.code}] ${e.message}`;
+    return e.hint ? `${head}\n   → ${e.hint}` : head;
+  }
   if (e instanceof LockError) return `[lock/${e.code}] ${e.message}`;
   if (e instanceof VendorError) return `[vendor/${e.code}/${e.tool}] ${e.message}`;
   if (e instanceof SettingsError) return `[settings/${e.code}] ${e.message}`;

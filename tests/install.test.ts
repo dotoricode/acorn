@@ -206,7 +206,11 @@ test('runInstall: settings 충돌 시 preflight 단계에서 중단 (vendors 변
           skipGstackSetup: true,
         }),
       (err: unknown) =>
-        err instanceof InstallError && err.code === 'SETTINGS_CONFLICT',
+        err instanceof InstallError &&
+        err.code === 'SETTINGS_CONFLICT' &&
+        typeof err.hint === 'string' &&
+        err.hint.length > 0 &&
+        /제거|수정/.test(err.hint),
     );
     // vendors not created
     assert.equal(existsSync(join(w.harnessRoot, 'vendors', 'omc')), false);
@@ -328,7 +332,10 @@ test('runInstall: 이전 tx 미완료 → IN_PROGRESS 에러', () => {
           skipGstackSetup: true,
         }),
       (err: unknown) =>
-        err instanceof InstallError && err.code === 'IN_PROGRESS',
+        err instanceof InstallError &&
+        err.code === 'IN_PROGRESS' &&
+        typeof err.hint === 'string' &&
+        /tx\.log|--force/.test(err.hint),
     );
   } finally {
     w.cleanup();
@@ -382,6 +389,38 @@ test('runInstall: 설치 중 실패 → tx.abort 기록 + lastInProgress=null', 
       (err: unknown) => err instanceof InstallError,
     );
     assert.equal(lastInProgress(w.harnessRoot), null);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runInstall: 기존 non-git 경로 → VENDOR 에러 + NOT_A_REPO hint', () => {
+  // DOGFOOD Round 1 §v0.1.1 #3: install 에러에도 doctor 수준 next-action hint 필요.
+  const w = makeWorkspace();
+  try {
+    // vendors/omc 에 git 저장소가 아닌 디렉토리 선점
+    const squatted = join(w.harnessRoot, 'vendors', 'omc');
+    mkdirSync(squatted, { recursive: true });
+    writeFileSync(join(squatted, 'hello.txt'), 'not a repo', 'utf8');
+
+    const git = makeFakeGit({ heads: new Map() });
+    assert.throws(
+      () =>
+        runInstall({
+          lockPath: w.lockPath,
+          harnessRoot: w.harnessRoot,
+          claudeRoot: w.claudeRoot,
+          settingsPath: w.settingsPath,
+          git,
+          skipGstackSetup: true,
+        }),
+      (err: unknown) =>
+        err instanceof InstallError &&
+        err.code === 'VENDOR' &&
+        typeof err.hint === 'string' &&
+        /rm -rf|mv /.test(err.hint) &&
+        err.hint.includes('vendors'),
+    );
   } finally {
     w.cleanup();
   }
