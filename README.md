@@ -39,7 +39,48 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~8 완료)
+## 현재 구현된 기능 (Sprint 1~9 완료)
+
+### `src/index.ts` — CLI 라우터 (Sprint 9)
+
+`npm run build` 후 `acorn` 바이너리가 실제 터미널 커맨드로 동작한다.
+
+```bash
+# 빌드 후 npm link (글로벌 설치) 또는 직접 실행
+npm run build
+node dist/index.js --version        # 0.1.0
+node dist/index.js --help
+node dist/index.js install           # harness.lock 기준 설치
+node dist/index.js status            # 상태 요약
+node dist/index.js status --json     # 기계 판독용
+node dist/index.js doctor            # 진단 + 복구 힌트
+node dist/index.js doctor --json
+node dist/index.js install --force   # tx.log in_progress 우회
+```
+
+#### Exit code 규약
+
+| code | 의미 |
+|---|---|
+| `0` | 성공 (OK) |
+| `1` | 일반 실패 (FAILURE) |
+| `64` | 사용법 오류 (USAGE — 알 수 없는 커맨드) |
+| `75` | 재시도 가능 (IN_PROGRESS — 이전 설치 미완료) |
+| `78` | 설정 오류 (CONFIG — settings 충돌, lock 스키마) |
+
+Shell 스크립트·CI 에서 status/doctor 의 exit code 로 분기 가능:
+
+```bash
+if ! node dist/index.js status --json > /tmp/acorn.json; then
+  echo "설치 이슈 있음 — doctor 실행 중"
+  node dist/index.js doctor
+fi
+```
+
+#### 에러 메시지 포맷
+
+각 에러는 `[area/code] 메시지` 프리픽스로 stderr 에 출력.
+예: `[vendor/CLONE/omc] clone 실패: ...`, `[install/IN_PROGRESS] 이전 설치 ...`.
 
 ### `src/commands/doctor.ts` — 진단 + 권장 조치 (Sprint 8)
 
@@ -430,7 +471,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 | 6 | `src/commands/install.ts` + `src/core/vendors.ts` | ✅ 완료 |
 | 7 | `src/commands/status.ts` | ✅ 완료 |
 | 8 | `src/commands/doctor.ts` | ✅ 완료 |
-| 9 | `src/index.ts` (CLI 라우터) | 🔲 |
+| 9 | `src/index.ts` (CLI 라우터) | ✅ 완료 |
 | 10 | README 정비 + CI placeholder | 🔲 (본 문서 초안) |
 
 ---
