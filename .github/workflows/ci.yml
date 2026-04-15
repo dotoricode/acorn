@@ -1,0 +1,47 @@
+# acorn CI — v0.1.0 placeholder
+#
+# 이 워크플로우는 v0.1.1 에서 활성화 예정 (plan §4 P8).
+# v0.1.0 에서는 구조만 커밋하고 실행하지 않는다.
+#
+# 활성화 방법: 아래 `on:` 섹션의 주석을 풀고 branch 이름을 확인한다.
+
+name: CI
+
+# v0.1.1 까지 비활성 — workflow_dispatch 만 유지
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node 24 build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: CLI smoke
+        run: node dist/index.js --version

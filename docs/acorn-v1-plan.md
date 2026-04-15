@@ -533,7 +533,10 @@ direnv 설정 완료
 - [x] `npm run build` 성공 *(Sprint 0)*
 - [x] `npm test` 통과 (S2~S9 — 110개 테스트)
 - [x] README 3절 (설치·사용·트러블슈팅) *(초안, Sprint 1 기준)*
-- [ ] `.github/workflows/ci.yml` placeholder 커밋
+- [x] `.github/workflows/ci.yml` placeholder 커밋 *(Sprint 10, workflow_dispatch 만 활성)*
+- [x] CHANGELOG.md 초안 *(Sprint 10)*
+- [x] package.json version 0.0.1 → 0.1.0 *(Sprint 10)*
+- [x] README 빠른 시작 · Exit code 규약 섹션 재편 *(Sprint 10)*
 
 ---
 

@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-15 (Sprint 9 완료 시점)
+> 마지막 갱신: 2026-04-15 (Sprint 10 완료 — **v0.1.0 릴리즈 준비 완료**)
 
 ---
 
@@ -10,11 +10,12 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` |
-| 마지막 커밋 | `feat(sprint-9): src/index.ts — CLI 라우터` (본 커밋 직후 SHA 기록) |
-| 진행 중 작업 | **없음** — Sprint 9 완전 종료. **터미널에서 `acorn` 커맨드 동작** |
-| 다음 작업 | **Sprint 10 — docs 정비 + CI placeholder** (반일, v0.1.0 마지막 스프린트) |
-| Done Definition 진척 | 기능 전 항목 ✅, CI placeholder 1개만 남음 |
+| 마지막 커밋 | `docs(sprint-10): v0.1.0 릴리즈 준비` (본 커밋 직후 SHA 기록) |
+| 진행 중 작업 | **없음** — v0.1.0 10스프린트(+6.5) 완료 |
+| 다음 작업 | **v0.1.0 git tag** + (선택) v0.2.0 로드맵 (uninstall/config/list/doctor --fix) |
+| Done Definition 진척 | 전 항목 ✅ |
 | 테스트 | 110/110 통과 |
+| 버전 | package.json `0.1.0` |
 
 ---
 

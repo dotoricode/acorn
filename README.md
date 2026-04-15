@@ -2,8 +2,9 @@
 
 Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
-> **Status**: v0.1.0 개발 중 (Radical MVP).
+> **Status**: v0.1.0 Radical MVP — 기능 완성, 릴리즈 정리 중
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
+> 변경 이력: [`CHANGELOG.md`](CHANGELOG.md)
 
 ---
 
@@ -19,68 +20,79 @@ Claude Code 하네스 생태계의 세 툴(OMC / gstack / ECC)을 **검증된 SH
 
 ---
 
-## 설치
-
-v0.1.0은 아직 npm publish 전이며 git 태그 기반 사설 배포다.
+## 빠른 시작
 
 ```bash
+# 1. 부트스트랩
 git clone https://github.com/dotoricode/acorn.git
 cd acorn
+nvm use 24     # Node 24.x 필요
 npm install
 npm run build
+
+# 2. 전역 연결 (개발 중 권장)
+npm link       # 이후 어디서든 `acorn` 호출 가능
+
+# 3. 일상 사용
+acorn install        # harness.lock 기준 설치
+acorn status         # 3툴 + guard + env 요약
+acorn doctor         # 이슈 + 수동 복구 힌트
+acorn status --json  # 기계 판독
 ```
 
 **요구사항**
 - Node.js 24.x (`.nvmrc` 참고, `nvm use` 권장)
 - bash (guard 훅 실행용 — Windows 는 Git Bash)
 - jq 권장 (없으면 node 폴백)
+- `git` (vendors clone 용)
+
+**환경변수**
+- `ACORN_HARNESS_ROOT` — harness 루트 (기본: `$CLAUDE_CONFIG_DIR/skills/harness` 또는 `~/.claude/skills/harness`)
+- `CLAUDE_CONFIG_DIR` — Claude Code 설정 루트 (direnv 사용 시)
+- `ACORN_GUARD_BYPASS=1` — guard 훅 1회 우회
+- `ACORN_GUARD_MODE=block|warn|log` — guard 모드 오버라이드
 
 > 머신 간 인계(Mac ↔ Windows)는 [docs/HANDOVER.md](docs/HANDOVER.md) 참조.
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~9 완료)
-
-### `src/index.ts` — CLI 라우터 (Sprint 9)
-
-`npm run build` 후 `acorn` 바이너리가 실제 터미널 커맨드로 동작한다.
-
-```bash
-# 빌드 후 npm link (글로벌 설치) 또는 직접 실행
-npm run build
-node dist/index.js --version        # 0.1.0
-node dist/index.js --help
-node dist/index.js install           # harness.lock 기준 설치
-node dist/index.js status            # 상태 요약
-node dist/index.js status --json     # 기계 판독용
-node dist/index.js doctor            # 진단 + 복구 힌트
-node dist/index.js doctor --json
-node dist/index.js install --force   # tx.log in_progress 우회
-```
-
-#### Exit code 규약
+## Exit code 규약
 
 | code | 의미 |
 |---|---|
-| `0` | 성공 (OK) |
-| `1` | 일반 실패 (FAILURE) |
-| `64` | 사용법 오류 (USAGE — 알 수 없는 커맨드) |
-| `75` | 재시도 가능 (IN_PROGRESS — 이전 설치 미완료) |
-| `78` | 설정 오류 (CONFIG — settings 충돌, lock 스키마) |
+| `0` | 성공 |
+| `1` | 일반 실패 (drift, critical issue 등) |
+| `64` | 사용법 오류 (알 수 없는 커맨드) |
+| `75` | 재시도 가능 (tx.log in_progress — `--force` 로 재실행) |
+| `78` | 설정 오류 (settings 충돌, lock 스키마) |
 
-Shell 스크립트·CI 에서 status/doctor 의 exit code 로 분기 가능:
+모든 에러는 `[area/code] 메시지` 프리픽스로 stderr 출력.
+예: `[vendor/CLONE/omc]`, `[install/IN_PROGRESS]`, `[lock/NOT_FOUND]`.
 
-```bash
-if ! node dist/index.js status --json > /tmp/acorn.json; then
-  echo "설치 이슈 있음 — doctor 실행 중"
-  node dist/index.js doctor
-fi
-```
+---
 
-#### 에러 메시지 포맷
+## 구성 모듈 (v0.1.0)
 
-각 에러는 `[area/code] 메시지` 프리픽스로 stderr 에 출력.
-예: `[vendor/CLONE/omc] clone 실패: ...`, `[install/IN_PROGRESS] 이전 설치 ...`.
+핵심 구현은 크게 3개 오케스트레이터(`commands/`) + 6개 코어 모듈(`core/`) + 1개 훅 스크립트.
+각 모듈은 독립적으로 import 가능하며 `GitRunner` 등 주요 외부 의존성은 주입식이다.
+
+| 계층 | 모듈 | 역할 |
+|---|---|---|
+| CLI | `src/index.ts` | argv 라우팅 + exit code 매핑 |
+| commands | `install.ts` | 7단계 preflight-우선 설치 파이프라인 |
+| commands | `status.ts` | 읽기 전용 상태 요약 + JSON |
+| commands | `doctor.ts` | 진단 + 이슈별 복구 힌트 |
+| core | `lock.ts` | harness.lock 스키마 검증 |
+| core | `env.ts` | 환경변수 3키 계산 + diff |
+| core | `settings.ts` | settings.json 멱등 머지 + 원자 쓰기 |
+| core | `symlink.ts` | gstack 디렉토리 심링크 원자 교체 |
+| core | `vendors.ts` | git clone + SHA 핀 + dirty 감지 |
+| core | `tx.ts` | install 트랜잭션 로그 (JSONL) |
+| hook | `hooks/guard-check.sh` | PreToolUse 위험 커맨드 차단 |
+
+---
+
+## 아키텍처 상세 (Sprint 1~9)
 
 ### `src/commands/doctor.ts` — 진단 + 권장 조치 (Sprint 8)
 
@@ -472,7 +484,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 | 7 | `src/commands/status.ts` | ✅ 완료 |
 | 8 | `src/commands/doctor.ts` | ✅ 완료 |
 | 9 | `src/index.ts` (CLI 라우터) | ✅ 완료 |
-| 10 | README 정비 + CI placeholder | 🔲 (본 문서 초안) |
+| 10 | README 정비 + CI placeholder | ✅ 완료 |
 
 ---
 
