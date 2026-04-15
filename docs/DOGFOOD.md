@@ -8,9 +8,103 @@
 ## 관찰 원칙
 
 - **상상하지 말고 쓴다** — 기능 검토가 아니라 실제 작업 흐름에서 acorn 을 꺼내 쓴다
-- **걸리는 순간 즉시 기록** — "사소하다" 느껴도 일단 log 에 1줄
-- **수정하지 않는다** — 버그 발견해도 v0.1.0 코드는 **건드리지 않음**. 기록만. 쌓이면 v0.1.1 로 한 번에 처리
+- **정량 데이터는 자동** — 실행 기록·exit code·stderr 는 wrapper 가 알아서 저장. 아래 "자동 로거" 참고
+- **정성 관찰은 수동** — "불편하다", "이상하다" 감각은 `dn` 으로 1줄 메모 (사람 판단 필요)
+- **수정하지 않는다** — 버그 발견해도 v0.1.0 코드는 **건드리지 않음**. 쌓이면 v0.1.1 로 한 번에 처리
 - **유일한 예외**: 실제로 하루 작업을 막는 블로커는 hotfix 브랜치에서 즉시 수정
+
+---
+
+## 자동 로거 (정량 수집) — 1회 셋업
+
+`scripts/dogfood/` 에 wrapper 3종이 있다. 한 번만 alias 등록하면 이후 자동 로깅.
+
+### Mac (zsh)
+
+```bash
+# ~/.zshrc 에 추가
+export ACORN_REPO=~/01_private/acorn
+alias adog="$ACORN_REPO/scripts/dogfood/wrap.sh"
+alias dn="$ACORN_REPO/scripts/dogfood/note.sh"
+alias dreport="$ACORN_REPO/scripts/dogfood/report.sh"
+# (선택) 로그 위치 커스터마이즈
+# export ACORN_DOGFOOD_LOG=~/acorn-dogfood.log
+```
+
+### Windows (Git Bash, `~/.bashrc`)
+
+```bash
+export ACORN_REPO=/d/dotoricode/acorn
+alias adog="$ACORN_REPO/scripts/dogfood/wrap.sh"
+alias dn="$ACORN_REPO/scripts/dogfood/note.sh"
+alias dreport="$ACORN_REPO/scripts/dogfood/report.sh"
+```
+
+재로그인 또는 `source ~/.zshrc`.
+
+### 사용법
+
+```bash
+# acorn 대신 adog 로 호출 — 실행결과는 동일, 백그라운드에서 로깅됨
+adog install
+adog status --json | jq .
+adog doctor --force
+
+# 이상한 걸 발견하면 1줄 메모 (라벨 선택: bug ux idea question blocker)
+dn ux "status 출력에 personal/work 구분이 없어 헷갈림"
+dn bug "doctor --json 의 hint 에서 줄바꿈이 리터럴 \\n 으로 찍힘"
+dn idea "acorn sync 한 커맨드로 drift 수복되면 매일 씀"
+
+# 누적 요약 — 언제든
+dreport
+```
+
+출력 예 (`dreport`):
+```
+=== acorn 도그푸딩 요약 ===
+로그: /Users/.../acorn-dogfood.log  (47 줄)
+기간: 2026-04-16T09:12:03+09:00 → 2026-04-19T18:04:11+09:00
+실행: 18 회,  메모: 7 건
+
+--- 서브커맨드 실행 분포 ---
+   9 status
+   5 install
+   3 doctor
+   1 --version
+
+--- exit code 분포 ---
+  15 exit=0
+   2 exit=1
+   1 exit=64
+
+--- 라벨별 메모 ---
+  bug: 2
+  ux: 3
+  idea: 2
+```
+
+로그는 **로컬 파일**이며 레포에 커밋되지 않는다 (`~/acorn-dogfood.log` 기본값).
+
+### 자동으로 수집되는 것
+
+- 타임스탬프 (ISO8601)
+- 호스트명 (Mac/Windows 구분용)
+- 작업 디렉토리
+- 전체 커맨드 + 인자
+- exit code
+- 소요 시간 (초)
+- 실패 시 stderr 마지막 5줄
+
+### 여전히 수동으로 필요한 것
+
+- UX 불편함 ("이 화면 오래 봐야 이해됨")
+- 기능 제안 ("이런 게 있으면 좋겠다")
+- false positive / true positive 판단
+- v0.1.1 / v0.2.0 / v0.3.0 분류 (도그푸딩 종료 시)
+
+**자동으로 못 잡는 부분이 오히려 가치 있는 데이터**다. 한 줄씩 남겨라.
+
+---
 
 ---
 
@@ -243,30 +337,13 @@ fi
 
 ---
 
-## 관찰 로그 템플릿 (`~/acorn-dogfood.md`)
+## 관찰 로그 (자동 + 수동 합쳐 한 파일)
 
-하루치 블록:
+모든 기록은 `$ACORN_DOGFOOD_LOG` (기본 `~/acorn-dogfood.log`) 에 append 된다.
+실행 기록은 wrapper 가, 메모는 `dn` 이 같은 파일에 쓴다.
 
-```markdown
-## 2026-04-16 (Mac / personal)
-
-### 실행
-- acorn install → OK (3.2s, 모두 cloned)
-- acorn status → ✅
-
-### 불편 / 이상 (1줄씩)
-- [UX] `install` 끝나고 한국어 + 영어 섞여있음. 로그 포맷 통일?
-- [BUG?] backup/ 폴더가 install 돌 때마다 생김 → GC 필요 체감
-- [예상 외] doctor --json 의 issues[].hint 에서 줄바꿈 문자가 이스케이프 안 됨
-
-### 개선 아이디어
-- acorn status 에 "마지막 install 시각" 노출하면 편할 듯
-
-### 분류
-- v0.1.1: [없음]
-- v0.2.0: backup GC, status last-install 필드
-- v0.3.0+: 로그 포맷 통일
-```
+필요하면 같은 디렉토리에 별도 `~/acorn-dogfood.md` 를 만들어
+주간 요약·회고를 써도 되지만 **필수 아님**. `dreport` 출력을 그대로 다음 세션에 가져와도 충분.
 
 ---
 
@@ -292,9 +369,9 @@ fi
 
 ## 종료 후 다음 세션 브리핑 재료
 
-1. `~/acorn-dogfood.md` 원문
-2. v0.1.1 / v0.2.0 분류 요약
-3. 가장 의외였던 발견 3개
-4. **실제로 얼마나 썼나 솔직히** (일 몇 번, 안 쓴 날은 왜)
+1. `dreport` 출력 (정량 전부 — 실행 횟수, 실패 분포, 메모 전량)
+2. v0.1.1 / v0.2.0 분류 요약 (사람 판단)
+3. 가장 의외였던 발견 3개 (사람 판단)
+4. **실제로 얼마나 썼나 솔직히** — `dreport` 의 "실행 N 회" 가 숫자로 말해줌. 안 쓴 날은 왜?
 
 이 네 가지 들고 와서 v0.1.1 착수 세션 시작.
