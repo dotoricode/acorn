@@ -5,6 +5,56 @@
 
 ---
 
+## Round 1 기록 — 2026-04-15 (Mac personal, ~40분)
+
+**환경**: macOS, `CLAUDE_CONFIG_DIR=~/.claude-personal`, direnv, npm link 로 전역 acorn
+**시나리오 진행**: Fresh install → SETTINGS 충돌 해소 → NOT_A_REPO 해소 → 전 녹색 → gstack `./setup` 실행
+**dreport 요약**: 실행 12회 · exit=0 5회(42%) · exit=78 3회 · exit=1 4회 · 메모 3건
+
+### v0.1.1 hotfix 큐 (실사용으로 실증된 것)
+
+1. **lock.ts BOM 처리** — Windows 에디터로 lock 저장 시 UTF-8 BOM 이 `JSON.parse` 터뜨림. `parseLock` 진입부에 `raw = raw.replace(/^\uFEFF/, '');` + 테스트
+2. **schema_version 필드 누락 메시지** — 현재 `"기대 1, 실제 undefined"` 가 혼란. "schema_version 필드 누락" 별도 메시지로 분리
+3. **SETTINGS_CONFLICT / NOT_A_REPO hint 일관성** — doctor 는 hint 를 주지만 install 에러는 "무엇이 문제" 만. 다음 행동(rm / mv / config) 힌트를 install 에러에도 부여
+4. **CLI `--run-gstack-setup` 플래그** — `gstackSetup` 콜백이 프로그램 API 전용. CLI 사용자는 수동 `cd vendors/gstack && ./setup` 필요. defaultGstackSetup 을 `<source>/setup --host auto` spawn 으로 구현
+5. **vendors/gstack dirty 처리** — gstack `./setup` 이 repo-local `.agents/skills/` 생성해 **매번 dirty 로 판정됨**. acorn 측에서 expected dirty paths 허용 리스트 또는 업스트림 `.gitignore` 패치 제안
+
+### v0.2.0 후보 (재확인된 것)
+
+1. **기존 수동 설치 편입** — `acorn install --adopt` 로 현 env/심링크/vendors 상태를 lock 기준으로 흡수. SETTINGS_CONFLICT / NOT_A_REPO 를 파괴적 대응 없이 처리
+2. **`acorn config`** — jq/zsh 저글링 대신 `acorn config env.reset` 류 helper. 사용자 수술 불필요
+3. **`acorn lock` 도구** — init / validate / bump-acorn-version. 현재 lock 직접 편집 필수라 v0.1.0 도 `acorn_version: "0.0.0-dev"` 같은 사고 방지 못함
+4. **partial 설치 지원** — `tools.<name>.external_path` 또는 `exclude` 로 일부 툴은 사용자 개발 레포 그대로 유지 (실제 ECC 를 `~/01_private/everything-claude-code` 로 개발 중)
+5. **doctor hint 구조화** — `hint` 가 현재 평문 한 줄. `actions: [{cmd, description}]` 배열로 구조화하면 프론트엔드 자동화 가능
+
+### 긍정 관찰 (v0.1.0 설계가 실증된 것)
+
+- ✅ **preflight 가 실 사고 방지** — SETTINGS_CONFLICT 3회 발생, 전부 파일 무변경으로 중단
+- ✅ **NOT_A_REPO 가 사용자 심링크 보호** — `vendors/ecc/everything-claude-code` (개발 레포 심링크) 를 acorn 이 함부로 덮어쓰지 않음
+- ✅ **tx.log 흐름 정상** — begin/phase/abort 가 실패 시 자동 기록, 최종 pendingTx null 유지
+- ✅ **doctor 가 dirty 정확 감지** — gstack `.agents/` 생성 즉시 warning
+- ✅ **status --json 이 jq 로 잘 읽힘** — 실 CI 파이프라인 그대로 사용 가능
+- ✅ **npm link + adog wrapper 가 자연스럽게 통합** — 평소처럼 치되 로깅은 자동
+
+### 오답·함정 (세션 중 실수 기록)
+
+- `{setup,install}*.sh` glob 으로 gstack setup 못 찾고 "실존 안 함" 오판정 → README 확인 후 `./setup` (확장자 없음) 발견 → 정정
+- `--host claude-code` 추천은 틀림. 정답은 `--host claude` 또는 default `auto` (이미 자동감지 성공)
+- `"$SETTINGS.fixed"` zsh 파라미터 확장에서 엉킴 → `${SETTINGS}.fixed` 또는 tempfile 로 회피
+
+### 다음 라운드 준비
+
+- Round 2 시작 조건: Round 1 로부터 3일 이상 + 자연스럽게 acorn 을 쓴 실행 로그 5건 이상 누적
+- 또는: Windows (집) 머신에서 같은 시나리오 돌리기 (2머신 drift 실전)
+- 가져와야 할 것: `dreport` 최신 + `git status --short` (`vendors/*` 모두) + 새로 쌓인 `dn` 메모
+
+### 미해결 파편 (세션 종료 시점)
+
+- `~/.claude-personal/skills/harness/vendors/gstack` 에 `connect-chrome` 파일 `D` (삭제) 상태 — gstack `./setup` 이 삭제. 원인 미조사
+- gstack dirty (`.agents/*` untracked) — 현재 상태 유지, doctor 가 warning 으로 계속 표시할 것
+
+---
+
 ## 관찰 원칙
 
 - **상상하지 말고 쓴다** — 기능 검토가 아니라 실제 작업 흐름에서 acorn 을 꺼내 쓴다

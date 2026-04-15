@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-15 (v0.1.0 태그 + 도그푸딩 단계 진입)
+> 마지막 갱신: 2026-04-15 (도그푸딩 Round 1 완료)
 
 ---
 
@@ -10,11 +10,11 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main`, 태그 `v0.1.0` push 완료 |
-| 마지막 코드 커밋 | `docs(sprint-10): v0.1.0 릴리즈 준비` (`758dacf`) |
-| 진행 중 작업 | **도그푸딩 1~2주** — 실 2머신에서 v0.1.0 굴리며 관찰 로그 수집 |
-| 다음 작업 | 도그푸딩 종료 후 **v0.1.1 hotfix** (9/10 리뷰 HIGH 2건 + 도그푸딩 발견 이슈) → **v0.2.0 S1 (registry 스키마 확장)** |
+| 진행 중 작업 | **도그푸딩 Round 2 대기** — Round 1 (Mac personal) 완료, 자연사용 누적 또는 Windows 실측 필요 |
+| 다음 작업 | 도그푸딩 몇 일 누적 후 → **v0.1.1 hotfix** (DOGFOOD.md Round 1 § v0.1.1 큐 5건) → **v0.2.0 S1 (registry 스키마 확장)** |
 | 테스트 | 110/110 통과, 버전 `0.1.0` |
-| 도그푸딩 가이드 | `docs/DOGFOOD.md` — 시나리오 9개 + 관찰 로그 템플릿 + 분류 기준 |
+| Round 1 결과 | `docs/DOGFOOD.md` § Round 1 — 실사용 40분, v0.1.1 5건 / v0.2.0 5건 발견, 긍정 관찰 6건 |
+| 실사용 환경 | Mac personal, CLAUDE_CONFIG_DIR=~/.claude-personal, ECC 는 로컬 개발 레포 `~/01_private/everything-claude-code` 별도 관리 |
 
 ---
 
