@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-15 (도그푸딩 Round 1 완료)
+> 마지막 갱신: 2026-04-16 (Windows / v0.1.1 hotfix 5건 구현 완료)
 
 ---
 
@@ -9,11 +9,11 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main`, 태그 `v0.1.0` push 완료 |
-| 진행 중 작업 | **도그푸딩 Round 2 대기** — Round 1 (Mac personal) 완료, 자연사용 누적 또는 Windows 실측 필요 |
-| 다음 작업 | 도그푸딩 몇 일 누적 후 → **v0.1.1 hotfix** (DOGFOOD.md Round 1 § v0.1.1 큐 5건) → **v0.2.0 S1 (registry 스키마 확장)** |
-| 테스트 | 110/110 통과, 버전 `0.1.0` |
-| Round 1 결과 | `docs/DOGFOOD.md` § Round 1 — 실사용 40분, v0.1.1 5건 / v0.2.0 5건 발견, 긍정 관찰 6건 |
+| 브랜치 | `hotfix/v0.1.1` — 로컬 커밋 5건 (미푸시, 미머지, 미태그) |
+| 진행 중 작업 | **v0.1.1 릴리스 마무리 대기** — package.json 0.1.1 bump + CHANGELOG + README + 이 문서 커밋 완료, `main` 머지 / 태그 / push 는 **사용자 검토 후** |
+| 다음 작업 | (a) hotfix/v0.1.1 → main 머지 + `v0.1.1` 태그 + push → (b) 도그푸딩 Round 2 (가능하면 Windows 실측) → (c) v0.2.0 S1 (registry 스키마 확장) |
+| 테스트 | Windows: 107/120 (13 실패 모두 EPERM 심링크·경로구분자 — 기존부터 동일). Mac 기준 120/120 예상. |
+| v0.1.1 내용 | `docs/DOGFOOD.md` § Round 1 v0.1.1 큐 5건 모두 `[x]`. 커밋 5개 순서: `aea3fdc` lock BOM → `730368f` schema_version 누락 → `e6dcdc2` install hint → `849fdad` --run-gstack-setup → `ddbc8a6` EXPECTED_DIRTY_PATHS |
 | 실사용 환경 | Mac personal, CLAUDE_CONFIG_DIR=~/.claude-personal, ECC 는 로컬 개발 레포 `~/01_private/everything-claude-code` 별도 관리 |
 
 ---

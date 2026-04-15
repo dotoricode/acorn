@@ -2,7 +2,7 @@
 
 Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
-> **Status**: v0.1.0 Radical MVP — 기능 완성, 도그푸딩 단계
+> **Status**: v0.1.1 — 도그푸딩 Round 1 기반 hotfix 반영
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
 > 변경 이력: [`CHANGELOG.md`](CHANGELOG.md)
@@ -35,11 +35,17 @@ npm run build
 npm link       # 이후 어디서든 `acorn` 호출 가능
 
 # 3. 일상 사용
-acorn install        # harness.lock 기준 설치
-acorn status         # 3툴 + guard + env 요약
-acorn doctor         # 이슈 + 수동 복구 힌트
-acorn status --json  # 기계 판독
+acorn install                     # harness.lock 기준 설치
+acorn install --run-gstack-setup  # + gstack setup --host auto 자동 실행
+acorn status                      # 3툴 + guard + env 요약
+acorn doctor                      # 이슈 + 수동 복구 힌트
+acorn status --json               # 기계 판독
 ```
+
+**install 플래그**
+- `--force` — 이전 `tx.log in_progress` 우회 (수동 검사 후 사용)
+- `--skip-gstack-setup` — gstack setup 콜백 생략
+- `--run-gstack-setup` — `<vendors/gstack>/setup --host auto` 자동 실행 (v0.1.1+) · `--skip` 과 상호 배타
 
 **요구사항**
 - Node.js 24.x (`.nvmrc` 참고, `nvm use` 권장)

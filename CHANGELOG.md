@@ -3,6 +3,21 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.1.1] — 2026-04-16
+
+도그푸딩 Round 1 (Mac personal, 40분 실사용) 관찰 기반 hotfix 5건.
+
+### Fixed
+
+- **lock.ts BOM 처리**: Windows 에디터로 저장 시 삽입되는 UTF-8 BOM(`\uFEFF`)이 `JSON.parse` 를 터뜨리던 문제. `parseLock` 진입부에서 선행 BOM 1바이트 자동 제거. `readLock` 포함 + 테스트 2건.
+- **schema_version 필드 누락 메시지**: 필드 자체가 없을 때 `"기대 1, 실제 undefined"` 로 표시되어 혼란. 누락과 값 불일치를 분리해 각각 `"schema_version 필드 누락"` / `"schema_version 불일치: 기대 1, 실제 X"` 로 출력.
+- **install 에러 hint 일관성**: doctor 수준의 구체적 next-action hint 를 `InstallError` 에도 부여. `IN_PROGRESS` / `SETTINGS_CONFLICT` (preflight + post-write) / `SETTINGS_WRITE` + vendor cause 기반 (`NOT_A_REPO` / `LOCAL_CHANGES` / `CLONE` / `CHECKOUT` / `REV_PARSE`) 별 메시지. `formatError` 가 `→ <hint>` 로 출력.
+- **vendors dirty 오판정**: gstack `./setup` 이 생성한 `.agents/skills/` 가 매 install 마다 LOCAL_CHANGES 를 유발하던 문제. `GitRunner.getDirtyPaths(dir)` + 툴별 `EXPECTED_DIRTY_PATHS` 허용 리스트 (`gstack: ['.agents/']`) 도입. install 과 doctor 모두 동일 필터. LOCAL_CHANGES 메시지에 오염 경로 상위 5건 표시.
+
+### Added
+
+- **`acorn install --run-gstack-setup`**: CLI 사용자용 기본 gstack setup 실행. `<gstackSource>/setup --host auto` 를 spawn (Windows 는 `shell:true` 로 POSIX 스크립트 Git Bash/WSL 경유). 스크립트 부재 / 비정상 종료 / 시그널 종료 모두 fail-close. `--skip-gstack-setup` 과 상호 배타.
+
 ## [0.1.0] — 2026-04-15
 
 Radical MVP 릴리즈 — 10 스프린트(+ 6.5 안정화) 완료.
