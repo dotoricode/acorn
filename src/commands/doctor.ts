@@ -7,7 +7,11 @@ import {
   type CollectOptions,
   type ToolStatus,
 } from './status.ts';
-import { defaultGitRunner, type GitRunner } from '../core/vendors.ts';
+import {
+  defaultGitRunner,
+  unexpectedDirtyPaths,
+  type GitRunner,
+} from '../core/vendors.ts';
 
 export type DoctorSeverity = 'critical' | 'warning' | 'info';
 export type DoctorArea =
@@ -74,12 +78,21 @@ function checkVendorIntegrity(
     };
   }
   try {
-    if (git.isDirty(vendorPath)) {
+    // 툴별 EXPECTED_DIRTY_PATHS (예: gstack 의 .agents/) 는 setup 부산물로 간주.
+    const paths = git.getDirtyPaths
+      ? git.getDirtyPaths(vendorPath)
+      : git.isDirty(vendorPath)
+        ? (['<unknown>'] as const)
+        : ([] as const);
+    const unexpected = unexpectedDirtyPaths(tool.tool, paths);
+    if (unexpected.length > 0) {
       return {
         area: 'vendor',
         severity: 'warning',
         subject: tool.tool,
-        message: `vendor 에 로컬 변경이 있음: ${vendorPath}`,
+        message:
+          `vendor 에 로컬 변경이 있음: ${vendorPath} ` +
+          `(paths: ${unexpected.slice(0, 5).join(', ')}${unexpected.length > 5 ? ' ...' : ''})`,
         hint:
           'git -C <path> status 로 확인 후 커밋·스태시·버림 중 선택. ' +
           'acorn install 은 dirty tree 를 감지하면 중단됨.',

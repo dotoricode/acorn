@@ -17,7 +17,7 @@
 2. ~~**schema_version 필드 누락 메시지**~~ ✅ — 현재 `"기대 1, 실제 undefined"` 가 혼란. `in` 연산자로 누락을 먼저 감지해 "schema_version 필드 누락" 메시지 분리 + 테스트 1건 추가 *(v0.1.1-hotfix)*
 3. ~~**SETTINGS_CONFLICT / NOT_A_REPO hint 일관성**~~ ✅ — `InstallError` 에 `hint?: string` 추가, `IN_PROGRESS` / `SETTINGS_CONFLICT` / `SETTINGS_WRITE` + vendor cause 기반 (`NOT_A_REPO`/`LOCAL_CHANGES`/`CLONE`/`CHECKOUT`/`REV_PARSE`) 별 hint 부여, `formatError` 는 `→` 로 출력, 테스트 3건 업데이트/추가 *(v0.1.1-hotfix)*
 4. ~~**CLI `--run-gstack-setup` 플래그**~~ ✅ — `defaultGstackSetup` 함수 추가 (`<source>/setup --host auto` spawn, Windows 는 shell:true), `--run-gstack-setup` CLI 플래그 + `--skip-gstack-setup` 상호배타 검증, 스모크 테스트 1건 *(v0.1.1-hotfix)*
-5. **vendors/gstack dirty 처리** — gstack `./setup` 이 repo-local `.agents/skills/` 생성해 **매번 dirty 로 판정됨**. acorn 측에서 expected dirty paths 허용 리스트 또는 업스트림 `.gitignore` 패치 제안
+5. ~~**vendors/gstack dirty 처리**~~ ✅ — `GitRunner.getDirtyPaths` 추가 (fallback: isDirty), 툴별 `EXPECTED_DIRTY_PATHS` 상수 (`gstack: ['.agents/']`), `unexpectedDirtyPaths` prefix 필터로 install 의 LOCAL_CHANGES 판정과 doctor 의 dirty warning 동일 규칙 적용, 테스트 5건 추가 *(v0.1.1-hotfix)*
 
 ### v0.2.0 후보 (재확인된 것)
 

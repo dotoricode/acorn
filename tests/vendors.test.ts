@@ -13,6 +13,8 @@ import {
   installVendor,
   toRepoUrl,
   VendorError,
+  unexpectedDirtyPaths,
+  EXPECTED_DIRTY_PATHS,
   type GitRunner,
 } from '../src/core/vendors.ts';
 
@@ -20,13 +22,21 @@ const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
 
 interface FakeCall {
-  readonly op: 'clone' | 'checkout' | 'revParse' | 'isGitRepo' | 'isDirty';
+  readonly op:
+    | 'clone'
+    | 'checkout'
+    | 'revParse'
+    | 'isGitRepo'
+    | 'isDirty'
+    | 'getDirtyPaths';
   readonly args: readonly string[];
 }
 
 interface FakeGitState {
   headByDir: Map<string, string>;
   dirtyDirs?: Set<string>;
+  /** Per-directory dirty path list (for EXPECTED_DIRTY_PATHS testing). */
+  dirtyPathsByDir?: Map<string, readonly string[]>;
   cloneBehavior?: (repoUrl: string, dir: string) => void;
   checkoutBehavior?: (dir: string, commit: string) => void;
   failRevParse?: boolean;
@@ -66,7 +76,17 @@ function makeFakeGit(state: FakeGitState): { git: GitRunner; calls: FakeCall[] }
     },
     isDirty(dir) {
       calls.push({ op: 'isDirty', args: [dir] });
+      if (state.dirtyPathsByDir?.has(dir)) {
+        return (state.dirtyPathsByDir.get(dir) ?? []).length > 0;
+      }
       return state.dirtyDirs?.has(dir) ?? false;
+    },
+    getDirtyPaths(dir) {
+      calls.push({ op: 'getDirtyPaths', args: [dir] });
+      const explicit = state.dirtyPathsByDir?.get(dir);
+      if (explicit) return explicit;
+      if (state.dirtyDirs?.has(dir)) return ['<unknown>'];
+      return [];
     },
   };
   return { git, calls };
@@ -170,7 +190,8 @@ test('installVendor: 다른 SHA → checkout → checked_out', () => {
     assert.equal(r.previousCommit, SHA_A);
     assert.equal(r.commit, SHA_B);
     const ops = calls.map((c) => c.op);
-    assert.deepEqual(ops, ['isGitRepo', 'revParse', 'isDirty', 'checkout', 'revParse']);
+    // getDirtyPaths 가 구현되면 isDirty 를 건너뜀 (더 정밀한 정보로 대체).
+    assert.deepEqual(ops, ['isGitRepo', 'revParse', 'getDirtyPaths', 'checkout', 'revParse']);
   } finally {
     w.cleanup();
   }
@@ -345,6 +366,123 @@ test('installVendor: 멱등 — 두 번째 호출은 noop', () => {
       git,
     });
     assert.equal(r2.action, 'noop');
+  } finally {
+    w.cleanup();
+  }
+});
+
+// ─── EXPECTED_DIRTY_PATHS (DOGFOOD Round 1 §v0.1.1 #5) ────────────────
+
+test('EXPECTED_DIRTY_PATHS: gstack 에 .agents/ 등록됨', () => {
+  assert.ok(EXPECTED_DIRTY_PATHS['gstack']?.includes('.agents/'));
+  assert.deepEqual(EXPECTED_DIRTY_PATHS['omc'], []);
+});
+
+test('unexpectedDirtyPaths: prefix 매칭으로 허용 경로 필터', () => {
+  // gstack 의 .agents/ 만 있으면 빈 배열 (= 정상 취급)
+  assert.deepEqual(
+    unexpectedDirtyPaths('gstack', ['.agents/skills/foo', '.agents/pkgs/bar']),
+    [],
+  );
+  // .agents/ 외 다른 경로는 그대로 남음
+  assert.deepEqual(
+    unexpectedDirtyPaths('gstack', ['.agents/skills/foo', 'src/modified.ts']),
+    ['src/modified.ts'],
+  );
+  // omc 는 허용 목록 없음 → 전부 unexpected
+  assert.deepEqual(
+    unexpectedDirtyPaths('omc', ['.agents/foo']),
+    ['.agents/foo'],
+  );
+  // 모르는 툴 이름 → 전부 unexpected (안전 쪽)
+  assert.deepEqual(
+    unexpectedDirtyPaths('unknown-tool', ['whatever']),
+    ['whatever'],
+  );
+});
+
+test('installVendor: gstack 에 .agents/ 만 dirty → checkout 허용', () => {
+  // DOGFOOD 증상: 첫 install 후 gstack setup 이 생성한 .agents/ 가 남아있어
+  // 다음 install(새 SHA) 이 LOCAL_CHANGES 로 막히던 문제.
+  const w = makeWorkspace();
+  try {
+    const path = join(w.vendorsRoot, 'gstack');
+    mkdirSync(join(path, '.git'), { recursive: true });
+    const heads = new Map<string, string>();
+    heads.set(path, SHA_A);
+    const { git } = makeFakeGit({
+      headByDir: heads,
+      dirtyPathsByDir: new Map([[path, ['.agents/skills/cli.md']]]),
+    });
+    const r = installVendor({
+      tool: 'gstack',
+      repo: 'org/gstack',
+      commit: SHA_B,
+      vendorsRoot: w.vendorsRoot,
+      git,
+    });
+    assert.equal(r.action, 'checked_out');
+    assert.equal(r.commit, SHA_B);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('installVendor: gstack 에 .agents/ + 다른 파일 dirty → LOCAL_CHANGES', () => {
+  // .agents/ 는 허용되지만 다른 경로가 섞이면 여전히 막아야 한다.
+  const w = makeWorkspace();
+  try {
+    const path = join(w.vendorsRoot, 'gstack');
+    mkdirSync(join(path, '.git'), { recursive: true });
+    const heads = new Map<string, string>();
+    heads.set(path, SHA_A);
+    const { git } = makeFakeGit({
+      headByDir: heads,
+      dirtyPathsByDir: new Map([
+        [path, ['.agents/skills/cli.md', 'src/main.ts']],
+      ]),
+    });
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'gstack',
+          repo: 'org/gstack',
+          commit: SHA_B,
+          vendorsRoot: w.vendorsRoot,
+          git,
+        }),
+      (err: unknown) =>
+        err instanceof VendorError &&
+        err.code === 'LOCAL_CHANGES' &&
+        err.message.includes('src/main.ts'),
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('installVendor: omc 에 .agents/ dirty → LOCAL_CHANGES (omc 는 허용 없음)', () => {
+  const w = makeWorkspace();
+  try {
+    const path = join(w.vendorsRoot, 'omc');
+    mkdirSync(join(path, '.git'), { recursive: true });
+    const heads = new Map<string, string>();
+    heads.set(path, SHA_A);
+    const { git } = makeFakeGit({
+      headByDir: heads,
+      dirtyPathsByDir: new Map([[path, ['.agents/whatever']]]),
+    });
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'omc',
+          repo: 'org/omc',
+          commit: SHA_B,
+          vendorsRoot: w.vendorsRoot,
+          git,
+        }),
+      (err: unknown) => err instanceof VendorError && err.code === 'LOCAL_CHANGES',
+    );
   } finally {
     w.cleanup();
   }
