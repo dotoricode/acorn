@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { defaultHarnessRoot } from './env.ts';
 
 export const SCHEMA_VERSION = 1 as const;
 export const TOOL_NAMES = ['omc', 'gstack', 'ecc'] as const;
@@ -42,11 +42,7 @@ export class LockError extends Error {
 }
 
 export function defaultLockPath(harnessRoot?: string): string {
-  const root =
-    harnessRoot ??
-    process.env['ACORN_HARNESS_ROOT'] ??
-    join(homedir(), '.claude', 'skills', 'harness');
-  return join(root, 'harness.lock');
+  return join(harnessRoot ?? defaultHarnessRoot(), 'harness.lock');
 }
 
 const SHA1_RE = /^[a-f0-9]{40}$/i;

@@ -39,7 +39,24 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~6 완료)
+## 현재 구현된 기능 (Sprint 1~6.5 완료)
+
+### Sprint 6.5 — 안정화 (3/10 + 6/10 마일스톤 회고 반영)
+
+마일스톤 회고 에이전트 리뷰로 드러난 이슈를 Sprint 7 착수 전에 흡수.
+
+- **vendors**: checkout 실패 시 partial clone 정리, git 명령어 120초 timeout,
+  `readCurrentCommit()` 헬퍼, dirty working tree 감지 (`LOCAL_CHANGES` 에러)
+- **symlink**: `createDirSymlink` 이 기존 심링크를 `rename` 으로 원자 교체 (TOCTOU 제거),
+  `inspectGstackSymlink()` 헬퍼 추가 (status/doctor 용)
+- **install**: 모든 단계를 `tx.log` 트랜잭션으로 감쌈. 이전 실행이 `commit` 이나 `abort` 없이
+  중단된 경우 다음 `runInstall` 은 `IN_PROGRESS` 에러로 차단 (`--force` 로 우회)
+- **settings**: `atomicWriteJson` rename 실패 시 tmp 파일 정리
+- **paths 단일화**: `defaultHarnessRoot` / `defaultClaudeRoot` 를 `env.ts` 로 단일화,
+  `CLAUDE_CONFIG_DIR` 존중 버그 수정 (direnv 환경에서 올바른 harness 루트 선택)
+- **guard**: `push --force-with-lease` 는 차단 제외 (안전한 강제푸시 관용구)
+
+테스트: 71 → 86개 (+15)
 
 ### `src/commands/install.ts` — 설치 오케스트레이터 (Sprint 6)
 

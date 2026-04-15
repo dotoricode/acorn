@@ -22,16 +22,33 @@ test('defaultHarnessRoot: ACORN_HARNESS_ROOT 우선', () => {
   }
 });
 
-test('defaultHarnessRoot: env 없으면 ~/.claude/skills/harness', () => {
-  const original = process.env['ACORN_HARNESS_ROOT'];
+test('defaultHarnessRoot: ACORN_HARNESS_ROOT 없고 CLAUDE_CONFIG_DIR 만 있을 때', () => {
+  const origHarness = process.env['ACORN_HARNESS_ROOT'];
+  const origConfig = process.env['CLAUDE_CONFIG_DIR'];
   delete process.env['ACORN_HARNESS_ROOT'];
+  process.env['CLAUDE_CONFIG_DIR'] = '/custom/claude';
+  try {
+    assert.equal(defaultHarnessRoot(), join('/custom/claude', 'skills', 'harness'));
+  } finally {
+    if (origHarness !== undefined) process.env['ACORN_HARNESS_ROOT'] = origHarness;
+    if (origConfig === undefined) delete process.env['CLAUDE_CONFIG_DIR'];
+    else process.env['CLAUDE_CONFIG_DIR'] = origConfig;
+  }
+});
+
+test('defaultHarnessRoot: env 없으면 ~/.claude/skills/harness', () => {
+  const origHarness = process.env['ACORN_HARNESS_ROOT'];
+  const origConfig = process.env['CLAUDE_CONFIG_DIR'];
+  delete process.env['ACORN_HARNESS_ROOT'];
+  delete process.env['CLAUDE_CONFIG_DIR'];
   try {
     assert.equal(
       defaultHarnessRoot(),
       join(homedir(), '.claude', 'skills', 'harness'),
     );
   } finally {
-    if (original !== undefined) process.env['ACORN_HARNESS_ROOT'] = original;
+    if (origHarness !== undefined) process.env['ACORN_HARNESS_ROOT'] = origHarness;
+    if (origConfig !== undefined) process.env['CLAUDE_CONFIG_DIR'] = origConfig;
   }
 });
 

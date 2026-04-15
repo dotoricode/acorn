@@ -5,10 +5,16 @@ import {
   mkdirSync,
   existsSync,
   copyFileSync,
+  unlinkSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { ENV_KEYS, type EnvKey, type EnvMap } from './env.ts';
+import {
+  ENV_KEYS,
+  defaultClaudeRoot,
+  defaultHarnessRoot,
+  type EnvKey,
+  type EnvMap,
+} from './env.ts';
 
 export type SettingsErrorCode = 'PARSE' | 'CONFLICT' | 'IO';
 
@@ -36,9 +42,7 @@ export interface EnvConflict {
 export type SettingsObject = Record<string, unknown>;
 
 export function defaultSettingsPath(): string {
-  const dir =
-    process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude');
-  return join(dir, 'settings.json');
+  return join(defaultClaudeRoot(), 'settings.json');
 }
 
 export function readSettings(path?: string): SettingsObject {
@@ -129,11 +133,7 @@ function isoTimestamp(): string {
 }
 
 export function defaultBackupRoot(harnessRoot?: string): string {
-  const root =
-    harnessRoot ??
-    process.env['ACORN_HARNESS_ROOT'] ??
-    join(homedir(), '.claude', 'skills', 'harness');
-  return join(root, 'backup');
+  return join(harnessRoot ?? defaultHarnessRoot(), 'backup');
 }
 
 export interface BackupResult {
@@ -165,6 +165,7 @@ export function atomicWriteJson(path: string, data: SettingsObject): void {
     writeFileSync(tmp, json, { encoding: 'utf8', mode: 0o644 });
     renameSync(tmp, path);
   } catch (e) {
+    try { unlinkSync(tmp); } catch { /* best effort */ }
     throw new SettingsError(
       `원자적 쓰기 실패: ${path} (${e instanceof Error ? e.message : String(e)})`,
       'IO',

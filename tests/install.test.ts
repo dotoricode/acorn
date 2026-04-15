@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runInstall, InstallError } from '../src/commands/install.ts';
 import type { GitRunner } from '../src/core/vendors.ts';
+import { beginTx, lastInProgress, txLogPath } from '../src/core/tx.ts';
 
 const SHA_OMC = 'a'.repeat(40);
 const SHA_GSTACK = 'b'.repeat(40);
@@ -56,6 +57,9 @@ function makeFakeGit(state: FakeGitState): GitRunner {
     },
     isGitRepo(dir) {
       return existsSync(join(dir, '.git'));
+    },
+    isDirty(_dir) {
+      return false;
     },
   };
 }
@@ -282,6 +286,102 @@ test('runInstall: 기존 settings.json 키 보존 + env만 추가', () => {
     assert.equal(written.model, 'sonnet');
     assert.deepEqual(written.existingSection, { a: 1 });
     assert.ok(written.env['CLAUDE_PLUGIN_ROOT']);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runInstall: tx.log commit 마커 기록 + lastInProgress=null', () => {
+  const w = makeWorkspace();
+  try {
+    const git = makeFakeGit({ heads: new Map() });
+    runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+    });
+    assert.equal(lastInProgress(w.harnessRoot), null);
+    assert.ok(existsSync(txLogPath(w.harnessRoot)));
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runInstall: 이전 tx 미완료 → IN_PROGRESS 에러', () => {
+  const w = makeWorkspace();
+  try {
+    // 이전 tx 흔적 남김 (commit 없이 phase 까지만)
+    const tx = beginTx(w.harnessRoot);
+    tx.phase('vendors');
+    const git = makeFakeGit({ heads: new Map() });
+    assert.throws(
+      () =>
+        runInstall({
+          lockPath: w.lockPath,
+          harnessRoot: w.harnessRoot,
+          claudeRoot: w.claudeRoot,
+          settingsPath: w.settingsPath,
+          git,
+          skipGstackSetup: true,
+        }),
+      (err: unknown) =>
+        err instanceof InstallError && err.code === 'IN_PROGRESS',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runInstall: force=true → IN_PROGRESS 우회', () => {
+  const w = makeWorkspace();
+  try {
+    const tx = beginTx(w.harnessRoot);
+    tx.phase('vendors');
+    const git = makeFakeGit({ heads: new Map() });
+    const r = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+      force: true,
+    });
+    assert.equal(r.settings.action, 'add');
+    assert.equal(lastInProgress(w.harnessRoot), null);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runInstall: 설치 중 실패 → tx.abort 기록 + lastInProgress=null', () => {
+  const w = makeWorkspace();
+  try {
+    // settings 충돌로 실패 유도
+    writeFileSync(
+      w.settingsPath,
+      JSON.stringify({
+        env: { CLAUDE_PLUGIN_ROOT: '/other' },
+      }),
+      'utf8',
+    );
+    const git = makeFakeGit({ heads: new Map() });
+    assert.throws(
+      () =>
+        runInstall({
+          lockPath: w.lockPath,
+          harnessRoot: w.harnessRoot,
+          claudeRoot: w.claudeRoot,
+          settingsPath: w.settingsPath,
+          git,
+          skipGstackSetup: true,
+        }),
+      (err: unknown) => err instanceof InstallError,
+    );
+    assert.equal(lastInProgress(w.harnessRoot), null);
   } finally {
     w.cleanup();
   }

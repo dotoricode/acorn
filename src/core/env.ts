@@ -6,10 +6,14 @@ export type EnvKey = (typeof ENV_KEYS)[number];
 
 export type EnvMap = Readonly<Record<EnvKey, string>>;
 
+export function defaultClaudeRoot(): string {
+  return process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude');
+}
+
 export function defaultHarnessRoot(): string {
   return (
     process.env['ACORN_HARNESS_ROOT'] ??
-    join(homedir(), '.claude', 'skills', 'harness')
+    join(defaultClaudeRoot(), 'skills', 'harness')
   );
 }
 

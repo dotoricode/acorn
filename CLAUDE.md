@@ -14,9 +14,23 @@ Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
 src/
 ├── commands/   사용자 커맨드 (install[S6], status, list, config, uninstall)
-├── core/       핵심 로직 (lock, env, settings, symlink, vendors, registry, guard)
+├── core/       핵심 로직 (lock, env, settings, symlink, vendors, tx, registry, guard)
 └── dev/        dotori 전용 커맨드 (check, lock, validate, release)
                 빌드 타임에 배포판에서 제거됨
+
+## 경로 단일화 (Sprint 6.5 이후)
+
+defaultClaudeRoot / defaultHarnessRoot 는 src/core/env.ts 단일 소스.
+- CLAUDE_CONFIG_DIR → defaultClaudeRoot() fallback
+- ACORN_HARNESS_ROOT → defaultHarnessRoot() override
+다른 모듈은 env.ts 에서 import. 중복 정의 금지.
+
+## 트랜잭션 로그 (tx.log)
+
+runInstall 은 모든 단계를 src/core/tx.ts 의 beginTx/phase/commit 으로 감싼다.
+이전 실행이 commit/abort 없이 중단된 경우 다음 runInstall 은 IN_PROGRESS 에러.
+강제 진행은 `force: true` 옵션 (CLI 에서 --force 로 노출 예정).
+위치: <harnessRoot>/tx.log (JSONL)
 
 ## Sprint 6 — runInstall 오케스트레이터
 

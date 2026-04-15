@@ -20,12 +20,13 @@ const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
 
 interface FakeCall {
-  readonly op: 'clone' | 'checkout' | 'revParse' | 'isGitRepo';
+  readonly op: 'clone' | 'checkout' | 'revParse' | 'isGitRepo' | 'isDirty';
   readonly args: readonly string[];
 }
 
 interface FakeGitState {
   headByDir: Map<string, string>;
+  dirtyDirs?: Set<string>;
   cloneBehavior?: (repoUrl: string, dir: string) => void;
   checkoutBehavior?: (dir: string, commit: string) => void;
   failRevParse?: boolean;
@@ -62,6 +63,10 @@ function makeFakeGit(state: FakeGitState): { git: GitRunner; calls: FakeCall[] }
     isGitRepo(dir) {
       calls.push({ op: 'isGitRepo', args: [dir] });
       return existsSync(join(dir, '.git'));
+    },
+    isDirty(dir) {
+      calls.push({ op: 'isDirty', args: [dir] });
+      return state.dirtyDirs?.has(dir) ?? false;
     },
   };
   return { git, calls };
@@ -165,7 +170,75 @@ test('installVendor: 다른 SHA → checkout → checked_out', () => {
     assert.equal(r.previousCommit, SHA_A);
     assert.equal(r.commit, SHA_B);
     const ops = calls.map((c) => c.op);
-    assert.deepEqual(ops, ['isGitRepo', 'revParse', 'checkout', 'revParse']);
+    assert.deepEqual(ops, ['isGitRepo', 'revParse', 'isDirty', 'checkout', 'revParse']);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('installVendor: dirty working tree → LOCAL_CHANGES', () => {
+  const w = makeWorkspace();
+  try {
+    const path = join(w.vendorsRoot, 'omc');
+    mkdirSync(join(path, '.git'), { recursive: true });
+    const state: FakeGitState = {
+      headByDir: new Map([[path, SHA_A]]),
+      dirtyDirs: new Set([path]),
+    };
+    const { git } = makeFakeGit(state);
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'omc',
+          repo: 'org/omc',
+          commit: SHA_B,
+          vendorsRoot: w.vendorsRoot,
+          git,
+        }),
+      (err: unknown) =>
+        err instanceof VendorError && err.code === 'LOCAL_CHANGES',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('installVendor: checkout 실패 시 partial clone 정리 → 다음 호출은 fresh clone', () => {
+  const w = makeWorkspace();
+  try {
+    let checkoutFails = true;
+    const state: FakeGitState = {
+      headByDir: new Map(),
+      checkoutBehavior: (dir, commit) => {
+        if (checkoutFails) throw new Error('sim checkout fail');
+        state.headByDir.set(dir, commit);
+      },
+    };
+    const { git } = makeFakeGit(state);
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'omc',
+          repo: 'org/omc',
+          commit: SHA_B,
+          vendorsRoot: w.vendorsRoot,
+          git,
+        }),
+      (err: unknown) => err instanceof VendorError && err.code === 'CHECKOUT',
+    );
+    // partial clone 이 정리되어야 함
+    assert.equal(existsSync(join(w.vendorsRoot, 'omc')), false);
+
+    // 두 번째 호출: 이제 성공해야 함
+    checkoutFails = false;
+    const r = installVendor({
+      tool: 'omc',
+      repo: 'org/omc',
+      commit: SHA_B,
+      vendorsRoot: w.vendorsRoot,
+      git,
+    });
+    assert.equal(r.action, 'cloned');
   } finally {
     w.cleanup();
   }

@@ -104,6 +104,7 @@ Claude Code 하네스 생태계에는 세 가지 주요 툴이 존재한다:
 | 4 | `src/core/settings.ts` | 하루 |
 | 5 | `src/core/symlink.ts` | 하루 |
 | 6 | `src/commands/install.ts` | 3~4일 |
+| 6.5 | 안정화 (3/10+6/10 회고) | 0.5일 |
 | 7 | `src/commands/status.ts` | 반일 |
 | 8 | `src/commands/doctor.ts` | 1~2일 |
 | 9 | `src/index.ts` | 반일 |
@@ -516,6 +517,10 @@ direnv 설정 완료
 - [x] settings.json 기존 내용 보존 + env 3키만 추가 + backup 존재 *(Sprint 4 — settings.ts)*
 - [x] 기존 env 키 충돌 시 에러+중단 (비파괴) *(Sprint 4 — SettingsError CONFLICT)*
 - [x] preflight 단계에서 settings 충돌 감지 시 vendors 변경 없이 중단 *(Sprint 6)*
+- [x] tx.log 트랜잭션 — 중단된 이전 설치 감지 시 IN_PROGRESS 에러 *(Sprint 6.5)*
+- [x] vendor partial clone 정리 + dirty tree 감지(LOCAL_CHANGES) + git timeout *(Sprint 6.5)*
+- [x] gstack 심링크 원자 교체(rename) + inspectGstackSymlink *(Sprint 6.5)*
+- [x] defaultHarnessRoot 단일화 + CLAUDE_CONFIG_DIR 존중 *(Sprint 6.5)*
 
 ### guard 동작
 - [x] `rm -rf /tmp/foo` → 차단 *(Sprint 1)*
@@ -524,7 +529,7 @@ direnv 설정 완료
 
 ### 개발 품질
 - [x] `npm run build` 성공 *(Sprint 0)*
-- [x] `npm test` 통과 (lock S2, env S3, settings S4, symlink S5, vendors+install S6 — 71개 테스트)
+- [x] `npm test` 통과 (S2~S6.5 — 86개 테스트)
 - [x] README 3절 (설치·사용·트러블슈팅) *(초안, Sprint 1 기준)*
 - [ ] `.github/workflows/ci.yml` placeholder 커밋
 

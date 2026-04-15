@@ -7,8 +7,9 @@ import {
   mkdirSync,
   existsSync,
 } from 'node:fs';
-import { homedir, platform } from 'node:os';
+import { platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { defaultClaudeRoot, defaultHarnessRoot } from './env.ts';
 
 export type SymlinkErrorCode = 'NOT_SYMLINK' | 'SOURCE_MISSING' | 'IO';
 
@@ -23,16 +24,7 @@ export class SymlinkError extends Error {
   }
 }
 
-export function defaultClaudeRoot(): string {
-  return process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude');
-}
-
-export function defaultHarnessRoot(): string {
-  return (
-    process.env['ACORN_HARNESS_ROOT'] ??
-    join(defaultClaudeRoot(), 'skills', 'harness')
-  );
-}
+export { defaultClaudeRoot, defaultHarnessRoot };
 
 export function gstackSymlinkPath(claudeRoot?: string): string {
   return join(claudeRoot ?? defaultClaudeRoot(), 'skills', 'gstack');
@@ -80,6 +72,22 @@ function symlinkType(): 'dir' | 'junction' | undefined {
   return platform() === 'win32' ? 'junction' : 'dir';
 }
 
+function targetExists(target: string): boolean {
+  try {
+    lstatSync(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Create or atomically replace a directory symlink.
+ * - absent target: symlink(tmp) → rename(tmp, target)
+ * - existing symlink: symlink(tmp) → rename(tmp, target) atomically replaces on POSIX.
+ *   On Windows/junctions where rename may fail with EEXIST, fall back to unlink+rename.
+ *   Only a symlink may be overwritten — callers must guard NOT_SYMLINK upstream.
+ */
 export function createDirSymlink(source: string, target: string): void {
   if (!existsSync(source)) {
     throw new SymlinkError(`source 부재: ${source}`, 'SOURCE_MISSING', target);
@@ -97,10 +105,34 @@ export function createDirSymlink(source: string, target: string): void {
   }
   try {
     renameSync(tmp, target);
-  } catch (e) {
+    return;
+  } catch (renameErr) {
+    if (targetExists(target)) {
+      try {
+        unlinkSync(target);
+      } catch (e) {
+        try { unlinkSync(tmp); } catch { /* best effort */ }
+        throw new SymlinkError(
+          `기존 target 제거 실패: ${target} (${e instanceof Error ? e.message : String(e)})`,
+          'IO',
+          target,
+        );
+      }
+      try {
+        renameSync(tmp, target);
+        return;
+      } catch (e) {
+        try { unlinkSync(tmp); } catch { /* best effort */ }
+        throw new SymlinkError(
+          `rename 재시도 실패: ${tmp} → ${target} (${e instanceof Error ? e.message : String(e)})`,
+          'IO',
+          target,
+        );
+      }
+    }
     try { unlinkSync(tmp); } catch { /* best effort */ }
     throw new SymlinkError(
-      `rename 실패: ${tmp} → ${target} (${e instanceof Error ? e.message : String(e)})`,
+      `rename 실패: ${tmp} → ${target} (${renameErr instanceof Error ? renameErr.message : String(renameErr)})`,
       'IO',
       target,
     );
@@ -129,15 +161,6 @@ export function ensureSymlink(source: string, target: string): EnsureResult {
       );
     case 'wrong_target': {
       const prev = inspection.currentLink;
-      try {
-        unlinkSync(target);
-      } catch (e) {
-        throw new SymlinkError(
-          `기존 심링크 제거 실패: ${target} (${e instanceof Error ? e.message : String(e)})`,
-          'IO',
-          target,
-        );
-      }
       createDirSymlink(source, target);
       return { action: 'replaced', target, source, previousLink: prev };
     }
@@ -156,4 +179,10 @@ export function installGstackSymlink(opts: InstallGstackOptions = {}): EnsureRes
   const source = gstackSymlinkSource(opts.harnessRoot);
   const target = gstackSymlinkPath(opts.claudeRoot);
   return ensureSymlink(source, target);
+}
+
+export function inspectGstackSymlink(opts: InstallGstackOptions = {}): SymlinkInspection {
+  const source = gstackSymlinkSource(opts.harnessRoot);
+  const target = gstackSymlinkPath(opts.claudeRoot);
+  return inspectSymlink(target, source);
 }

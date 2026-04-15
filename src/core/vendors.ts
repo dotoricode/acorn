@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { defaultHarnessRoot } from './env.ts';
 
 export type VendorErrorCode =
   | 'GIT_MISSING'
@@ -10,6 +10,8 @@ export type VendorErrorCode =
   | 'REV_PARSE'
   | 'NOT_A_REPO'
   | 'SHA_MISMATCH'
+  | 'LOCAL_CHANGES'
+  | 'TIMEOUT'
   | 'IO';
 
 export class VendorError extends Error {
@@ -28,14 +30,13 @@ export interface GitRunner {
   checkout(dir: string, commit: string): void;
   revParse(dir: string): string;
   isGitRepo(dir: string): boolean;
+  isDirty(dir: string): boolean;
 }
 
+export const DEFAULT_GIT_TIMEOUT_MS = 120_000;
+
 export function defaultVendorsRoot(harnessRoot?: string): string {
-  const root =
-    harnessRoot ??
-    process.env['ACORN_HARNESS_ROOT'] ??
-    join(homedir(), '.claude', 'skills', 'harness');
-  return join(root, 'vendors');
+  return join(harnessRoot ?? defaultHarnessRoot(), 'vendors');
 }
 
 export function toRepoUrl(repo: string): string {
@@ -48,15 +49,22 @@ function run(cmd: string, args: readonly string[], cwd?: string): string {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: DEFAULT_GIT_TIMEOUT_MS,
     }).toString();
   } catch (e) {
-    const err = e as NodeJS.ErrnoException & { stderr?: Buffer | string };
+    const err = e as NodeJS.ErrnoException & {
+      stderr?: Buffer | string;
+      signal?: string | null;
+    };
     const stderr =
       typeof err.stderr === 'string'
         ? err.stderr
         : err.stderr?.toString('utf8') ?? '';
     const detail = stderr.trim() || err.message;
-    throw new Error(`${cmd} ${args.join(' ')}: ${detail}`);
+    const timedOut =
+      err.code === 'ETIMEDOUT' || err.signal === 'SIGTERM';
+    const prefix = timedOut ? `[timeout ${DEFAULT_GIT_TIMEOUT_MS}ms] ` : '';
+    throw new Error(`${prefix}${cmd} ${args.join(' ')}: ${detail}`);
   }
 }
 
@@ -79,7 +87,22 @@ export const defaultGitRunner: GitRunner = {
       return false;
     }
   },
+  isDirty(dir) {
+    const out = run('git', ['-C', dir, 'status', '--porcelain']);
+    return out.trim().length > 0;
+  },
 };
+
+/**
+ * Return the current HEAD SHA of a vendor directory.
+ * Used by status/doctor to compare disk state against harness.lock.
+ */
+export function readCurrentCommit(
+  vendorPath: string,
+  git: GitRunner = defaultGitRunner,
+): string {
+  return git.revParse(vendorPath);
+}
 
 export type VendorAction = 'noop' | 'cloned' | 'checked_out';
 
@@ -108,6 +131,18 @@ function isEmptyDir(dir: string): boolean {
   }
 }
 
+function cleanupPartial(path: string, tool: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true });
+  } catch (e) {
+    throw new VendorError(
+      `partial clone 정리 실패: ${path} (${e instanceof Error ? e.message : String(e)})`,
+      'IO',
+      tool,
+    );
+  }
+}
+
 export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
   const git = opts.git ?? defaultGitRunner;
   const path = join(opts.vendorsRoot, opts.tool);
@@ -128,6 +163,7 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
     try {
       git.clone(toRepoUrl(opts.repo), path);
     } catch (e) {
+      cleanupPartial(path, opts.tool);
       throw new VendorError(
         `clone 실패: ${opts.repo} → ${path} (${e instanceof Error ? e.message : String(e)})`,
         'CLONE',
@@ -137,13 +173,19 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
     try {
       git.checkout(path, opts.commit);
     } catch (e) {
+      cleanupPartial(path, opts.tool);
       throw new VendorError(
         `checkout 실패: ${opts.commit} (${e instanceof Error ? e.message : String(e)})`,
         'CHECKOUT',
         opts.tool,
       );
     }
-    verifyCommit(git, path, opts.commit, opts.tool);
+    try {
+      verifyCommit(git, path, opts.commit, opts.tool);
+    } catch (e) {
+      cleanupPartial(path, opts.tool);
+      throw e;
+    }
     return {
       tool: opts.tool,
       action: 'cloned',
@@ -180,6 +222,15 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
       previousCommit: head,
       commit: opts.commit,
     };
+  }
+
+  // About to checkout a different SHA — reject dirty working tree to protect user work.
+  if (git.isDirty(path)) {
+    throw new VendorError(
+      `vendor 에 로컬 변경 감지 — 자동 checkout 거부: ${path}`,
+      'LOCAL_CHANGES',
+      opts.tool,
+    );
   }
 
   try {

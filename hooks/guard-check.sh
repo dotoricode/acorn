@@ -82,10 +82,28 @@ fi
 # 4. 패턴 매칭 + mode 분기
 is_dangerous() {
   local cmd="$1"
+  # Allowlist: --force-with-lease 는 원격 상태 체크 후에만 강제 푸시하는 안전 관용구
+  # push --force 패턴을 검사하기 전에 이 경우를 먼저 걸러낸다.
+  case "$cmd" in
+    *"push --force-with-lease"*)
+      # force-with-lease 만 쓰는 경우는 위험 아님. 다른 패턴 계속 검사.
+      case "$cmd" in
+        *"rm -rf"*|*"rm -fr"*|*"rm -Rf"*) return 0 ;;
+        *"DROP TABLE"*|*"DROP DATABASE"*|*"TRUNCATE TABLE"*) return 0 ;;
+        *"reset --hard"*) return 0 ;;
+        *"chmod 777"*|*"chmod -R 777"*) return 0 ;;
+        *":(){ :|:& };:"*) return 0 ;;
+        *"mkfs"*) return 0 ;;
+        *"> /dev/sda"*|*"> /dev/nvme"*) return 0 ;;
+        *"dd if="*"of=/dev/"*) return 0 ;;
+      esac
+      return 1
+      ;;
+  esac
   case "$cmd" in
     *"rm -rf"*|*"rm -fr"*|*"rm -Rf"*) return 0 ;;
     *"DROP TABLE"*|*"DROP DATABASE"*|*"TRUNCATE TABLE"*) return 0 ;;
-    *"push --force"*|*"push -f"*|*"push --force-with-lease"*) return 0 ;;
+    *"push --force"*|*"push -f"*) return 0 ;;
     *"reset --hard"*) return 0 ;;
     *"chmod 777"*|*"chmod -R 777"*) return 0 ;;
     *":(){ :|:& };:"*) return 0 ;;

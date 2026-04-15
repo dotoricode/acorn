@@ -17,6 +17,7 @@ import {
   createDirSymlink,
   ensureSymlink,
   installGstackSymlink,
+  inspectGstackSymlink,
   gstackSymlinkPath,
   gstackSymlinkSource,
   SymlinkError,
@@ -186,6 +187,47 @@ test('installGstackSymlink: end-to-end (claudeRoot+harnessRoot 격리)', () => {
     assert.ok(existsSync(join(target, 'SKILL.md')));
     // 두 번째는 noop
     assert.equal(installGstackSymlink({ claudeRoot, harnessRoot }).action, 'noop');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('inspectGstackSymlink: 부재 → absent, 정확 → correct', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-inspect-'));
+  try {
+    const claudeRoot = join(dir, 'claude');
+    const harnessRoot = join(dir, 'harness');
+    mkdirSync(join(harnessRoot, 'vendors', 'gstack'), { recursive: true });
+    writeFileSync(join(harnessRoot, 'vendors', 'gstack', 'm'), 'x');
+
+    const before = inspectGstackSymlink({ claudeRoot, harnessRoot });
+    assert.equal(before.status, 'absent');
+
+    installGstackSymlink({ claudeRoot, harnessRoot });
+    const after = inspectGstackSymlink({ claudeRoot, harnessRoot });
+    assert.equal(after.status, 'correct');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createDirSymlink: 기존 심링크를 rename 으로 원자 교체', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-atomic-'));
+  try {
+    const source1 = join(dir, 'src1');
+    const source2 = join(dir, 'src2');
+    mkdirSync(source1);
+    mkdirSync(source2);
+    writeFileSync(join(source1, 'marker'), '1');
+    writeFileSync(join(source2, 'marker'), '2');
+
+    const target = join(dir, 'parent', 'link');
+    createDirSymlink(source1, target);
+    assert.equal(readlinkSync(target), source1);
+
+    // 기존 symlink 위에 직접 교체 (unlink 선행 없이)
+    createDirSymlink(source2, target);
+    assert.equal(readlinkSync(target), source2);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

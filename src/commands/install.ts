@@ -1,5 +1,10 @@
 import { readLock, TOOL_NAMES, type HarnessLock, type ToolName } from '../core/lock.ts';
-import { computeEnv, defaultHarnessRoot, vendorsRoot } from '../core/env.ts';
+import {
+  computeEnv,
+  defaultClaudeRoot,
+  defaultHarnessRoot,
+  vendorsRoot,
+} from '../core/env.ts';
 import {
   defaultSettingsPath,
   readSettings,
@@ -10,7 +15,6 @@ import {
 } from '../core/settings.ts';
 import {
   installGstackSymlink,
-  defaultClaudeRoot,
   type EnsureResult,
 } from '../core/symlink.ts';
 import {
@@ -19,8 +23,10 @@ import {
   type GitRunner,
   type InstallVendorResult,
 } from '../core/vendors.ts';
+import { beginTx, lastInProgress } from '../core/tx.ts';
 
 export type InstallErrorCode =
+  | 'IN_PROGRESS'
   | 'SETTINGS_CONFLICT'
   | 'VENDOR'
   | 'SYMLINK'
@@ -52,6 +58,8 @@ export interface InstallOptions {
   readonly gstackSetup?: GstackSetupFn;
   readonly skipGstackSetup?: boolean;
   readonly logger?: (line: string) => void;
+  /** Bypass in_progress tx.log guard. Use only after manual cleanup. */
+  readonly force?: boolean;
 }
 
 export interface InstallResult {
@@ -73,17 +81,60 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
   const settingsPath = opts.settingsPath ?? defaultSettingsPath();
   const git = opts.git ?? defaultGitRunner;
 
+  // 0. tx.log 검사 — 이전 설치가 미완료(in_progress)면 fail-close
+  const pending = lastInProgress(harnessRoot);
+  if (pending && !opts.force) {
+    throw new InstallError(
+      `이전 설치 미완료 감지 (ts=${pending.ts}, phase=${pending.phase ?? 'begin'}). ` +
+        `수동 검사 후 ${harnessRoot}/tx.log 정리 또는 --force 재실행 필요.`,
+      'IN_PROGRESS',
+    );
+  }
+
+  const tx = beginTx(harnessRoot);
+  try {
+    return runInstallInner({
+      opts,
+      log,
+      harnessRoot,
+      claudeRoot,
+      settingsPath,
+      git,
+      tx,
+    });
+  } catch (e) {
+    tx.abort(e instanceof Error ? e.message : String(e));
+    throw e;
+  }
+}
+
+interface InnerContext {
+  readonly opts: InstallOptions;
+  readonly log: (line: string) => void;
+  readonly harnessRoot: string;
+  readonly claudeRoot: string;
+  readonly settingsPath: string;
+  readonly git: GitRunner;
+  readonly tx: ReturnType<typeof beginTx>;
+}
+
+function runInstallInner(ctx: InnerContext): InstallResult {
+  const { opts, log, harnessRoot, claudeRoot, settingsPath, git, tx } = ctx;
+
   // 1. lock 파싱
   log(`[1/7] harness.lock 파싱`);
+  tx.phase('lock');
   const lock = readLock(opts.lockPath);
 
   // 2. env 계산
   log(`[2/7] env 계산`);
+  tx.phase('env');
   const desired = computeEnv(harnessRoot);
   const vRoot = vendorsRoot(harnessRoot);
 
   // 3. settings 충돌 체크 (읽기 전용, 조기 실패)
   log(`[3/7] settings.json preflight`);
+  tx.phase('settings-preflight');
   const current = readSettings(settingsPath);
   const plan = planMerge(current, desired);
   if (plan.action === 'conflict') {
@@ -97,6 +148,7 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
 
   // 4. vendors clone
   log(`[4/7] vendors clone/checkout`);
+  tx.phase('vendors');
   const vendors: Record<ToolName, InstallVendorResult> = {} as Record<
     ToolName,
     InstallVendorResult
@@ -124,6 +176,7 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
 
   // 5. gstack 심링크
   log(`[5/7] gstack 심링크`);
+  tx.phase('symlink');
   let gstackSymlink: EnsureResult;
   try {
     gstackSymlink = installGstackSymlink({ harnessRoot, claudeRoot });
@@ -138,6 +191,7 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
 
   // 6. gstack setup
   let gstackSetupRan = false;
+  tx.phase('gstack-setup');
   if (opts.skipGstackSetup) {
     log(`[6/7] gstack setup (스킵)`);
   } else {
@@ -164,6 +218,7 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
 
   // 7. settings 원자 쓰기 (백업 포함, 마지막)
   log(`[7/7] settings.json 쓰기`);
+  tx.phase('settings-write');
   let settings: InstallEnvResult;
   try {
     settings = installEnv({
@@ -187,6 +242,7 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
     );
   }
 
+  tx.commit();
   return {
     lock,
     vendors,
