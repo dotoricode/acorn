@@ -2,7 +2,8 @@
 
 Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
-> **Status**: v0.1.0 Radical MVP — 기능 완성, 릴리즈 정리 중
+> **Status**: v0.1.0 Radical MVP — 기능 완성, 도그푸딩 단계
+> **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
 > 변경 이력: [`CHANGELOG.md`](CHANGELOG.md)
 
