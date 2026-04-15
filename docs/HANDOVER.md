@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-14 (Sprint 5 완료 시점)
+> 마지막 갱신: 2026-04-15 (Sprint 6 완료 시점)
 
 ---
 
@@ -10,11 +10,11 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` |
-| 마지막 커밋 | `a3ada26 feat(sprint-5): src/core/symlink.ts` |
-| 진행 중 작업 | **없음** — Sprint 5 완전 종료 후 push |
-| 다음 작업 | **Sprint 6 — `src/commands/install.ts`** (3~4일 예상, 최대 작업) |
-| Done Definition 진척 | guard 3/3 ✅, 비파괴 머지 2/2 ✅, build/test ✅ |
-| 테스트 | 55/55 통과 (lock 15 + env 10 + settings 19 + symlink 12) |
+| 마지막 커밋 | `feat(sprint-6): runInstall + core/vendors.ts` (본 커밋 직후 SHA 기록 예정) |
+| 진행 중 작업 | **없음** — Sprint 6 완전 종료 |
+| 다음 작업 | **Sprint 7 — `src/commands/status.ts`** (반일 예상, harness.lock + settings.json 직독 요약) |
+| Done Definition 진척 | guard 3/3 ✅, 비파괴 머지 2/2 ✅, install 오케스트레이션 ✅, build/test ✅ |
+| 테스트 | 71/71 통과 (lock 15 + env 10 + settings 19 + symlink 12 + vendors 9 + install 6) |
 
 ---
 
@@ -38,7 +38,7 @@ node --version    # v24.x.x 여야 함
 # 4. 의존성 설치 + 빌드 + 테스트
 npm install
 npm run build
-npm test          # 55/55 통과해야 정상
+npm test          # 71/71 통과해야 정상
 ```
 
 ### Mac (회사)
@@ -69,21 +69,18 @@ npm install && npm run build && npm test
 
 ## 4. 작업 재개 절차
 
-### A. 코드 작업 (Sprint 6 착수 시)
+### A. 코드 작업 (Sprint 7 착수 시)
 
-`docs/acorn-v1-plan.md`의 §4 (Sprint 표) + §6 (실행 순서) 기준.
+`docs/acorn-v1-plan.md`의 §8 `acorn status 출력` 참조.
 
-```
-1. lock.ts 파싱
-2. env.ts 경로 계산
-3. settings.json 충돌 체크 (읽기 전용)  ← 조기 실패 감지
-4. vendors clone
-5. 심링크 생성
-6. gstack setup 실행
-7. settings.json 원자적 쓰기  ← 마지막
-```
+status 는 실제 FS 를 건드리지 않고 읽기 전용 요약만 출력:
+- `harness.lock` 파싱 (`core/lock.ts` 재사용)
+- `settings.json` env 3키 diff (`core/env.ts` + `settings.ts` 재사용)
+- gstack 심링크 상태 (`core/symlink.ts` — inspectSymlink 재사용)
+- guard mode 표시 (lock.guard.mode)
 
-이 순서대로 `src/commands/install.ts`를 짜면 됨. 이미 만들어진 코어 모듈 4개를 조립.
+Sprint 6 의 `runInstall` 이 만든 상태를 그대로 읽어 요약하는 것이므로
+새 코어 로직은 불필요. `src/commands/status.ts` 만 추가하면 된다.
 
 ### B. 문서만 손볼 때
 

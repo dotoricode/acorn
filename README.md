@@ -39,7 +39,76 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~5 완료)
+## 현재 구현된 기능 (Sprint 1~6 완료)
+
+### `src/commands/install.ts` — 설치 오케스트레이터 (Sprint 6)
+
+`harness.lock` 기반으로 세 툴을 검증된 SHA에 고정 설치하고, gstack 심링크와
+`settings.json` env 3키를 **비파괴적으로** 구성한다.
+내부 코어 4개 모듈(`lock` / `env` / `symlink` / `settings`)과 신규 `core/vendors.ts`를 조립한다.
+
+```ts
+import { runInstall, InstallError } from '@dotoricode/acorn/commands/install';
+
+try {
+  const r = runInstall({
+    logger: (l) => console.log(l),
+    // gstackSetup: ({ gstackSource, claudeRoot }) => { ... },  // 선택
+  });
+  // r.vendors.omc.action: 'cloned' | 'noop' | 'checked_out'
+  // r.gstackSymlink.action: 'created' | 'noop' | 'replaced'
+  // r.settings.action: 'add' | 'noop'
+} catch (e) {
+  if (e instanceof InstallError) {
+    // e.code: 'SETTINGS_CONFLICT' | 'VENDOR' | 'SYMLINK' | 'GSTACK_SETUP' | 'SETTINGS_WRITE'
+  }
+}
+```
+
+#### 실행 순서 (preflight 우선)
+
+```
+[1/7] harness.lock 파싱
+[2/7] env 3키 계산
+[3/7] settings.json 충돌 체크   ← 읽기 전용, 조기 실패
+[4/7] vendors clone/checkout   (OMC, gstack, ECC)
+[5/7] gstack 심링크
+[6/7] gstack setup (콜백, 선택)
+[7/7] settings.json 원자 쓰기  ← 마지막, 백업 후
+```
+
+**핵심 불변식**: 충돌이 감지되면 디스크를 건드리기 전에 중단된다.
+vendors clone은 [3/7] 통과 이후에만 시작한다.
+
+#### 멱등성
+
+두 번째 `runInstall` 호출은 모든 단계가 `noop`이 된다.
+머신 간 `git pull` 후 재실행해도 안전하다.
+
+### `src/core/vendors.ts` — vendor clone + SHA 핀 (Sprint 6)
+
+`harness.lock`의 `commit`에 정확히 고정하여 git 저장소를 clone/checkout 한다.
+네트워크를 타지 않는 **의존성 주입용 `GitRunner` 인터페이스**를 제공해 단위 테스트는 stub으로 돌린다.
+
+```ts
+import { installVendor, defaultGitRunner, VendorError } from '@dotoricode/acorn/core/vendors';
+
+const r = installVendor({
+  tool: 'omc',
+  repo: 'org/omc',
+  commit: '<40자 SHA>',
+  vendorsRoot: '/path/to/harness/vendors',
+});
+// r.action: 'cloned' | 'noop' | 'checked_out'
+```
+
+| 기존 상태 | 결과 |
+|---|---|
+| 없음 / 빈 폴더 | **cloned** (clone → checkout → rev-parse 검증) |
+| 같은 SHA | **noop** (rev-parse만 실행) |
+| 다른 SHA | **checked_out** (checkout → rev-parse 검증) |
+| git 저장소 아님 | **NOT_A_REPO 에러** (자동 교체 거부) |
+| checkout 후 SHA 불일치 | **SHA_MISMATCH 에러** |
 
 ### `src/core/symlink.ts` — gstack 심링크 관리 (Sprint 5)
 
@@ -264,7 +333,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 | 3 | `src/core/env.ts` | ✅ 완료 |
 | 4 | `src/core/settings.ts` | ✅ 완료 |
 | 5 | `src/core/symlink.ts` | ✅ 완료 |
-| 6 | `src/commands/install.ts` | 🔲 |
+| 6 | `src/commands/install.ts` + `src/core/vendors.ts` | ✅ 완료 |
 | 7 | `src/commands/status.ts` | 🔲 |
 | 8 | `src/commands/doctor.ts` | 🔲 |
 | 9 | `src/index.ts` (CLI 라우터) | 🔲 |

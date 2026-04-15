@@ -504,13 +504,18 @@ direnv 설정 완료
 ## 14. v0.1.0 Done Definition
 
 ### 기능
-- [ ] `acorn install` 완료 (fresh macOS 기준)
+- [x] `acorn install` 오케스트레이터 (`runInstall`) — 7단계 preflight-우선 파이프라인 *(Sprint 6)*
+- [x] vendor clone + SHA 핀 (`core/vendors.ts`, `GitRunner` 주입) *(Sprint 6)*
+- [x] 설치 멱등성: 두 번째 runInstall 은 모든 단계 noop *(Sprint 6)*
+- [ ] `acorn install` CLI 래퍼 (Sprint 9에서 `src/index.ts` 라우팅)
+- [ ] fresh macOS 실환경 검증 (실 git clone 포함)
 - [ ] `acorn status` — 3개 툴 ✅ + guard ✅ + env 3키 ✅
 - [ ] `acorn doctor` — 정상 상태에서 zero-issue
 - [ ] 심링크 하나 수동 삭제 후 `acorn doctor`가 정확 지적
 - [ ] `acorn doctor --json` 머신 판독 가능 구조
 - [x] settings.json 기존 내용 보존 + env 3키만 추가 + backup 존재 *(Sprint 4 — settings.ts)*
 - [x] 기존 env 키 충돌 시 에러+중단 (비파괴) *(Sprint 4 — SettingsError CONFLICT)*
+- [x] preflight 단계에서 settings 충돌 감지 시 vendors 변경 없이 중단 *(Sprint 6)*
 
 ### guard 동작
 - [x] `rm -rf /tmp/foo` → 차단 *(Sprint 1)*
@@ -519,7 +524,7 @@ direnv 설정 완료
 
 ### 개발 품질
 - [x] `npm run build` 성공 *(Sprint 0)*
-- [x] `npm test` 통과 (lock S2, env S3, settings S4, symlink S5 — 55개 테스트)
+- [x] `npm test` 통과 (lock S2, env S3, settings S4, symlink S5, vendors+install S6 — 71개 테스트)
 - [x] README 3절 (설치·사용·트러블슈팅) *(초안, Sprint 1 기준)*
 - [ ] `.github/workflows/ci.yml` placeholder 커밋
 

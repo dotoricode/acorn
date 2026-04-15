@@ -13,10 +13,25 @@ Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 ## 디렉토리 구조
 
 src/
-├── commands/   사용자 커맨드 (install, status, list, config, uninstall)
-├── core/       핵심 로직 (lock, registry, symlink, env, guard)
+├── commands/   사용자 커맨드 (install[S6], status, list, config, uninstall)
+├── core/       핵심 로직 (lock, env, settings, symlink, vendors, registry, guard)
 └── dev/        dotori 전용 커맨드 (check, lock, validate, release)
                 빌드 타임에 배포판에서 제거됨
+
+## Sprint 6 — runInstall 오케스트레이터
+
+src/commands/install.ts 의 runInstall() 은 7단계 preflight-우선 파이프라인:
+  [1] lock 파싱 → [2] env 계산 → [3] settings 충돌 읽기전용 체크
+  → [4] vendors clone/checkout → [5] gstack 심링크
+  → [6] gstack setup (주입 콜백) → [7] settings 원자 쓰기
+
+핵심 불변식:
+- [3] preflight 실패 시 디스크 변경 없음
+- [7] 은 반드시 마지막 (백업 후 원자 쓰기)
+- 두 번째 호출은 모든 단계 noop (멱등)
+
+git 의존성은 GitRunner 인터페이스(core/vendors.ts)로 주입 가능.
+테스트는 stub git 으로 네트워크 없이 실행.
 
 ## 주요 경로 (Windows 기준)
 
