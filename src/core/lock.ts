@@ -112,6 +112,12 @@ export function parseLock(raw: string): HarnessLock {
 
   const { schema_version, acorn_version, tools, guard } = data;
 
+  // 누락과 불일치를 구분. undefined 일 때 "기대 1, 실제 undefined" 표시는
+  // 필드 자체가 없는 건지 잘못 찍은 건지 구분이 안 되어 혼란을 줌.
+  // (DOGFOOD Round 1 §v0.1.1 #2)
+  if (!('schema_version' in data)) {
+    throw new LockError('schema_version 필드 누락', 'SCHEMA');
+  }
   if (schema_version !== SCHEMA_VERSION) {
     throw new LockError(
       `schema_version 불일치: 기대 ${SCHEMA_VERSION}, 실제 ${String(schema_version)}`,

@@ -78,7 +78,20 @@ test('readLock: BOM 이 포함된 파일도 정상 읽기', () => {
 test('parseLock: schema_version 불일치 → LockError(SCHEMA)', () => {
   const bad = { ...VALID_LOCK, schema_version: 2 };
   assert.throws(() => parseLock(JSON.stringify(bad)), (e: unknown) => {
-    return e instanceof LockError && e.code === 'SCHEMA';
+    return e instanceof LockError && e.code === 'SCHEMA' && /불일치/.test(e.message);
+  });
+});
+
+test('parseLock: schema_version 필드 누락 → "필드 누락" 메시지 (불일치와 구분)', () => {
+  // field 자체가 없을 때는 "undefined" 가 아니라 명시적으로 "누락" 을 알려야 한다.
+  const { schema_version: _omit, ...bad } = VALID_LOCK;
+  assert.throws(() => parseLock(JSON.stringify(bad)), (e: unknown) => {
+    return (
+      e instanceof LockError &&
+      e.code === 'SCHEMA' &&
+      /필드 누락/.test(e.message) &&
+      !/불일치/.test(e.message)
+    );
   });
 });
 
