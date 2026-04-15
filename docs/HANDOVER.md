@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-15 (Sprint 6.5 완료 시점)
+> 마지막 갱신: 2026-04-15 (Sprint 7 완료 시점)
 
 ---
 
@@ -10,11 +10,11 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` |
-| 마지막 커밋 | `refactor(sprint-6.5): 3/10+6/10 회고 반영 안정화` (본 커밋 직후 SHA 기록) |
-| 진행 중 작업 | **없음** — Sprint 6.5 완전 종료 |
-| 다음 작업 | **Sprint 7 — `src/commands/status.ts`** (반일 예상, 읽기 전용 요약) |
-| Done Definition 진척 | guard 3/3 ✅, 비파괴 머지 2/2 ✅, install 오케스트레이션 ✅, tx.log ✅, build/test ✅ |
-| 테스트 | 86/86 통과 (lock 15 + env 11 + settings 19 + symlink 14 + vendors 11 + install 10 + tx 6) |
+| 마지막 커밋 | `feat(sprint-7): src/commands/status.ts` (본 커밋 직후 SHA 기록) |
+| 진행 중 작업 | **없음** — Sprint 7 완전 종료 |
+| 다음 작업 | **Sprint 8 — `src/commands/doctor.ts`** (1~2일, 실 FS 재검증 + `--fix` 제외 + `--json`) |
+| Done Definition 진척 | guard ✅, 비파괴 머지 ✅, install ✅, status ✅, tx.log ✅, build/test ✅ |
+| 테스트 | 94/94 통과 |
 
 ---
 
@@ -38,7 +38,7 @@ node --version    # v24.x.x 여야 함
 # 4. 의존성 설치 + 빌드 + 테스트
 npm install
 npm run build
-npm test          # 86/86 통과해야 정상
+npm test          # 94/94 통과해야 정상
 ```
 
 ### Mac (회사)

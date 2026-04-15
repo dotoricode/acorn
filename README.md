@@ -39,7 +39,47 @@ npm run build
 
 ---
 
-## 현재 구현된 기능 (Sprint 1~6.5 완료)
+## 현재 구현된 기능 (Sprint 1~7 완료)
+
+### `src/commands/status.ts` — 읽기 전용 상태 요약 (Sprint 7)
+
+설치된 상태를 수정 없이 조회만 한다. lock/env/settings/symlink/vendors 리더만 호출.
+
+```ts
+import { collectStatus, renderStatus, summarize } from '@dotoricode/acorn/commands/status';
+
+const report = collectStatus();
+console.log(renderStatus(report));
+
+const { ok, issues } = summarize(report);
+if (!ok) process.exit(1);
+```
+
+출력 예:
+```
+acorn v0.1.0  •  ~/.claude/skills/harness
+────────────────────────────────────────────────────────────
+  omc     04655ee  ✅  locked
+  gstack  c6e6a21  ✅  locked  (symlinked)
+  ecc     125d5e6  ✅  locked
+────────────────────────────────────────────────────────────
+  guard    block / strict
+  env:
+    CLAUDE_PLUGIN_ROOT   ✅  match
+    OMC_PLUGIN_ROOT      ✅  match
+    ECC_ROOT             ✅  match
+  gstack link   ✅  correct
+```
+
+| vendor state | 의미 |
+|---|---|
+| `locked` | vendors/<tool> HEAD == harness.lock SHA |
+| `drift` | HEAD가 lock과 다름 (실제 SHA도 함께 반환) |
+| `missing` | 디렉토리 부재 |
+| `error` | rev-parse 실패 등 |
+
+`collectStatus()` 는 FS 를 건드리지 않으므로 스크립트에서 안전하게 호출 가능.
+`summarize()` 는 `{ok, issues[]}` 로 CI 친화 요약 제공.
 
 ### Sprint 6.5 — 안정화 (3/10 + 6/10 마일스톤 회고 반영)
 
@@ -351,7 +391,7 @@ v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
 | 4 | `src/core/settings.ts` | ✅ 완료 |
 | 5 | `src/core/symlink.ts` | ✅ 완료 |
 | 6 | `src/commands/install.ts` + `src/core/vendors.ts` | ✅ 완료 |
-| 7 | `src/commands/status.ts` | 🔲 |
+| 7 | `src/commands/status.ts` | ✅ 완료 |
 | 8 | `src/commands/doctor.ts` | 🔲 |
 | 9 | `src/index.ts` (CLI 라우터) | 🔲 |
 | 10 | README 정비 + CI placeholder | 🔲 (본 문서 초안) |

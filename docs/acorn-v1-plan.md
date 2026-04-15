@@ -510,7 +510,8 @@ direnv 설정 완료
 - [x] 설치 멱등성: 두 번째 runInstall 은 모든 단계 noop *(Sprint 6)*
 - [ ] `acorn install` CLI 래퍼 (Sprint 9에서 `src/index.ts` 라우팅)
 - [ ] fresh macOS 실환경 검증 (실 git clone 포함)
-- [ ] `acorn status` — 3개 툴 ✅ + guard ✅ + env 3키 ✅
+- [x] `acorn status` 오케스트레이션 (`collectStatus` + `renderStatus` + `summarize`) — 3개 툴 + guard + env 3키 + gstack 심링크 *(Sprint 7)*
+- [ ] `acorn status` CLI 래퍼 (Sprint 9)
 - [ ] `acorn doctor` — 정상 상태에서 zero-issue
 - [ ] 심링크 하나 수동 삭제 후 `acorn doctor`가 정확 지적
 - [ ] `acorn doctor --json` 머신 판독 가능 구조
@@ -529,7 +530,7 @@ direnv 설정 완료
 
 ### 개발 품질
 - [x] `npm run build` 성공 *(Sprint 0)*
-- [x] `npm test` 통과 (S2~S6.5 — 86개 테스트)
+- [x] `npm test` 통과 (S2~S7 — 94개 테스트)
 - [x] README 3절 (설치·사용·트러블슈팅) *(초안, Sprint 1 기준)*
 - [ ] `.github/workflows/ci.yml` placeholder 커밋
 
