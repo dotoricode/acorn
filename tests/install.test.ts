@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runInstall, InstallError } from '../src/commands/install.ts';
+import { runInstall, InstallError, defaultGstackSetup } from '../src/commands/install.ts';
 import type { GitRunner } from '../src/core/vendors.ts';
 import { beginTx, lastInProgress, txLogPath } from '../src/core/tx.ts';
 
@@ -391,6 +391,22 @@ test('runInstall: 설치 중 실패 → tx.abort 기록 + lastInProgress=null', 
     assert.equal(lastInProgress(w.harnessRoot), null);
   } finally {
     w.cleanup();
+  }
+});
+
+test('defaultGstackSetup: setup 스크립트 없으면 명확한 에러', () => {
+  // DOGFOOD Round 1 §v0.1.1 #4: CLI 사용자용 기본 구현의 fail-close 검증.
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-gstack-noop-'));
+  try {
+    assert.throws(
+      () => defaultGstackSetup({ gstackSource: dir, claudeRoot: dir }),
+      (e: unknown) =>
+        e instanceof Error &&
+        /setup 스크립트 없음/.test(e.message) &&
+        e.message.includes(dir),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

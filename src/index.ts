@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // acorn — Claude Code harness manager CLI router
 
-import { runInstall, InstallError } from './commands/install.ts';
+import { runInstall, InstallError, defaultGstackSetup } from './commands/install.ts';
 import {
   collectStatus,
   renderStatus,
@@ -55,11 +55,14 @@ Global flags:
   --json          JSON 출력 (status, doctor)
 
 install flags:
-  --force             이전 tx.log in_progress 우회
-  --skip-gstack-setup gstack setup 콜백 생략
+  --force              이전 tx.log in_progress 우회
+  --skip-gstack-setup  gstack setup 콜백 생략
+  --run-gstack-setup   <vendors/gstack>/setup --host auto 를 자동 실행
+                       (--skip-gstack-setup 과 상호 배타)
 
 예시:
   acorn install
+  acorn install --run-gstack-setup
   acorn status --json
   acorn doctor
   acorn install --force
@@ -123,10 +126,19 @@ function exitFor(e: unknown): number {
 
 function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
   try {
+    const runSetup = parsed.flags.has('run-gstack-setup');
+    const skipSetup = parsed.flags.has('skip-gstack-setup');
+    if (runSetup && skipSetup) {
+      io.stderr(
+        `[install/ARGS] --run-gstack-setup 와 --skip-gstack-setup 는 동시에 지정할 수 없습니다.`,
+      );
+      return EXIT.FAILURE;
+    }
     const r = runInstall({
       logger: (l) => io.stdout(l),
       force: parsed.flags.has('force'),
-      skipGstackSetup: parsed.flags.has('skip-gstack-setup'),
+      skipGstackSetup: skipSetup,
+      ...(runSetup ? { gstackSetup: defaultGstackSetup } : {}),
     });
     io.stdout('');
     io.stdout(`✅ 설치 완료`);

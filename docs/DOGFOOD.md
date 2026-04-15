@@ -16,7 +16,7 @@
 1. ~~**lock.ts BOM 처리**~~ ✅ — Windows 에디터로 lock 저장 시 UTF-8 BOM 이 `JSON.parse` 터뜨림. `parseLock` 진입부에서 `\uFEFF` 1바이트 제거 + 테스트 2건 추가 *(v0.1.1-hotfix)*
 2. ~~**schema_version 필드 누락 메시지**~~ ✅ — 현재 `"기대 1, 실제 undefined"` 가 혼란. `in` 연산자로 누락을 먼저 감지해 "schema_version 필드 누락" 메시지 분리 + 테스트 1건 추가 *(v0.1.1-hotfix)*
 3. ~~**SETTINGS_CONFLICT / NOT_A_REPO hint 일관성**~~ ✅ — `InstallError` 에 `hint?: string` 추가, `IN_PROGRESS` / `SETTINGS_CONFLICT` / `SETTINGS_WRITE` + vendor cause 기반 (`NOT_A_REPO`/`LOCAL_CHANGES`/`CLONE`/`CHECKOUT`/`REV_PARSE`) 별 hint 부여, `formatError` 는 `→` 로 출력, 테스트 3건 업데이트/추가 *(v0.1.1-hotfix)*
-4. **CLI `--run-gstack-setup` 플래그** — `gstackSetup` 콜백이 프로그램 API 전용. CLI 사용자는 수동 `cd vendors/gstack && ./setup` 필요. defaultGstackSetup 을 `<source>/setup --host auto` spawn 으로 구현
+4. ~~**CLI `--run-gstack-setup` 플래그**~~ ✅ — `defaultGstackSetup` 함수 추가 (`<source>/setup --host auto` spawn, Windows 는 shell:true), `--run-gstack-setup` CLI 플래그 + `--skip-gstack-setup` 상호배타 검증, 스모크 테스트 1건 *(v0.1.1-hotfix)*
 5. **vendors/gstack dirty 처리** — gstack `./setup` 이 repo-local `.agents/skills/` 생성해 **매번 dirty 로 판정됨**. acorn 측에서 expected dirty paths 허용 리스트 또는 업스트림 `.gitignore` 패치 제안
 
 ### v0.2.0 후보 (재확인된 것)

@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { readLock, TOOL_NAMES, type HarnessLock, type ToolName } from '../core/lock.ts';
 import {
   computeEnv,
@@ -51,6 +54,31 @@ export type GstackSetupFn = (opts: {
   readonly gstackSource: string;
   readonly claudeRoot: string;
 }) => void;
+
+/**
+ * CLI 사용자용 기본 gstack setup 구현.
+ * `<gstackSource>/setup --host auto` 를 spawn 하고 exit code 0 을 기대한다.
+ * (DOGFOOD Round 1 §v0.1.1 #4: 기존에는 콜백 없이는 수동 `cd vendors/gstack && ./setup` 필요)
+ */
+export const defaultGstackSetup: GstackSetupFn = ({ gstackSource }) => {
+  const script = join(gstackSource, 'setup');
+  if (!existsSync(script)) {
+    throw new Error(`gstack setup 스크립트 없음: ${script}`);
+  }
+  const res = spawnSync(script, ['--host', 'auto'], {
+    cwd: gstackSource,
+    stdio: 'inherit',
+    // Windows: .sh 파일은 shell 경유 필요. Unix: 실행비트가 있으면 직접 spawn.
+    shell: process.platform === 'win32',
+  });
+  if (res.error) throw res.error;
+  if (typeof res.status === 'number' && res.status !== 0) {
+    throw new Error(`gstack setup 비정상 종료 (exit=${res.status})`);
+  }
+  if (res.status === null) {
+    throw new Error(`gstack setup 시그널 종료 (signal=${String(res.signal)})`);
+  }
+};
 
 export interface InstallOptions {
   readonly lockPath?: string;
