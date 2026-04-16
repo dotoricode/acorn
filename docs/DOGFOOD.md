@@ -5,6 +5,57 @@
 
 ---
 
+## Round 2 기록 (진행 중) — 2026-04-17 시작 (Windows 집 머신)
+
+**환경**: Windows 10, `D:\.claude\skills\harness\`, Git Bash, acorn v0.1.1 (전역 `npm link`), jq 미설치
+**현황**: D-0 ~ D-3 통과, D-4 (SIGINT) 재현 실패, 자연 누적 단계 대기
+**dreport 스냅샷 (2026-04-17 02:48)**: 실행 14회 · exit=0 10 / exit=1 3 / exit=78 1 · 메모 2건
+
+### 시나리오 결과
+
+| 단계 | 결과 | 비고 |
+|---|---|---|
+| D-0 status/doctor | ✅ | locked 3, env match 3. gstack `.agents/` 외 SKILL.md 등 dirty warning 계속 노출 (Round 1부터 이어진 상태) |
+| D-1 install 멱등성 | ✅ | vendors noop × 3, 심링크 noop, settings noop |
+| D-2 심링크 수동 파괴 → 재install | ✅ | `rm /d/.claude/skills/gstack` 후 status 에 `gstack link ⚠️ absent`, install 로 `created:` 재생성. **Windows junction 재생성 실증** |
+| D-3 settings 충돌 | ✅ | `CLAUDE_PLUGIN_ROOT` 값을 `...\vendors\omc` 로 변조 → exit=78 CONFLICT, 파일 무변경, 메시지에 `현재=/기대=` 양값 정확 표기 |
+| D-4 tx.log IN_PROGRESS (SIGINT) | ❌ 재현 실패 | 네트워크 없는 멱등 install 은 <300ms 에 완료되어 `sleep 0.3 && kill -INT`가 닿기 전에 프로세스 종료. 재시도 필요 (sleep 대폭 단축 or 실패 주입) |
+| jq 파이프 시나리오 | ⏸ 보류 | jq 미설치 (Git Bash 기본에 없음). 설치 후 재실행 예정 |
+
+### 긍정 관찰 (Windows 실증)
+
+- ✅ **Windows junction 수동 삭제 후 자동 복구** — `symlink.ts` 의 junction 분기가 실전에서도 동작. Round 1 (Mac symlink) 과 동등한 UX
+- ✅ **SETTINGS_CONFLICT 메시지 품질** — 현재값/기대값을 양쪽 다 찍어줘서 사용자가 diff 바로 판단 가능. "어느 키가 뭘 바꿔야 하는지"를 찾기 위해 다른 파일 열 필요 없음
+- ✅ **비파괴 preflight** — D-3에서 acorn 중단 후 settings.json timestamp 유지 확인
+- ✅ **adog/dn/dreport 파이프라인** — Windows Git Bash 에서 Mac 과 동일하게 작동, 로그 위치 `/c/Users/SMILE/acorn-dogfood.log`
+
+### 후속 미니 수정 (Round 2 도중 발견 · 본 문서와 같은 세션에서 조치)
+
+1. **`src/index.ts` VERSION 동기화 누락** — `package.json` 은 `b3c7668` 에서 0.1.1 로 올렸는데 `src/index.ts` 의 `VERSION` 상수와 `package-lock.json` 이 0.1.0 으로 남아있었음. v0.1.1 패치에서 누락. *(본 세션 커밋)*
+2. **ESM `isMain` 감지가 Windows npm link 환경에서 실패 가능** — 기존 코드는 `import.meta.url === \`file://${process.argv[1]}\`` 문자열 비교. npm link 로 생성되는 shim 이나 심링크 경로가 realpath 와 달라 엔트리 감지 실패 위험. `realpathSync` + `pathToFileURL` 정규화로 교체. *(본 세션 커밋)*
+
+### v0.1.2-hotfix 후보 (Round 2 시점)
+
+- (아직 hotfix 감 블로커 없음 — D-4 재시도 결과 보고 판단)
+
+### v0.2.0 후보 (Round 2 에서 재확인·추가)
+
+1. **부트스트랩 `jq` 의존 명시** — Windows Git Bash 기본에 없음. README / HANDOVER 부트스트랩 섹션에 설치 안내 1줄
+2. **`install` 출력의 `[6/7] setup 콜백 미제공` 라인 축약** — 이미 정상 상태에서도 매번 노출 → 멱등 실행 시 조용해지거나 더 짧은 문구로
+3. **`--adopt`, `acorn config`, `acorn lock` (Round 1에서 계속 유지)**
+
+### 미해결 파편 (2026-04-17 시점)
+
+- gstack vendors dirty (`SKILL.md`, `autoplan/SKILL.md` 등) — Round 1부터 이어진 상태. `EXPECTED_DIRTY_PATHS` 가 `.agents/` 만 허용. 실 편집 여부 확인 후 원복 or 허용 경로 확장 결정 필요
+- D-4 SIGINT 재현 방법 — 네트워크 없는 install 이 너무 빠르므로 (a) sleep <0.1 로 재시도 or (b) 인위적 지연 훅 주입 중 택1
+
+### 다음 라운드(또는 종료) 준비
+
+- 종료 조건 (DOGFOOD.md § 종료 기준 중 하나): 메모 10건+ / 2주 경과 (→ 2026-05-01) / 블로커 1건 / 3일 안 씀
+- 종료 시 산출물: `dreport` 전문 + 본 섹션 finalize + `HANDOVER.md §1` 갱신 + v0.1.2/v0.2.0 큐 확정
+
+---
+
 ## Round 1 기록 — 2026-04-15 (Mac personal, ~40분)
 
 **환경**: macOS, `CLAUDE_CONFIG_DIR=~/.claude-personal`, direnv, npm link 로 전역 acorn
