@@ -18,7 +18,7 @@ import { VendorError } from './core/vendors.ts';
 import { SettingsError } from './core/settings.ts';
 import { SymlinkError } from './core/symlink.ts';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 
 export interface CliIO {
   readonly stdout: (line: string) => void;
@@ -211,9 +211,19 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
 }
 
 // ESM entrypoint: 직접 실행될 때만 process.exit
+// Windows 경로/심링크 환경에서도 일치시키기 위해 realpath 해석 후 pathToFileURL 로 정규화
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
+function sameFile(a: string, b: string): boolean {
+  try {
+    return realpathSync(a) === realpathSync(b);
+  } catch {
+    return false;
+  }
+}
 const isMain =
   typeof process.argv[1] === 'string' &&
-  import.meta.url === `file://${process.argv[1]}`;
+  sameFile(fileURLToPath(import.meta.url), process.argv[1]);
 
 if (isMain) {
   const code = runCli(process.argv.slice(2));
