@@ -3,6 +3,57 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.3.4] — 2026-04-17
+
+🟠 v0.4.x 큐 중 코드 하드닝 2건 (H-3 / H-1) 을 v0.3.x 내 patch 로
+선공급. 기능 추가 없음, silent-lie 제거와 warning 노출 강화에 집중.
+HIGH-2 (공급망 sha256 pinning) / HIGH-3 (ACORN_GUARD_BYPASS 재설계) 은
+설계 결정 필요해 v0.4.0 에 별도.
+
+### Fixed
+
+- **§15 H-3 / `--follow-symlink` revParse silent 흡수 제거**: v0.3.1
+  B1 으로 "`--follow-symlink` 없이 심링크를 만나면 `NOT_A_REPO` 로
+  fail-close" 는 됐으나, `--follow-symlink` 자체의 성공 경로가 여전히
+  silent-lie 를 흘렸다. `git.revParse(path)` throw 를 `try {} catch {}`
+  로 흡수하고 head=null 로 두어 `head !== commit` 평가가 `preserved`
+  action 을 반환 — drift 든 target 자체가 git 아닌 경우든 모두 조용한
+  success 로 둔갑. v0.3.4 는 `--follow-symlink` 의미를 "lock SHA
+  기준으로 target 을 엄격 검증" 으로 재정의하고 4 단계로 분기:
+  `target 이 git 저장소 아님 → NOT_A_REPO`,
+  `revParse 실행 실패 → REV_PARSE`,
+  `HEAD ≠ lock SHA → SHA_MISMATCH` (drift 확정, `git checkout <sha>`
+  조치 안내 포함), `HEAD == lock SHA → adopted`. `install.ts` 의
+  `preserved` 로그 분기는 이제 unreachable 이라 제거.
+- **§15 H-1 / gstack setup silent no-op 경고**: `opts.gstackSetup`
+  미제공 + `skipGstackSetup=false` + marker 불일치 조합이면 runInstall
+  은 "[6/8] gstack setup 실행" 하고 한 줄 안내만 남긴 채 skip, 이후
+  `✅ 설치 완료` 초록 불빛이 덮어버려 사용자는 setup 이 안 돈 걸
+  놓친다. 새 `GstackSetupReason` 타입 (`'ran' | 'skip-flag' |
+  'marker-noop' | 'no-callback'`) 을 `InstallResult` 에 노출하고,
+  `cmdInstall` 이 `'no-callback'` 감지 시 stderr 에 `⚠️` 경고 블록
+  (조치 3안내) 출력. exit code 는 OK 유지 (backward compat). 다른 세
+  상태는 모두 의도된 상태이므로 경고 없음.
+
+### Changed
+
+- `VendorAction` 의 `'preserved'` 멤버는 현재 미사용 (v0.3.4 H-3 이후
+  어느 코드 경로도 emit 하지 않음). 미래 "소프트 모드" 가 필요할 때를
+  대비해 union 은 유지 — 실제 emit 이 재개되면 코멘트 업데이트 필요.
+
+### Testing
+
+- 212 단위 테스트 (v0.3.3 의 208 + H-3 regression guard 3 + H-1 reason
+  4상태 검증 1). Mac 기준 전부 pass 예상. Windows 18 실패는 기존
+  symlinkSync EPERM 그대로.
+
+### Deferred to v0.4.0
+
+🟠 남은 2건 (HIGH-2 공급망 sha256 pinning + npm provenance, HIGH-3
+`ACORN_GUARD_BYPASS` nonce 재설계) + 🟡 6건 + 🟢 Round 3 도그푸딩.
+v0.4.0 은 새 기능 (e.g., `acorn uninstall` / `acorn list` / `lock
+bump`) 와 함께 minor bump.
+
 ## [0.3.3] — 2026-04-17
 
 v0.3.1 / v0.3.2 코드 패치 이후 전역 문서 현행화. 기능 변경 0, 테스트

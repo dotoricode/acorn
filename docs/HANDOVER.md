@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-17 (Windows / **v0.3.3 docs patch — USAGE/README/CLAUDE.md 전역 현행화**)
+> 마지막 갱신: 2026-04-17 (Windows / **v0.3.4 hardening — H-3/H-1 silent-lie 제거**)
 
 ---
 
@@ -9,14 +9,15 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 과 동기), 태그 **`v0.3.3`** 최신 (+ v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
-| 진행 중 작업 | **v0.3.3 docs patch 완료** — v0.3.1 / v0.3.2 코드 패치 이후 누락된 전역 문서 현행화. `docs/USAGE.md` (npm 배포 동반 — 가장 심각하게 stale, title 이 v0.1.0), `README.md` (`--follow-symlink` 설명 정반대 오류), `CLAUDE.md` (존재하지 않는 `install --repo .` 커맨드 + npm pack 화이트리스트 guard). 기능 변경 0. |
-| 다음 작업 | **🟠 v0.4.x queue (4건)**: H-3 (follow-symlink revParse 흡수 강화), H-1 (setup 콜백 + skipGstackSetup silent no-op), security HIGH-2 (sha256 pinning + npm provenance), HIGH-3 (`ACORN_GUARD_BYPASS` 의미 재정의). **🟡 v1.0 전 부채 6건** (core/adopt+sha-display 흡수, InstallErrorCode naming 통일, integration test, isoTs 중복, 백업 ts 단일화, Windows junction 이슈 재검증) + **🟢 Round 3 도그푸딩 필수** (v0.3.x 신기능 실증 미이행 — plan.md:207-209 exit criteria). 상세 리스트는 `~/.gstack/projects/acorn/checkpoints/20260417-230009-v0-3-1-hotfix-shipped.md` |
-| 테스트 | Windows: **190/208** (18 실패 — 순수 Windows 개발자 모드 `symlinkSync` EPERM). Mac 기준 208/208 예상. v0.3.3 은 docs-only, 테스트 변경 없음. |
-| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 (`c287dfd`) → v0.3.1 (`b159bcc`) → v0.3.2 (`9cb7519`) → **v0.3.3** |
+| 브랜치 | `main` (origin 과 동기), 태그 **`v0.3.4`** 최신 (+ v0.3.3, v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
+| 진행 중 작업 | **v0.3.4 hardening 완료** — 🟠 v0.4.x 큐 중 코드 하드닝 2건 선공급: H-3 (`--follow-symlink` 의 revParse throw silent 흡수 제거 → NOT_A_REPO/REV_PARSE/SHA_MISMATCH/adopted 4단계 분기), H-1 (`gstack setup` silent no-op 경고 — `GstackSetupReason` 타입 + cmdInstall ⚠️ stderr 출력). 기능 추가 없음. |
+| 다음 작업 | **🟠 v0.4.0 queue (2건)**: security HIGH-2 (sha256 pinning + npm provenance — 공급망 설계), HIGH-3 (`ACORN_GUARD_BYPASS` nonce 재설계 — semantics 변경). 둘 다 **설계 결정 선행 필요**. v0.4.0 은 여기에 새 user 기능 (e.g., `acorn uninstall` / `acorn list` / `lock bump`) 결합한 minor bump 권장. **🟡 v1.0 전 부채 6건** (core/adopt+sha-display 흡수, InstallErrorCode naming 통일, integration test, isoTs 중복, 백업 ts 단일화, Windows junction 이슈 재검증) + **🟢 Round 3 도그푸딩 필수**. 상세: `~/.gstack/projects/acorn/checkpoints/20260417-230009-v0-3-1-hotfix-shipped.md` |
+| 테스트 | Windows: **194/212** (18 실패 — 순수 Windows 개발자 모드 `symlinkSync` EPERM). Mac 기준 212/212 예상. v0.3.4 신규: H-3 regression guard 3 + H-1 reason 4상태 검증 1 = 총 4건. |
+| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 (`c287dfd`) → v0.3.1 (`b159bcc`) → v0.3.2 (`9cb7519`) → v0.3.3 (`90b7c03`) → **v0.3.4** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |
 | v0.3.2 본문 | `16a2e40` S3 · `fbd3a60` S4 · `c81e2ef` S5 · `9cb7519` release |
-| v0.3.3 본문 | `209f325` docs(usage) · `6050cf7` docs(readme) · `388191c` docs(claude-md) · (+ release commit) |
+| v0.3.3 본문 | `209f325` docs(usage) · `6050cf7` docs(readme) · `388191c` docs(claude-md) · `90b7c03` release |
+| v0.3.4 본문 | `a2cb944` H-3 (+ H-1 reason tracking 선행) · `ceaff04` H-1 cmdInstall warning · (+ release commit) |
 | v0.1.2 본문 | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
 | v0.1.3 본문 | `cdeacff` C4 / `cf0518d` H3 / `4f59193` H4 / `1c797d2` C3 |
 | v0.2.0 본문 | `f660b4e` S2 · `a5738b6` M5 · `77a209e` H1 · `b574f05` M4 · `08022fc` M3 · `0165b46` S6 · `6b269ba` S5 |
