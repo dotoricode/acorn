@@ -68,6 +68,12 @@ install flags:
   --skip-gstack-setup  gstack setup 콜백 생략
   --run-gstack-setup   <vendors/gstack>/setup --host auto 를 자동 실행
                        (--skip-gstack-setup 과 상호 배타)
+  --adopt              기존 non-git vendor 를 "<path>.pre-adopt-<ISO8601>" 로
+                       rename 한 뒤 lock SHA 기준으로 clone (destructive rename,
+                       Y/n 확인 — non-TTY 는 --yes 필요)
+  --follow-symlink     vendor 경로가 심링크면 target HEAD 를 lock SHA 와 비교
+                       (기본: 심링크 거부)
+  --yes                확인 프롬프트 스킵 (destructive 플래그용)
 
 예시:
   acorn install
@@ -151,11 +157,43 @@ function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
       );
       return EXIT.FAILURE;
     }
+    // §15 B3 (v0.3.1): --adopt 는 vendor 디렉토리를 `<path>.pre-adopt-<ISO8601>`
+    // 로 rename 하는 destructive op. uninstall 보다 gate 가 약했던 회귀를 차단.
+    const adopt = parsed.flags.has('adopt');
+    const yes = parsed.flags.has('yes');
+    if (adopt && !yes) {
+      const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+      if (!isTty) {
+        io.stderr(
+          `[install/ARGS] --adopt 는 destructive rename 입니다. ` +
+            `non-TTY 환경에선 --yes 명시적 승인 필요.`,
+        );
+        return EXIT.USAGE;
+      }
+      io.stdout(
+        `⚠️  --adopt: 기존 non-git vendor 디렉토리를 ` +
+          `"<path>.pre-adopt-<ISO8601>" 로 이름 변경 후 lock SHA 기준으로 clone 합니다.`,
+      );
+      io.stdout(`계속하시겠습니까? [Y/n]`);
+      const buf = Buffer.alloc(8);
+      let accepted = false;
+      try {
+        const n = readSync(0, buf, 0, buf.length, null);
+        const input = buf.slice(0, n).toString('utf8').trim().toLowerCase();
+        accepted = input === '' || input.startsWith('y');
+      } catch {
+        accepted = false;
+      }
+      if (!accepted) {
+        io.stdout(`취소됨: --adopt`);
+        return EXIT.OK;
+      }
+    }
     const r = runInstall({
       logger: (l) => io.stdout(l),
       force: parsed.flags.has('force'),
       skipGstackSetup: skipSetup,
-      adopt: parsed.flags.has('adopt'),
+      adopt,
       followSymlink: parsed.flags.has('follow-symlink'),
       ...(runSetup ? { gstackSetup: defaultGstackSetup } : {}),
     });

@@ -148,3 +148,16 @@ test('runCli: lock unknown-sub → USAGE', () => {
   assert.equal(code, EXIT.USAGE);
   assert.ok(c.err.some((l) => /알 수 없는 lock 서브커맨드/.test(l)));
 });
+
+test('§15 B3 regression: install --adopt + non-TTY + no --yes → USAGE 차단', () => {
+  // Non-TTY (test runner) 환경에서 --adopt 만 주면 destructive rename 을
+  // 명시적 --yes 없이 실행할 수 없다. v0.3.0 은 무조건 진행 → uninstall 보다
+  // gate 가 약했던 회귀.
+  const c = capture();
+  const code = runCli(['install', '--adopt'], c.io);
+  assert.equal(code, EXIT.USAGE);
+  assert.ok(
+    c.err.some((l) => /install\/ARGS/.test(l) && /adopt/.test(l)),
+    'ARGS 에러 메시지에 adopt 언급',
+  );
+});
