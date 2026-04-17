@@ -7,6 +7,16 @@
   "bin": {
     "acorn": "dist/index.js"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "hooks/guard-check.sh",
+    "templates/harness.lock.template.json",
+    "scripts/install-shim-windows.sh",
+    "docs/USAGE.md",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc --project tsconfig.build.json",
