@@ -3,6 +3,59 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.3.1] — 2026-04-17
+
+v0.3.0 직후 4-agent 독립 검토(critic / code-reviewer / architect / security-reviewer)
+결과 식별된 blocker 4건에 대한 hotfix. v0.3.0 은 npm 에 publish 되지 않아
+unpublish 는 불필요.
+
+### Security
+
+- **CRIT-1 / npm pack 유출 차단**: `package.json` 에 `files` 화이트리스트 추가.
+  `dist/**`, `hooks/guard-check.sh`, `templates/harness.lock.template.json`,
+  `scripts/install-shim-windows.sh`, `docs/USAGE.md`, `README.md`, `LICENSE`
+  만 배포에 포함. 이전 pack 은 `src/**/*.ts`, `tests/**/*.ts`, 내부 설계
+  문서(`docs/acorn-v0.3-plan.md`, `docs/acorn-v1-plan.md`, `docs/DOGFOOD.md`,
+  `docs/HANDOVER.md`), `scripts/dogfood/*.sh`, `tsconfig.json` 을 전부 포함해
+  내부 작업 내역이 npm 에 노출될 뻔함. 73 파일 / 126kB → 37 파일 / 51kB.
+
+### Fixed
+
+- **§15 B1 / installVendor 심링크 silent regression**: `src/core/vendors.ts`
+  의 `isSymlink` 분기가 `--follow-symlink` 확인 없이 `preserved` 로 success
+  를 반환해 v0.2.0 의 `NOT_A_REPO` 자동 교체 거부 계약을 회귀시키던 문제.
+  이제 `--follow-symlink` 없이 심링크를 만나면 `NOT_A_REPO` 로 fail-close.
+  regression guard 테스트 2건 추가 (`§15 B1 ... --follow-symlink 없음 → NOT_A_REPO`,
+  `... --follow-symlink + HEAD 일치 → adopted`).
+- **§15 B2 / `acorn config` tx.log 미래핑**: v0.3 plan §S3 이 명시한
+  "phase 이름 `config-<key>`, commit 마커로 완료 기록" 을 `runConfig` 가
+  이행하지 않아 lock/settings 변경이 `tx.log` 에 흔적 없이 이뤄지던 문제.
+  `runMutation` 헬퍼로 `guard.mode` / `guard.patterns` / `env.reset` 쓰기
+  경로를 `beginTx`/`phase`/`commit`/`abort` 으로 감쌈. read-only 경로
+  (`summary`, `get`) 는 tx 생략. 테스트 5건 추가.
+- **§15 B3 / `acorn install --adopt` 확인 프롬프트 부재**: destructive rename
+  (`<path>.pre-adopt-<ISO8601>`) 임에도 `uninstall` 보다 gate 가 약했던 문제.
+  TTY 에서는 경고 + Y/n 프롬프트, non-TTY + `--yes` 미지정 → `[install/ARGS]`
+  USAGE 에러. `--yes` 로 프롬프트 스킵. 기존 `config` 와 동일 패턴.
+
+### Changed
+
+- `usage()` 에 `--adopt` / `--follow-symlink` / `--yes` 플래그 설명 추가.
+
+### Testing
+
+- 207 단위 테스트 (v0.3.0 의 199 + B1 regression guard 2 + B2 tx.log 검증 5 +
+  B3 non-TTY gate 1). Mac 기준 전부 pass 예상. Windows 20 실패는 기존
+  symlinkSync EPERM / 경로구분자 케이스로 변경 무관.
+
+### Deferred to v0.4.x
+
+- H-3 (follow-symlink revParse 흡수 강화), H-1 (setup 콜백 미제공 + skipGstackSetup
+  조합 silent no-op), security HIGH-2 (supply-chain sha256 pinning + npm
+  provenance), HIGH-3 (`ACORN_GUARD_BYPASS` 의미 재정의), critic S3/S4/S5 및
+  architect R1/R2. 전체 큐는 `docs/HANDOVER.md §1` 의 "4-agent 검토 기준
+  remaining work" 참조.
+
 ## [0.3.0] — 2026-04-17
 
 v0.3 설계 문서 (`docs/acorn-v0.3-plan.md`) 기준 feature 2 개 완료 + ADR-018/019 신설. v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 으로 같은 날 네 번째 릴리스.

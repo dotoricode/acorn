@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-17 (Windows / **동일 세션 4연속 릴리스 v0.1.2 → v0.3.0**)
+> 마지막 갱신: 2026-04-17 (Windows / **v0.3.1 hotfix — 4-agent 검토 blocker 4건 처리**)
 
 ---
 
@@ -9,11 +9,12 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 과 동기), 태그 **`v0.3.0`** 최신 (+ v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
-| 진행 중 작업 | **v0.3.0 릴리스 완료** — `docs/acorn-v0.3-plan.md` 기준 S3 `acorn config` + S4 `acorn install --adopt` + ADR-018/019 신설. 네 번째 릴리스. §15 audit 버킷 (v0.1.2/v0.1.3/v0.2.0) + v0.3 feature 큐 모두 처리 완료. |
-| 다음 작업 | 없음 (clean checkpoint). 선택적 후속: (a) **도그푸딩 Round 3** — v0.2.0 + v0.3.0 신기능 (config / --adopt / summary 필드 / guard patterns 3단계) 실사용 검증. 다른 Windows 머신 또는 Mac 에서. (b) 백로그 L1/L2 (CRLF/UNC, tx.log 회전) · (c) `acorn lock bump` (ADR-019 에서 암시된 v0.4+ 유틸) |
-| 테스트 | Windows: 179/199 (20 실패 — 전부 기존 Windows EPERM symlinkSync / 경로구분자 + S1/C4 의 symlink 종속 케이스). Mac 기준 199/199 예상 |
-| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 (`b3c7668`) → v0.1.2 (`1a8e2a6`) → v0.1.3 (`d1590e0`) → v0.2.0 (`640f214`) → **v0.3.0 (`c287dfd`)** |
+| 브랜치 | `main` (origin 과 동기), 태그 **`v0.3.1`** 최신 (+ v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
+| 진행 중 작업 | **v0.3.1 hotfix 완료** — v0.3.0 직후 4-agent 독립 검토 (critic / code-reviewer / architect / security-reviewer) 가 식별한 🔴 blocker 4건 처리: CRIT-1 (npm pack 유출 차단 = `files` 화이트리스트 — 73→37 파일, 126→51kB), B1 (installVendor 심링크 silent regression — `NOT_A_REPO` fail-close 복원), B2 (`acorn config` tx.log 미래핑 — `runMutation` 헬퍼 도입), B3 (`--adopt` 확인 프롬프트 부재 — TTY Y/n + non-TTY `--yes` 강제). v0.3.0 은 npm publish 된 적 없어 unpublish 불필요. |
+| 다음 작업 | **🟠 v0.4.x queue (7건)**: H-3 (follow-symlink revParse 흡수 강화), H-1 (setup 콜백 + skipGstackSetup silent no-op), security HIGH-2 (sha256 pinning + npm provenance), HIGH-3 (`ACORN_GUARD_BYPASS` 의미 재정의), critic S3 (테스트 POSIX 하드코딩 2건), S4 (`NOT_A_REPO` hint 에 `--adopt` 안내), S5 (`usage()` 풀 개편). **🟡 v1.0 전 부채 6건** (core/adopt+sha-display 흡수, InstallErrorCode naming 통일, integration test, isoTs 중복, 백업 ts 단일화, Windows junction 이슈 재검증) + **🟢 Round 3 도그푸딩 필수** (v0.3.x 신기능 실증 미이행 — plan.md:207-209 exit criteria) — 상세 리스트는 `~/.gstack/projects/acorn/checkpoints/20260417-221603-v0-1-2-to-v0-3-0-session.md` (단, v0.3.1 로 🔴 4건은 해소됨) |
+| 테스트 | Windows: 187/207 (20 실패 — 전부 기존 Windows EPERM symlinkSync / 경로구분자 + S1/C4 의 symlink 종속 케이스). Mac 기준 207/207 예상. v0.3.1 신규: B1 regression guard 2 + B2 tx.log 검증 5 + B3 non-TTY gate 1 = 총 8건 |
+| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 (`b3c7668`) → v0.1.2 (`1a8e2a6`) → v0.1.3 (`d1590e0`) → v0.2.0 (`640f214`) → v0.3.0 (`c287dfd`) → **v0.3.1** |
+| v0.3.1 본문 | (hotfix 단일 커밋 — CRIT-1 + B1 + B2 + B3 묶음) |
 | v0.1.2 본문 | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
 | v0.1.3 본문 | `cdeacff` C4 / `cf0518d` H3 / `4f59193` H4 / `1c797d2` C3 |
 | v0.2.0 본문 | `f660b4e` S2 · `a5738b6` M5 · `77a209e` H1 · `b574f05` M4 · `08022fc` M3 · `0165b46` S6 · `6b269ba` S5 |
