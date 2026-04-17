@@ -86,6 +86,22 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
 - `CLAUDE_CONFIG_DIR` — Claude Code 설정 루트 (direnv 사용 시)
 - `ACORN_GUARD_BYPASS=1` — guard 훅 우회. 셸 inline 형태 `ACORN_GUARD_BYPASS=1 <cmd>` 는 해당 `<cmd>` 1회에만 적용되고, `export ACORN_GUARD_BYPASS=1` 은 unset 할 때까지 **세션 전체**에서 guard 를 비활성화 (매 호출마다 stderr `⚠️ BYPASS ACTIVE` 반복, v0.3.5+ `acorn doctor` 가 critical 로 표시)
 - `ACORN_GUARD_MODE=block|warn|log` — guard 모드 오버라이드
+- `ACORN_ALLOW_ANY_REPO=1` — **v0.4.0+**: `harness.lock.tools.*.repo` allowlist 우회. fork·내부 미러·로컬 dev 용 escape hatch. 설정하지 않으면 acorn 은 hardcoded allowlist 를 강제 (§15 HIGH-2 / ADR-020)
+
+**공급망 무결성 (v0.4.0+)**
+
+- `harness.lock.tools.*.repo` 는 **hardcoded allowlist** 만 허용:
+  - `omc: Yeachan-Heo/oh-my-claudecode`
+  - `gstack: garrytan/gstack`
+  - `ecc: affaan-m/everything-claude-code`
+
+  악성 lock 파일이 공격자 저장소를 지정하지 못하도록 차단. Fork 시엔 `ACORN_ALLOW_ANY_REPO=1` 로 우회.
+- npm 패키지는 **sigstore provenance** 로 서명되어 배포된다 (GitHub Actions OIDC). 사용자는 신뢰 검증 가능:
+  ```bash
+  npm audit signatures                        # 전체 의존성 검증
+  npm view @dotoricode/acorn --provenance     # acorn 단독 빌드 출처 확인
+  ```
+  수동 `npm publish` 는 금지 (릴리스는 tag push → GitHub Actions 만).
 
 > 머신 간 인계(Mac ↔ Windows)는 [docs/HANDOVER.md](docs/HANDOVER.md) 참조.
 
