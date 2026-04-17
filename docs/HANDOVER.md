@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-18 (Windows / **v0.4.4 — codex P1 #7 (defaultGstackSetup Windows cmd.exe injection 표면 제거)**)
+> 마지막 갱신: 2026-04-18 (Windows / **v0.5.0 — installVendor lstat-first 재설계 (codex P1 #1 tool traversal + Round 3 F3 Node 24 Windows junction)**)
 
 ---
 
@@ -9,11 +9,11 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 과 동기), 태그 **`v0.4.4`** 최신 (+ v0.4.3, v0.4.2, v0.4.1, v0.4.0, v0.3.5, v0.3.4, v0.3.3, v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
-| 진행 중 작업 | **v0.4.4 — codex P1 #7 해소 완료**. `defaultGstackSetup` 의 Windows `spawnSync shell` 옵션 활성을 제거하고 bash 를 argv[0] 로 직접 호출 + shell:false. cmd.exe 가 경로 내 특수문자를 command-line 으로 해석하던 injection 표면 차단. 회귀 가드 테스트 (source grep) +1. 테스트 235/235 Mac 예상, Windows 217/235 (기존 EPERM 18, 신규 회귀 0). **v0.5.0 계획**: codex P1 #1 (tool name path traversal) + Round 3 F3 (Node 24 Windows `existsSync(junction)=false`) 을 `installVendor` 진입부 lstat-first reorder 한 번에 처리. |
+| 브랜치 | `main` (origin 과 동기), 태그 **`v0.5.0`** 최신 (+ v0.4.4, v0.4.3, v0.4.2, v0.4.1, v0.4.0, v0.3.5, v0.3.4, v0.3.3, v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
+| 진행 중 작업 | **v0.5.0 — installVendor 진입부 lstat-first 재설계 완료**. codex P1 #1 (tool name path traversal guard) + Round 3 F3 (Node 24 Windows `existsSync(junction)=false` 로 `--follow-symlink` 비작동) 을 한 refactor 로 해소. `isValidToolName` + `INVALID_TOOL_NAME` 에러 코드 추가, `probePath(lstat)` 단일 소스로 "존재/심링크/디렉토리" 판정. 기존 `isEmptyDir` inline 화. minor bump 근거: `installVendor({tool: ...})` 가 런타임 검증 시작해 외부 caller 에 이론적 breaking. CLI 사용자 체감 없음. 테스트 241/241 Mac 예상, Windows 223/241 (기존 EPERM 18, 신규 회귀 0). **codex review 10건 중 해결**: #1✅ #2✅ #3✅ #4✅ #5✅ #6(v0.5+ ADR-021) #7✅ #8(문서 부채) #9✅ #10(v0.5+ junction tests). |
 | 다음 작업 | **🟠 v0.4.2 (P1 2건)**: `installVendor` 의 `tool` 경로 traversal guard + `defaultGstackSetup` Windows `shell:true` 제거. **🟢 Round 3 도그푸딩 필수** — v0.3.x~v0.4.1 신기능 실증. **🟡 v1.0 전 부채 6건**: core/adopt+sha-display 흡수, InstallErrorCode naming 통일, integration test (ARCH-R1), isoTs 중복 제거, 백업 ts 조각화, Windows junction 이슈. **🆕 미구현 user 커맨드**: `acorn uninstall` / `acorn list` / `acorn lock bump`. **🔒 v0.5+**: sha256 pinning (ADR-020-3), tx ID (ADR-021). 상세 큐: `~/.gstack/projects/acorn/checkpoints/20260418-013310-v0-4-0-high2-lite-완주.md` + CHANGELOG v0.4.1. |
-| 테스트 | Windows: **217/235** (18 실패 — 기존 symlinkSync EPERM, 신규 회귀 0). Mac 기준 235/235 예상. 세션 누적 신규 +17: bom 4 + env 2 + settings 5 + config 2 + status 2 + cli lock PARSE 1 + install shell regression guard 1. |
-| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 → v0.3.1 → v0.3.2 → v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → v0.4.2 → v0.4.3 → **v0.4.4** |
+| 테스트 | Windows: **223/241** (18 실패 — 기존 symlinkSync EPERM, 신규 회귀 0). Mac 기준 241/241 예상. 세션 누적 신규 +23: bom 4 + env 2 + settings 5 + config 2 + status 2 + cli lock PARSE 1 + install shell regression guard 1 + vendors isValidToolName 2 + vendors INVALID_TOOL_NAME guard 4. |
+| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 → v0.3.1 → v0.3.2 → v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → v0.4.2 → v0.4.3 → v0.4.4 → **v0.5.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |
 | v0.3.2 본문 | `16a2e40` S3 · `fbd3a60` S4 · `c81e2ef` S5 · `9cb7519` release |
 | v0.3.3 본문 | `209f325` docs(usage) · `6050cf7` docs(readme) · `388191c` docs(claude-md) · `90b7c03` release |
@@ -24,6 +24,7 @@
 | v0.4.2 본문 | fix(vendors) isEmptyDir 심링크 오판 + release |
 | v0.4.3 본문 | fix(cli) LockError/PARSE → exit=78 CONFIG (Round 3 F1) + release |
 | v0.4.4 본문 | fix(install) defaultGstackSetup cmd.exe injection 표면 제거 (codex P1 #7) + release |
+| v0.5.0 본문 | refactor(vendors) installVendor lstat-first + INVALID_TOOL_NAME (codex P1 #1 + Round 3 F3) + release |
 | v0.1.2 본문 | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
 | v0.1.3 본문 | `cdeacff` C4 / `cf0518d` H3 / `4f59193` H4 / `1c797d2` C3 |
 | v0.2.0 본문 | `f660b4e` S2 · `a5738b6` M5 · `77a209e` H1 · `b574f05` M4 · `08022fc` M3 · `0165b46` S6 · `6b269ba` S5 |

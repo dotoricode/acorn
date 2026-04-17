@@ -3,6 +3,47 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.5.0] — 2026-04-18
+
+🟠 **`installVendor` 진입부 lstat-first 재설계** — codex review P1 #1
+(tool name path traversal guard) + Round 3 F3 (Node 24 Windows
+`existsSync(junction)=false` 로 `--follow-symlink` 비작동) 을 한 번에
+해소. `tool` 인자 런타임 검증이 외부 caller 에 breaking 가능성이라
+**minor bump**.
+
+### Added
+
+- **§15 v0.5.0 / codex review #1 / `src/core/vendors.ts`**: `isValidToolName`
+  + `VendorErrorCode.INVALID_TOOL_NAME`. `installVendor` 진입부에서 tool
+  이름을 `/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/` 로 strict 검증. path separator
+  (`/`, `\`), 상위참조 (`..`), null byte, 특수문자 등 **vendorsRoot 밖으로
+  파일/디렉토리 쓰기·삭제를 유발할 수 있던 표면 차단**. CLI 는 `TOOL_NAMES`
+  고정이라 exploit 경로가 없었으나 exported API 는 열려 있었다. 기존
+  픽스처 (`omc` / `gstack` / `ecc`) 는 모두 통과.
+
+### Fixed
+
+- **§15 v0.5.0 / Round 3 F3 / `src/core/vendors.ts`**: `installVendor`
+  진입부를 `probePath`(lstat-based) 로 재구성. 이전엔 `existsSync` →
+  `isEmptyDir` → symlink 순서였고 Node 24 Windows 에서 `existsSync(junction)
+  === false` 라 junction 이 "부재" 로 오판되며 symlink 분기가 도달 불가였다.
+  이제 `lstatSync` 결과를 단일 소스로 삼아 "존재/심링크/디렉토리" 를 1회
+  판정하고 심링크는 treatAsClone 판정 전에 먼저 분기. `isEmptyDir` 헬퍼는
+  inline 화. Windows `--follow-symlink` 가 비로소 정상 작동 (F3 해소).
+
+### Breaking
+
+- `installVendor({ tool: ... })` 가 허용 패턴 외의 tool 이름에 대해
+  `VendorError(code: 'INVALID_TOOL_NAME')` throw. **외부 caller 0 추정**
+  이지만 이론적 호환성 변화라 minor bump. CLI 사용자 체감 없음.
+
+### Added (tests)
+
+- `tests/vendors.test.ts`: `isValidToolName` 허용/거부 단위 검증 +2,
+  `installVendor` 에서 4가지 악의적 tool 이름 (`..` / `../../../etc` /
+  `a/b` / 빈 문자열) 이 `INVALID_TOOL_NAME` 으로 차단되는 E2E +4 = **+6**.
+  기존 25 → 31.
+
 ## [0.4.4] — 2026-04-18
 
 🟠 **Codex review P1 #7 — `defaultGstackSetup` Windows cmd.exe injection
