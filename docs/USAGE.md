@@ -42,7 +42,7 @@ acorn status
 3툴 전부 ✅ 뜨면 끝.
 
 ```
-acorn v0.3.2  •  ~/.claude/skills/harness
+acorn v0.6.0  •  ~/.claude/skills/harness
 ────────────────────────────────────────────────────────────
   omc     04655ee  ✅  locked
   gstack  c6e6a21  ✅  locked  (symlinked)
@@ -54,6 +54,29 @@ acorn v0.3.2  •  ~/.claude/skills/harness
     OMC_PLUGIN_ROOT      ✅  match
     ECC_ROOT             ✅  match
   gstack link   ✅  correct
+```
+
+### 1-B. tool 목록만 간결 확인 (v0.6.0+)
+
+`status` 보다 단순 — 환경변수/심링크/guard 안 보고 **tool SHA 만**.
+
+```bash
+acorn list
+```
+
+```
+acorn v0.6.0  •  ~/.claude/skills/harness
+────────────────────────────────────────────────────────────────────────
+  TOOL     SHA        STATE    REPO
+  omc      04655ee    ✅ locked Yeachan-Heo/oh-my-claudecode
+  gstack   c6e6a21    ✅ locked garrytan/gstack
+  ecc      125d5e6    ✅ locked affaan-m/everything-claude-code
+```
+
+CI 한 줄 게이트:
+```bash
+# 모든 tool 이 locked 이 아니면 exit 1
+acorn list --json | jq -e '.tools | map(select(.state != "locked")) | length == 0'
 ```
 
 ### 2. 설정 요약 — 현재 guard 모드 / 패턴 한눈에 (v0.3.0+)

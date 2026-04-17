@@ -2,7 +2,17 @@
 
 Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
-> **Status**: v0.3.2 — v0.3.1 hotfix (4-agent 검토 blocker 4건) + v0.3.2 quick-sweep (S3/S4/S5)
+> **Status**: **v0.6.0** — CI 그린 유지, codex review 10건 중 7건 해소, Round 3
+> 도그푸딩 F1/F3 해소, 신규 커맨드 `acorn list` (read-only, CI 친화).
+> v0.3.2 이후 릴리스: v0.3.3 (docs 전역 현행화) → v0.3.4 (H-3/H-1 silent-lie
+> 제거) → v0.3.5 (HIGH-3 lite, ACORN_GUARD_BYPASS 감지) → v0.4.0 (HIGH-2 lite,
+> 공급망 무결성 — allowlist + provenance) → v0.4.1 (codex P0 5건 fail-close
+> 복원) → v0.4.2 (CI 회귀 isEmptyDir 심링크 오판) → v0.4.3 (F1, LockError/PARSE
+> exit=78) → v0.4.4 (codex #7, Windows cmd.exe injection 제거) → v0.5.0
+> (installVendor lstat-first + tool traversal guard) → v0.5.1 (부채 #4 #5,
+> isoTs 단일화 + backup 디렉토리 공유) → **v0.6.0** (acorn list + VERSION
+> 런타임 로드).
+>
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
 > 변경 이력: [`CHANGELOG.md`](CHANGELOG.md)
@@ -41,6 +51,8 @@ npm run shim:windows   # .cmd + bash shim 을 $APPDATA/npm/ 에 생성 (junction
 acorn install                     # harness.lock 기준 설치
 acorn install --run-gstack-setup  # + gstack setup --host auto 자동 실행
 acorn status                      # 3툴 + guard + env 요약
+acorn list                        # tool/SHA/상태 간결 나열 (v0.6.0+)
+acorn list --json                 # CI 용 JSON
 acorn doctor                      # 이슈 + 수동 복구 힌트
 acorn status --json               # 기계 판독
 acorn lock validate               # harness.lock schema 검증 (v0.2.0+)
@@ -73,7 +85,12 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
 - 모든 쓰기는 preflight 검증 → backup → atomic write → parseLock 재검증 + `tx.log` 기록 (v0.3.1+ B2)
 
 **lock 서브커맨드 (v0.2.0+)**
-- `acorn lock validate [path]` — `harness.lock` schema 검증 (read-only). CI 한 줄 gate 로 꽂기 좋음. 실패 시 exit 78
+- `acorn lock validate [path]` — `harness.lock` schema 검증 (read-only). CI 한 줄 gate 로 꽂기 좋음. **v0.4.3+**: SCHEMA 뿐 아니라 **PARSE** 실패도 exit 78 로 매핑돼 "lock 파일이 잘못됐다" 를 단일 exit 로 받는다
+
+**list 커맨드 (v0.6.0+)**
+- `acorn list` — `harness.lock` 에 기록된 tool 별로 **repo / SHA / 상태** 를 간결 나열. `status` 보다 단순 — 환경변수·심링크·guard 는 포함하지 않음. CI 에서 "tool SHA 빠르게 확인" 용
+- `acorn list --json` — 기계 판독용 JSON. 예: `acorn list --json | jq -r '.tools[] | select(.state != "locked") | .tool'`
+- Exit code: 모든 tool 이 `locked` 이면 0, 하나라도 `drift` / `missing` / `error` 면 1
 
 **요구사항**
 - Node.js 24.x (`.nvmrc` 참고, `nvm use` 권장)
@@ -129,16 +146,24 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
 
 | 계층 | 모듈 | 역할 |
 |---|---|---|
-| CLI | `src/index.ts` | argv 라우팅 + exit code 매핑 |
+| CLI | `src/index.ts` | argv 라우팅 + exit code 매핑 + VERSION 런타임 로드 (v0.6.0+) |
 | commands | `install.ts` | 8단계 preflight-우선 설치 파이프라인 |
 | commands | `status.ts` | 읽기 전용 상태 요약 + JSON |
+| commands | `list.ts` | lock 기준 tool/SHA/상태 간결 나열 (v0.6.0+) |
 | commands | `doctor.ts` | 진단 + 이슈별 복구 힌트 |
-| core | `lock.ts` | harness.lock 스키마 검증 |
-| core | `env.ts` | 환경변수 3키 계산 + diff |
-| core | `settings.ts` | settings.json 멱등 머지 + 원자 쓰기 |
+| commands | `config.ts` | guard.mode / guard.patterns / env.reset 조작 (v0.3.0+) |
+| core | `lock.ts` | harness.lock 스키마 검증 + allowlist (v0.4.0+) |
+| core | `env.ts` | 환경변수 3키 계산 + diff (v0.4.1+ 빈 문자열 fallback) |
+| core | `settings.ts` | settings.json 멱등 머지 + 원자 쓰기 (v0.4.1+ BOM/fail-close) |
 | core | `symlink.ts` | gstack 디렉토리 심링크 원자 교체 |
-| core | `vendors.ts` | git clone + SHA 핀 + dirty 감지 |
+| core | `vendors.ts` | git clone + SHA 핀 + dirty 감지 + tool name guard (v0.5.0+) |
 | core | `tx.ts` | install 트랜잭션 로그 (JSONL) |
+| core | `hooks.ts` | `<harnessRoot>/hooks/guard-check.sh` 배포 (v0.1.2+) |
+| core | `time.ts` | 타임스탬프 단일 소스 (v0.5.1+, backup 디렉토리 공유) |
+| core | `bom.ts` | UTF-8 BOM strip 단일 소스 (v0.4.1+) |
+| core | `adopt.ts` | `--adopt` 의 pre-adopt rename (v0.3.0+) |
+| core | `gstack-marker.ts` | gstack setup SHA marker (v0.1.3+ 멱등성) |
+| core | `sha-display.ts` | drift 메시지에서 lock vs 실제 SHA 구분 표시 |
 | hook | `hooks/guard-check.sh` | PreToolUse 위험 커맨드 차단 |
 
 ---
@@ -278,7 +303,9 @@ try {
   // r.settings.action: 'add' | 'noop'
 } catch (e) {
   if (e instanceof InstallError) {
-    // e.code: 'SETTINGS_CONFLICT' | 'VENDOR' | 'SYMLINK' | 'GSTACK_SETUP' | 'SETTINGS_WRITE'
+    // e.code: 'IN_PROGRESS' | 'LOCK_SEEDED' | 'SETTINGS_CONFLICT' |
+    //         'VENDOR' | 'SYMLINK' | 'GSTACK_SETUP' |
+    //         'HOOKS_WRITE' | 'SETTINGS_WRITE'
   }
 }
 ```
@@ -315,12 +342,15 @@ vendors clone은 [3/8] 통과 이후에만 시작한다. hooks 배포가 setting
 import { installVendor, defaultGitRunner, VendorError } from '@dotoricode/acorn/core/vendors';
 
 const r = installVendor({
-  tool: 'omc',
-  repo: 'org/omc',
+  tool: 'omc',   // v0.5.0+: /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/ 아니면 INVALID_TOOL_NAME
+  repo: 'Yeachan-Heo/oh-my-claudecode', // v0.4.0+: allowlist (또는 ACORN_ALLOW_ANY_REPO=1)
   commit: '<40자 SHA>',
   vendorsRoot: '/path/to/harness/vendors',
 });
-// r.action: 'cloned' | 'noop' | 'checked_out' | 'adopted' | 'preserved'
+// r.action: 'cloned' | 'noop' | 'checked_out' | 'adopted'
+// VendorErrorCode (v0.5.0+): 'GIT_MISSING' | 'CLONE' | 'CHECKOUT' | 'REV_PARSE'
+//                           | 'NOT_A_REPO' | 'SHA_MISMATCH' | 'LOCAL_CHANGES'
+//                           | 'TIMEOUT' | 'INVALID_TOOL_NAME' | 'IO'
 ```
 
 | 기존 상태 | 결과 |
@@ -542,6 +572,28 @@ sudo rm -rf /usr/local/lib/node_modules/npm && brew link --overwrite node@24
 1. 안전한 커맨드라면 **inline** `ACORN_GUARD_BYPASS=1 <cmd>` 로 그 호출만 우회 (셸 export 금지 — `export` 하면 세션 전체 비활성이라 `acorn doctor` critical)
 2. 패턴이 너무 공격적이라면 `ACORN_GUARD_MODE=warn` 으로 강등 (또는 v0.3.0+ `acorn config guard.mode warn`)
 3. 근본 해결은 패턴 조정 — `hooks/guard-check.sh` 의 `is_dangerous()` 함수 수정
+
+### Windows 에서 `--follow-symlink` 가 작동하지 않음 (v0.5.0 에서 해소)
+v0.4.x 이하: Node 24 Windows 의 `existsSync(junction)` 이 `false` 를 반환하던
+버그로 `installVendor` 가 junction 을 "부재" 로 오판해 `--follow-symlink`
+handling 경로가 실행되지 않았다. **v0.5.0 에서 `lstatSync` 기반 `probePath`
+로 교체해 해소.** dev 레포를 `~/.claude/skills/harness/vendors/<tool>` 에
+junction/symlink 로 걸어놓고 `acorn install --follow-symlink` 로 HEAD drift
+를 감지하는 워크플로우가 Windows 에서도 동작한다.
+
+### `mklink /J` / PowerShell `New-Item -ItemType Junction` 으로 만든 junction 감지
+acorn 내부는 `fs.symlinkSync(target, path, 'junction')` (Node API) 로 junction
+을 생성하는데, 이걸로 만든 junction 은 `lstat.isSymbolicLink()` 가 `true`.
+반면 **`mklink /J` (cmd.exe) 와 PowerShell `New-Item -ItemType Junction` 으로
+만든 junction 은 Node `lstat` 에서 `isSymbolicLink: false`** 로 보고한다
+(Round 3 도그푸딩 F2). acorn production 경로는 Node API 를 쓰므로 영향 없지만,
+사용자가 cmd/PowerShell 로 dev 레포를 수동 junction 하려면 Node 기반으로
+생성하거나 Developer Mode 활성 상태에서 `fs.symlinkSync` 사용 권장.
+
+### 기타: Node 24 의 EPERM symlinkSync 로 Windows 테스트 18건 실패
+프로젝트 테스트 중 symlink 관련 18건은 Windows 개발자 모드가 꺼져 있으면
+EPERM 으로 실패한다. CI Linux 에서는 전부 통과 (v0.4.2 이후 `publish.yml`
+CI 그린 유지). 로컬 테스트 실패가 실 버그는 아님.
 
 ---
 
