@@ -1,5 +1,11 @@
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defaultHarnessRoot } from './env.ts';
 
 export const SCHEMA_VERSION = 1 as const;
@@ -164,4 +170,37 @@ export function readLock(lockPath?: string): HarnessLock {
 
 export function getTool(lock: HarnessLock, name: ToolName): ToolEntry {
   return lock.tools[name];
+}
+
+/**
+ * 패키지 동봉된 harness.lock 템플릿 경로를 반환한다.
+ * - dev (src/core/lock.ts 실행): `<repo>/templates/harness.lock.template.json`
+ * - prod (dist/core/lock.js 실행): 같은 상대 경로로 해소됨
+ * §15 C1: 빈 harness root 에서 install 즉시 실패하지 않도록 seedLockTemplate 가 참조.
+ */
+export function lockTemplatePath(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return join(here, '..', '..', 'templates', 'harness.lock.template.json');
+}
+
+/**
+ * 대상 lockPath 가 존재하지 않으면 템플릿을 복사해서 시드한다.
+ * - 기존 파일은 덮어쓰지 않음 (비파괴 원칙)
+ * - 부모 디렉토리는 자동 생성 (mkdirSync recursive)
+ * - BOM 없이 utf8 로 기록
+ * §15 C1: install 의 첫 실패 UX 를 "에러 + 에디터 열어라" 로 개선.
+ */
+export function seedLockTemplate(lockPath: string): { seeded: boolean; templatePath: string } {
+  const templatePath = lockTemplatePath();
+  if (existsSync(lockPath)) return { seeded: false, templatePath };
+  if (!existsSync(templatePath)) {
+    throw new LockError(
+      `내장 템플릿 누락: ${templatePath} (패키지 무결성 이상)`,
+      'IO',
+    );
+  }
+  mkdirSync(dirname(lockPath), { recursive: true });
+  const raw = readFileSync(templatePath, 'utf8');
+  writeFileSync(lockPath, raw, 'utf8');
+  return { seeded: true, templatePath };
 }

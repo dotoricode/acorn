@@ -1,0 +1,26 @@
+{
+  "_comment": "acorn install 가 harness.lock 없음을 감지하고 생성한 템플릿입니다. 각 tool 의 'commit' 을 실제 SHA 로 바꾼 뒤 'acorn install' 을 재실행하세요. SHA 수집: 각 저장소의 git log 에서 v0.x 태그 또는 검증 시점 HEAD. '_comment' 필드는 무시되므로 남겨두어도 무관합니다.",
+  "schema_version": 1,
+  "acorn_version": "0.1.0",
+  "tools": {
+    "omc": {
+      "repo": "Yeachan-Heo/oh-my-claudecode",
+      "commit": "0000000000000000000000000000000000000000",
+      "verified_at": "1970-01-01"
+    },
+    "gstack": {
+      "repo": "garrytan/gstack",
+      "commit": "0000000000000000000000000000000000000000",
+      "verified_at": "1970-01-01"
+    },
+    "ecc": {
+      "repo": "affaan-m/everything-claude-code",
+      "commit": "0000000000000000000000000000000000000000",
+      "verified_at": "1970-01-01"
+    }
+  },
+  "guard": {
+    "mode": "block",
+    "patterns": "strict"
+  }
+}

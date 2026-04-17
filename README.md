@@ -42,6 +42,12 @@ acorn doctor                      # 이슈 + 수동 복구 힌트
 acorn status --json               # 기계 판독
 ```
 
+**첫 설치 (harness.lock 이 없는 상태, v0.1.2+)**
+- `acorn install` 가 `<harnessRoot>/harness.lock` 이 없다는 걸 감지하면,
+  패키지 동봉 템플릿을 해당 경로에 시드하고 `[install/LOCK_SEEDED]` 에러로 중단한다
+- 템플릿의 `commit` 필드는 40-zero placeholder 이므로 그대로 재실행하면 clone 은 되지만 checkout 에서 실패한다
+- 각 tool 의 `commit` 을 실제 SHA 로 바꾼 뒤 `acorn install` 을 다시 실행
+
 **install 플래그**
 - `--force` — 이전 `tx.log in_progress` 우회 (수동 검사 후 사용)
 - `--skip-gstack-setup` — gstack setup 콜백 생략
@@ -74,7 +80,7 @@ acorn status --json               # 기계 판독
 | `78` | 설정 오류 (settings 충돌, lock 스키마) |
 
 모든 에러는 `[area/code] 메시지` 프리픽스로 stderr 출력.
-예: `[vendor/CLONE/omc]`, `[install/IN_PROGRESS]`, `[lock/NOT_FOUND]`.
+예: `[vendor/CLONE/omc]`, `[install/IN_PROGRESS]`, `[install/LOCK_SEEDED]`, `[lock/NOT_FOUND]`.
 
 ---
 

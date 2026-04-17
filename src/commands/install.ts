@@ -1,7 +1,13 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { readLock, TOOL_NAMES, type HarnessLock, type ToolName } from '../core/lock.ts';
+import {
+  readLock,
+  seedLockTemplate,
+  TOOL_NAMES,
+  type HarnessLock,
+  type ToolName,
+} from '../core/lock.ts';
 import {
   computeEnv,
   defaultClaudeRoot,
@@ -35,7 +41,8 @@ export type InstallErrorCode =
   | 'VENDOR'
   | 'SYMLINK'
   | 'GSTACK_SETUP'
-  | 'SETTINGS_WRITE';
+  | 'SETTINGS_WRITE'
+  | 'LOCK_SEEDED';
 
 export class InstallError extends Error {
   readonly code: InstallErrorCode;
@@ -139,6 +146,21 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
   const claudeRoot = opts.claudeRoot ?? defaultClaudeRoot();
   const settingsPath = opts.settingsPath ?? defaultSettingsPath();
   const git = opts.git ?? defaultGitRunner;
+  const lockPath = opts.lockPath ?? `${harnessRoot}/harness.lock`;
+
+  // pre-0. lock 부트스트랩 (§15 C1) — 빈 harness 에서 즉시 LOCK_NOT_FOUND 로
+  // 실패하는 대신 패키지 동봉 템플릿을 시드하고 안내 메시지로 중단한다.
+  // tx 시작 전에 수행 (이 실패는 기록할 phase 가 없음).
+  const seedResult = seedLockTemplate(lockPath);
+  if (seedResult.seeded) {
+    throw new InstallError(
+      `harness.lock 템플릿을 생성했습니다: ${lockPath}`,
+      'LOCK_SEEDED',
+      undefined,
+      `각 tool 의 "commit" 을 실제 SHA 로 교체한 뒤 acorn install 재실행. ` +
+        `현재 SHA 는 placeholder(40 zeros)라 vendor clone/checkout 에서 실패합니다.`,
+    );
+  }
 
   // 0. tx.log 검사 — 이전 설치가 미완료(in_progress)면 fail-close
   const pending = lastInProgress(harnessRoot);

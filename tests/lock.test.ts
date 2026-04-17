@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -8,6 +8,8 @@ import {
   readLock,
   getTool,
   defaultLockPath,
+  seedLockTemplate,
+  lockTemplatePath,
   LockError,
   SCHEMA_VERSION,
   TOOL_NAMES,
@@ -193,5 +195,60 @@ test('defaultLockPath: 인자가 env보다 우선', () => {
     assert.equal(defaultLockPath('/explicit'), '/explicit/harness.lock');
   } finally {
     delete process.env['ACORN_HARNESS_ROOT'];
+  }
+});
+
+test('lockTemplatePath: 패키지 템플릿 파일 실존 (repo + 빌드 산출물 공통)', () => {
+  const p = lockTemplatePath();
+  assert.ok(existsSync(p), `템플릿 파일이 없음: ${p}`);
+  // 내용이 유효한 lock 스키마인지 parseLock 으로 확인 (placeholder SHA 수용)
+  const raw = readFileSync(p, 'utf8');
+  const parsed = parseLock(raw);
+  assert.equal(parsed.schema_version, SCHEMA_VERSION);
+  for (const name of TOOL_NAMES) {
+    // placeholder 40-zero SHA 가 schema 통과해야 함 (format-valid)
+    assert.equal(parsed.tools[name].commit, '0'.repeat(40));
+  }
+});
+
+test('seedLockTemplate: 파일 없으면 템플릿 복사 (§15 C1)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-seed-'));
+  const lockPath = join(dir, 'harness.lock');
+  try {
+    assert.equal(existsSync(lockPath), false);
+    const r = seedLockTemplate(lockPath);
+    assert.equal(r.seeded, true);
+    assert.ok(existsSync(lockPath));
+    // 시드된 파일이 parseLock 을 통과해야 사용자가 edit 전에도 schema valid
+    const parsed = parseLock(readFileSync(lockPath, 'utf8'));
+    assert.equal(parsed.schema_version, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('seedLockTemplate: 기존 파일 덮어쓰지 않음 (비파괴)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-seed-'));
+  const lockPath = join(dir, 'harness.lock');
+  try {
+    const original = '{"preserved": true}';
+    writeFileSync(lockPath, original, 'utf8');
+    const r = seedLockTemplate(lockPath);
+    assert.equal(r.seeded, false);
+    assert.equal(readFileSync(lockPath, 'utf8'), original);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('seedLockTemplate: 부모 디렉토리 자동 생성 (recursive mkdir)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-seed-'));
+  const lockPath = join(dir, 'deep', 'nested', 'harness.lock');
+  try {
+    const r = seedLockTemplate(lockPath);
+    assert.equal(r.seeded, true);
+    assert.ok(existsSync(lockPath));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

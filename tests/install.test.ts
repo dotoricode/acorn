@@ -462,3 +462,59 @@ test('runInstall: logger 호출 (진행 추적)', () => {
     w.cleanup();
   }
 });
+
+test('runInstall: 빈 harness root → lock 템플릿 시드 + LOCK_SEEDED 에러 (§15 C1)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-c1-'));
+  const harnessRoot = join(dir, 'harness-fresh');
+  const claudeRoot = join(dir, 'claude');
+  const lockPath = join(harnessRoot, 'harness.lock');
+  mkdirSync(claudeRoot, { recursive: true });
+  try {
+    let caught: unknown = null;
+    try {
+      runInstall({
+        lockPath,
+        harnessRoot,
+        claudeRoot,
+        settingsPath: join(claudeRoot, 'settings.json'),
+        git: makeFakeGit({ heads: new Map() }),
+      });
+    } catch (e) {
+      caught = e;
+    }
+    assert.ok(caught instanceof InstallError, 'InstallError 가 throw 되어야 함');
+    assert.equal((caught as InstallError).code, 'LOCK_SEEDED');
+    assert.ok(
+      (caught as InstallError).hint?.includes('SHA'),
+      'hint 에 SHA 교체 안내가 들어있어야 함',
+    );
+    // seed 가 실제로 파일을 만들었는지
+    assert.ok(existsSync(lockPath), `lock 이 생성되어야 함: ${lockPath}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runInstall: 기존 lock 은 seed 가 건드리지 않음 (§15 C1 비파괴)', () => {
+  const w = makeWorkspace();
+  try {
+    const originalLock = readFileSync(w.lockPath, 'utf8');
+    const git = makeFakeGit({ heads: new Map() });
+    // 정상 install 플로우. LOCK_SEEDED 가 아니어야 하고 lock 내용 불변이어야 함
+    runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+    });
+    assert.equal(
+      readFileSync(w.lockPath, 'utf8'),
+      originalLock,
+      'seed 가 기존 lock 을 덮어쓰면 안 됨',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
