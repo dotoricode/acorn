@@ -3,6 +3,32 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.5.1] — 2026-04-18
+
+🟡 **v1.0 전 부채 소화 #4 + #5 — 타임스탬프 단일화 + backup 디렉토리
+조각화 해소**.
+
+### Added
+
+- **`src/core/time.ts`** (신규): `backupDirTs()` + `isoTsRaw()` — 타임
+  스탬프 생성을 단일 소스로 통합. Windows 파일시스템 안전 형식 (`:` /
+  `.` 을 `-` 로 치환) 과 tx.log 용 raw ISO 를 분리. 회귀 테스트 +4.
+
+### Fixed
+
+- **§15 v0.5.1 부채 #4**: `isoTs` / `isoTimestamp` / `timestampDirName`
+  5곳 중복 (adopt / config / hooks / symlink / settings) 을 `core/time.ts`
+  단일 소스로 통합. 동작 변화 없음 (순수 리팩터).
+- **§15 v0.5.1 부채 #5 (code-reviewer M-1)**: `runInstall` 1회 실행에서
+  gstackSymlink / hooks / settings 백업이 각 호출 시점의 ms 단위 ts 를
+  찍어 3 개 디렉토리로 조각나던 회귀. 이제 `runInstall` 진입부에서
+  `backupTs` 를 1회 계산해 `installGstackSymlink` / `installGuardHook` /
+  `installEnv` 에 주입 → 동일 디렉토리 공유. 추적/롤백 편의.
+  - `InstallGstackOptions.backupTs?: string`
+  - `installGuardHook(harnessRoot, backupTs?)`
+  - `InstallEnvOptions.backupTs?: string`
+  - 셋 다 선택적 인자 (미지정 시 호출 시점 기준, 이전 동작 호환).
+
 ## [0.5.0] — 2026-04-18
 
 🟠 **`installVendor` 진입부 lstat-first 재설계** — codex review P1 #1
