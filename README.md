@@ -120,6 +120,19 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
   ```
   수동 `npm publish` 는 금지 (릴리스는 tag push → GitHub Actions 만).
 
+  **npm publish 활성화 절차 (메인테이너용, 아직 활성화 전)**:
+  1. npm 에 `@dotoricode` scope 생성 후 `@dotoricode/acorn` 패키지 초기화
+  2. npm 에서 **Automation** 타입 토큰 발급 (https://www.npmjs.com/settings/<user>/tokens/new)
+  3. GitHub repo Settings → Secrets and variables → Actions → **New repository secret**:
+     - Name: `NPM_TOKEN`
+     - Value: 발급한 Automation token
+  4. 기존 tag (v0.6.1 등) 에 대해 workflow_dispatch 로 재실행하거나 다음 tag push 때 자동 진행
+  5. `npm view @dotoricode/acorn` 으로 공개 확인
+  6. 성공 후 `npm view @dotoricode/acorn --provenance` 로 sigstore attestation 확인
+
+  `.github/workflows/publish.yml` 은 `NPM_TOKEN` secret 이 없으면 `ENEEDAUTH`
+  로 안전하게 실패. 테스트/빌드 단계는 통과 상태를 유지한다.
+
 > 머신 간 인계(Mac ↔ Windows)는 [docs/HANDOVER.md](docs/HANDOVER.md) 참조.
 
 ---
