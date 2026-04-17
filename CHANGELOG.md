@@ -3,6 +3,26 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.4.2] — 2026-04-18
+
+🔴 **Round 3 도그푸딩 결과 CI 회귀 1건 해소** — v0.3.4 H-3 구현 이후
+GitHub Actions `publish.yml` 이 매 tag push 에서 조용히 실패하고 있던
+것을 v0.4.1 push 직후 확인. Windows 로컬은 `symlinkSync` EPERM 으로
+해당 테스트가 skip 되어 3 릴리스 연속 (v0.3.4/v0.3.5/v0.4.0/v0.4.1)
+CI 빨간 상태 누적. 실 사용자 영향은 edge case (심링크 target 이 빈
+디렉토리) 뿐이지만, CI 신호 정화 + 도그푸딩 전제 확보 위해 즉시 patch.
+
+### Fixed
+
+- **§15 v0.4.2 / `src/core/vendors.ts`**: `isEmptyDir` 이 심링크를
+  `readdirSync` 로 follow 해 target 의 empty 여부를 반환하던 오판
+  교정. 이제 `lstatSync` 기준 심링크면 즉시 `false` — 심링크는 "empty
+  dir" 이 아니며 상위 symlink handling 경로가 담당. v0.3.4 H-3 도입
+  당시 설계 의도 (`--follow-symlink` 로 심링크 target HEAD 검증) 가
+  비어있는 target 의 경우 `treatAsClone=true` 로 bypass 되던 회귀
+  해소. 기존 회귀 테스트 `tests/vendors.test.ts:651` 가 CI Linux 에서
+  실 경로를 검증한다.
+
 ## [0.4.1] — 2026-04-18
 
 🟠 **Codex review (2026-04-18) 5건 fail-close 복원**. v0.4.0 직후 외부
