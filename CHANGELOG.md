@@ -3,6 +3,41 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.4.3] — 2026-04-18
+
+🟠 **Round 3 도그푸딩 Finding #1 (F1) — exit code 일관성 복원**. 격리
+워크스페이스에서 `acorn lock validate` 실행 시 SCHEMA 오류는 exit=78
+(CONFIG) 지만 **JSON PARSE 오류는 exit=1 (FAILURE)** 으로 서로 다르게
+새어 CI 게이트 스크립트가 "lock 파일이 잘못됐다" 를 두 exit 로 받는
+비대칭 확인. 사용자가 `if [[ $(acorn lock validate) -ne 78 ]]` 류 게이트
+를 짜면 PARSE 가 슬쩍 빠져나가는 문제. 1줄 fix.
+
+### Fixed
+
+- **§15 v0.4.3 / `src/index.ts`**: `exitFor` 의 `LockError` 매핑에
+  `PARSE` 도 포함해 SCHEMA 와 같은 `EXIT.CONFIG (78)` 로 노출. `NOT_FOUND`
+  와 `IO` 는 인프라 이슈 (파일 부재/권한) 라 `EXIT.FAILURE (1)` 유지.
+  회귀 테스트 (`tests/cli.test.ts`) 에 깨진-JSON → CONFIG exit 검증 +1.
+
+### Round 3 도그푸딩 중간 결과 (정보)
+
+8 시나리오 중 7개 완료 (npm 실 publish 는 계정 설정 필요로 pending):
+
+- **✅ 6건 의도대로 작동**: `lock validate` 정상 / allowlist 차단+escape /
+  `config guard.mode` 워크플로우 / `env.reset` (+ malformed + BOM) /
+  `doctor --json | jq .okCritical` 게이트 / `ACORN_GUARD_BYPASS` critical
+  감지 / `install --adopt` B3 gate + rename.
+- **🔴 3건 추가 발견** (F1 이 현 릴리스에서 해소):
+  - **F1** (fixed in v0.4.3): `lock validate` PARSE 가 exit=1 로 새던 회귀.
+  - **F2** (문서화 예정): `mklink /J` / PowerShell 로 만든 junction 은
+    Node `lstat` 에서 `isSymbolicLink: false` — acorn production 은
+    `fs.symlinkSync(..., 'junction')` 쓰므로 영향 없음.
+  - **F3** (v0.5.0 예정): **Node 24 Windows `existsSync(junction) === false`**
+    로 인해 `installVendor` 가 심링크 감지 전에 `treatAsClone=true` 판정
+    → Windows 에서 `--follow-symlink` 완전 비작동. checkpoint 🟡#6 가
+    정확히 이 이슈. codex P1 #1 (tool name traversal guard) 과 같은
+    함수 진입부 건드리는 작업이라 묶어서 처리 예정.
+
 ## [0.4.2] — 2026-04-18
 
 🔴 **Round 3 도그푸딩 결과 CI 회귀 1건 해소** — v0.3.4 H-3 구현 이후

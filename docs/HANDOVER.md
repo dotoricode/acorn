@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-18 (Windows / **v0.4.2 — Round 3 도그푸딩 즉시 발견 CI 회귀 1건 해소 (isEmptyDir 심링크 오판)**)
+> 마지막 갱신: 2026-04-18 (Windows / **v0.4.3 — Round 3 도그푸딩 F1 해소 (LockError/PARSE exit=78 매핑)**)
 
 ---
 
@@ -9,11 +9,11 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 과 동기), 태그 **`v0.4.2`** 최신 (+ v0.4.1, v0.4.0, v0.3.5, v0.3.4, v0.3.3, v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
-| 진행 중 작업 | **v0.4.2 — CI 회귀 1건 즉시 해소 완료**. v0.4.1 push 직후 Round 3 도그푸딩 착수에서 GitHub Actions `publish.yml` 이 v0.3.4 부터 3 릴리스 연속 조용히 실패 중이었음을 발견. 원인: `src/core/vendors.ts` 의 `isEmptyDir` 이 심링크를 follow 해 target empty 여부를 반환 → target 이 비어있는 심링크가 `treatAsClone=true` 로 오판, `--follow-symlink` handling 이 bypass. 1줄 수정 (lstat 분기 추가). Windows 로컬은 `symlinkSync` EPERM 으로 skip 되어 안 보였던 회귀. 실 사용자 영향은 edge case 지만 CI 신호 정화 + 도그푸딩 전제. 테스트 233/233 (Mac 예상), Windows 215/233 (기존 EPERM 18). 외부 검토 P1 2건 (path traversal, shell:win32) 은 다음 릴리스 후보. |
+| 브랜치 | `main` (origin 과 동기), 태그 **`v0.4.3`** 최신 (+ v0.4.2, v0.4.1, v0.4.0, v0.3.5, v0.3.4, v0.3.3, v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
+| 진행 중 작업 | **v0.4.3 — Round 3 도그푸딩 F1 해소 완료**. `lock validate` 의 PARSE 에러가 SCHEMA 와 다른 exit(1 vs 78) 로 새던 비대칭 교정 (1줄 + 테스트 1건). 테스트 234/234 Mac 예상, Windows 216/234 (기존 EPERM 18, 신규 회귀 0). **Round 3 도그푸딩 중간 결과**: 8 시나리오 중 7 완료 (npm publish 는 계정 미설정으로 pending), 6 정상 작동 + 3 finding 발견 (F1 = 이번 릴리스, F2 = 문서화, F3 = v0.5.0 예정). F3 (Node 24 Windows `existsSync(junction)=false`) 은 checkpoint 🟡#6 과 동일 이슈 — Windows 에서 `--follow-symlink` 완전 비작동. codex P1 #1 (tool traversal) 과 같이 installVendor 진입부 리팩터에 묶을 예정. |
 | 다음 작업 | **🟠 v0.4.2 (P1 2건)**: `installVendor` 의 `tool` 경로 traversal guard + `defaultGstackSetup` Windows `shell:true` 제거. **🟢 Round 3 도그푸딩 필수** — v0.3.x~v0.4.1 신기능 실증. **🟡 v1.0 전 부채 6건**: core/adopt+sha-display 흡수, InstallErrorCode naming 통일, integration test (ARCH-R1), isoTs 중복 제거, 백업 ts 조각화, Windows junction 이슈. **🆕 미구현 user 커맨드**: `acorn uninstall` / `acorn list` / `acorn lock bump`. **🔒 v0.5+**: sha256 pinning (ADR-020-3), tx ID (ADR-021). 상세 큐: `~/.gstack/projects/acorn/checkpoints/20260418-013310-v0-4-0-high2-lite-완주.md` + CHANGELOG v0.4.1. |
-| 테스트 | Windows: **215/233** (18 실패 — 기존 symlinkSync EPERM, 신규 회귀 0). Mac 기준 233/233 예상. v0.4.1 신규: bom 4 + env 2 (empty-string) + settings 5 (malformed + BOM) + config 2 (malformed env.reset + TOCTOU) + status 2 (runtimeEnv contract) = **총 +15**. |
-| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 → v0.3.1 → v0.3.2 → v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → **v0.4.2** |
+| 테스트 | Windows: **216/234** (18 실패 — 기존 symlinkSync EPERM, 신규 회귀 0). Mac 기준 234/234 예상. v0.4.3 신규: cli lock validate PARSE exit +1. v0.4.1 신규: bom 4 + env 2 + settings 5 + config 2 + status 2 = +15. |
+| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 → v0.3.1 → v0.3.2 → v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → v0.4.2 → **v0.4.3** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |
 | v0.3.2 본문 | `16a2e40` S3 · `fbd3a60` S4 · `c81e2ef` S5 · `9cb7519` release |
 | v0.3.3 본문 | `209f325` docs(usage) · `6050cf7` docs(readme) · `388191c` docs(claude-md) · `90b7c03` release |
@@ -22,6 +22,7 @@
 | v0.4.0 본문 | `4c80b43` docs(plan) ADR-020 · `df4bbb0` feat(lock) allowlist · `5ea2782` ci publish · `a631173` docs(readme) · `027db17` release |
 | v0.4.1 본문 | refactor(bom) + fix(env #3) + fix(settings #2) + fix(settings #4 BOM) + fix(status #5 diffEnv) + fix(config #9 TOCTOU) + release |
 | v0.4.2 본문 | fix(vendors) isEmptyDir 심링크 오판 + release |
+| v0.4.3 본문 | fix(cli) LockError/PARSE → exit=78 CONFIG (Round 3 F1) + release |
 | v0.1.2 본문 | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
 | v0.1.3 본문 | `cdeacff` C4 / `cf0518d` H3 / `4f59193` H4 / `1c797d2` C3 |
 | v0.2.0 본문 | `f660b4e` S2 · `a5738b6` M5 · `77a209e` H1 · `b574f05` M4 · `08022fc` M3 · `0165b46` S6 · `6b269ba` S5 |
