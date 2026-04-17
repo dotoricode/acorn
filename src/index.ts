@@ -75,12 +75,27 @@ install flags:
                        (기본: 심링크 거부)
   --yes                확인 프롬프트 스킵 (destructive 플래그용)
 
+config 서브커맨드:
+  acorn config                        현재 설정 요약 (guard.mode / patterns)
+  acorn config <key>                  key 의 현재 값 출력 (get)
+  acorn config guard.mode <block|warn|log>
+                                      guard 훅 동작 모드 변경
+  acorn config guard.patterns <strict|moderate|minimal>
+                                      차단 패턴 세트 변경
+  acorn config env.reset              settings.json 에서 env 3키
+                                      (CLAUDE_PLUGIN_ROOT / OMC_PLUGIN_ROOT /
+                                       ECC_ROOT) 만 제거 — 다른 키 보존
+  config flags:
+    --yes              Y/n 확인 프롬프트 스킵 (non-TTY/CI 에서 필수)
+
 예시:
   acorn install
   acorn install --run-gstack-setup
+  acorn install --adopt --yes
   acorn status --json
   acorn doctor
-  acorn install --force
+  acorn config guard.mode warn --yes
+  acorn config env.reset --yes
 `;
 }
 

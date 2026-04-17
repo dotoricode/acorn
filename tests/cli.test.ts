@@ -66,6 +66,19 @@ test('usage(): 3개 커맨드 모두 언급', () => {
   assert.ok(u.includes('--force'));
 });
 
+test('§15 S5 (v0.3.2): usage() 에 config 서브커맨드 key/값 enum 노출', () => {
+  const u = usage();
+  // config block 시작 마커
+  assert.ok(u.includes('config 서브커맨드'), 'config block 누락');
+  // guard.mode 값 3종 + patterns 값 3종 + env.reset
+  assert.ok(u.includes('block|warn|log'), 'guard.mode 값 enum 누락');
+  assert.ok(u.includes('strict|moderate|minimal'), 'guard.patterns 값 enum 누락');
+  assert.ok(u.includes('env.reset'), 'env.reset action 누락');
+  // --adopt 도 install flags 에 이미 노출되어야 (v0.3.1)
+  assert.ok(u.includes('--adopt'), 'install --adopt 누락');
+  assert.ok(u.includes('--follow-symlink'), '--follow-symlink 누락');
+});
+
 test('EXIT 코드 규약', () => {
   assert.equal(EXIT.OK, 0);
   assert.equal(EXIT.FAILURE, 1);
