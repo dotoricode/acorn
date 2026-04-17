@@ -60,6 +60,8 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
 - `--force` — 이전 `tx.log in_progress` 우회 (수동 검사 후 사용)
 - `--skip-gstack-setup` — gstack setup 콜백 생략
 - `--run-gstack-setup` — `<vendors/gstack>/setup --host auto` 자동 실행 (v0.1.1+) · `--skip` 과 상호 배타
+- `--adopt` — 기존 수동 설치된 vendors/settings 을 비파괴 흡수 (v0.3.0+). non-git 디렉토리는 `<path>.pre-adopt-<ts>/` 로 이동 후 clone, settings 충돌 키는 `env.<key>.pre-adopt-<ts>` 로 이동 후 기대값 덮어쓰기
+- `--follow-symlink` — vendor 경로가 심링크면 target 의 HEAD 를 lock SHA 와 비교 (v0.3.0+). 미지정 시 심링크는 그대로 보존
 
 **요구사항**
 - Node.js 24.x (`.nvmrc` 참고, `nvm use` 권장)

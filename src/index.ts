@@ -155,6 +155,8 @@ function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
       logger: (l) => io.stdout(l),
       force: parsed.flags.has('force'),
       skipGstackSetup: skipSetup,
+      adopt: parsed.flags.has('adopt'),
+      followSymlink: parsed.flags.has('follow-symlink'),
       ...(runSetup ? { gstackSetup: defaultGstackSetup } : {}),
     });
     io.stdout('');

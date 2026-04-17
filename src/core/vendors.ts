@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultHarnessRoot } from './env.ts';
+import { preAdoptMove } from './adopt.ts';
 
 export type VendorErrorCode =
   | 'GIT_MISSING'
@@ -153,7 +154,12 @@ export function readCurrentCommit(
   return git.revParse(vendorPath);
 }
 
-export type VendorAction = 'noop' | 'cloned' | 'checked_out';
+export type VendorAction =
+  | 'noop'
+  | 'cloned'
+  | 'checked_out'
+  | 'adopted' // §15 S4: 기존 git 저장소 흡수 (실 checkout 없이 lock SHA 일치 확인만)
+  | 'preserved'; // §15 S4: vendor 경로가 심링크 — 사용자 dev 레포로 간주, 건드리지 않음
 
 export interface InstallVendorOptions {
   readonly tool: string;
@@ -161,6 +167,10 @@ export interface InstallVendorOptions {
   readonly commit: string;
   readonly vendorsRoot: string;
   readonly git?: GitRunner;
+  /** §15 S4: `--adopt` — 기존 non-git 디렉토리면 이름 바꿔 보존 후 clone */
+  readonly adopt?: boolean;
+  /** §15 S4: `--follow-symlink` — 심링크 vendor 의 target HEAD 로 lock SHA 확인 */
+  readonly followSymlink?: boolean;
 }
 
 export interface InstallVendorResult {
@@ -169,6 +179,8 @@ export interface InstallVendorResult {
   readonly path: string;
   readonly previousCommit: string | null;
   readonly commit: string;
+  /** adopt 시 이름 바뀐 보존 경로 */
+  readonly preAdoptPath?: string;
 }
 
 /**
@@ -273,7 +285,81 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
     };
   }
 
+  // §15 S4 / ADR-019: 심링크 vendor 는 "사용자 dev 레포" 로 간주.
+  // 기본: preserve (건드리지 않음). --follow-symlink 면 target 의 HEAD 를 revParse
+  // 로 확인하고 lock SHA 일치 여부 체크. 일치하면 adopted, 불일치면 drift 관찰용
+  // preserved + previousCommit 채워서 상위가 lock 갱신 여부 판단하게 맡김.
+  let isSymlink = false;
+  try {
+    isSymlink = lstatSync(path).isSymbolicLink();
+  } catch {
+    // ignore — 상위 처리
+  }
+  if (isSymlink) {
+    if (opts.followSymlink) {
+      let head: string | null = null;
+      try {
+        head = git.revParse(path);
+      } catch {
+        // 심링크 target 이 git 이 아닐 수도 있음 — 그냥 preserved 로
+      }
+      return {
+        tool: opts.tool,
+        action: head === opts.commit ? 'adopted' : 'preserved',
+        path,
+        previousCommit: head,
+        commit: opts.commit,
+      };
+    }
+    // 기본: 심링크는 그대로 둔다. lock SHA 와 일치 여부 상위가 판단.
+    return {
+      tool: opts.tool,
+      action: 'preserved',
+      path,
+      previousCommit: null,
+      commit: opts.commit,
+    };
+  }
+
   if (!git.isGitRepo(path)) {
+    if (opts.adopt) {
+      // §15 S4 / ADR-018: Lock 은 진실. 현실을 이름 바꿔 보존한 뒤 lock 기준으로 clone.
+      const moved = preAdoptMove(path);
+      try {
+        git.clone(toRepoUrl(opts.repo), path);
+      } catch (e) {
+        cleanupPartial(path, opts.tool);
+        throw new VendorError(
+          `adopt 후 clone 실패: ${opts.repo} → ${path} (${e instanceof Error ? e.message : String(e)})`,
+          'CLONE',
+          opts.tool,
+        );
+      }
+      try {
+        git.checkout(path, opts.commit);
+      } catch (e) {
+        cleanupPartial(path, opts.tool);
+        throw new VendorError(
+          `adopt 후 checkout 실패: ${opts.commit} (${e instanceof Error ? e.message : String(e)})`,
+          'CHECKOUT',
+          opts.tool,
+        );
+      }
+      try {
+        verifyCommit(git, path, opts.commit, opts.tool);
+      } catch (e) {
+        cleanupPartial(path, opts.tool);
+        throw e;
+      }
+      return {
+        tool: opts.tool,
+        action: 'adopted',
+        path,
+        previousCommit: null,
+        commit: opts.commit,
+        preAdoptPath: moved.preAdoptPath,
+      };
+    }
     throw new VendorError(
       `기존 경로가 git 저장소가 아님 — 자동 교체 거부: ${path}`,
       'NOT_A_REPO',

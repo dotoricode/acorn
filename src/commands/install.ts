@@ -129,6 +129,10 @@ export interface InstallOptions {
   readonly logger?: (line: string) => void;
   /** Bypass in_progress tx.log guard. Use only after manual cleanup. */
   readonly force?: boolean;
+  /** §15 S4: `--adopt` — 기존 non-git vendors 와 settings 충돌을 비파괴 흡수 */
+  readonly adopt?: boolean;
+  /** §15 S4: `--follow-symlink` — 심링크 vendor 의 target HEAD 로 lock 확인 */
+  readonly followSymlink?: boolean;
 }
 
 export interface InstallResult {
@@ -268,16 +272,27 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   const current = readSettings(settingsPath);
   const plan = planMerge(current, desired);
   if (plan.action === 'conflict') {
-    const keys = plan.conflicts.map((c) => c.key).join(', ');
-    throw new InstallError(
-      `settings.json 에 env 키 충돌: ${plan.conflicts
-        .map((c) => `${c.key} (현재="${c.current}", 기대="${c.desired}")`)
-        .join('; ')}`,
-      'SETTINGS_CONFLICT',
-      undefined,
-      `${settingsPath} 에서 env.${keys} 를 제거하거나 기대값으로 수정 후 재실행 ` +
-        `(백업: ${settingsPath}.bak 은 install 단계에서 자동 생성)`,
-    );
+    // §15 S4: adopt 모드에선 conflict 를 뒤 단계 (settings-write) 에서 흡수한다.
+    // 여기선 사용자에게 어떤 키가 이동될 예정인지만 로깅.
+    if (opts.adopt) {
+      for (const c of plan.conflicts) {
+        log(
+          `      adopt preview: ${c.key} (현재="${c.current}") → pre-adopt 로 이동, 기대값 "${c.desired}" 적용 예정`,
+        );
+      }
+    } else {
+      const keys = plan.conflicts.map((c) => c.key).join(', ');
+      throw new InstallError(
+        `settings.json 에 env 키 충돌: ${plan.conflicts
+          .map((c) => `${c.key} (현재="${c.current}", 기대="${c.desired}")`)
+          .join('; ')}`,
+        'SETTINGS_CONFLICT',
+        undefined,
+        `${settingsPath} 에서 env.${keys} 를 제거하거나 기대값으로 수정 후 재실행 ` +
+          `(백업: ${settingsPath}.bak 은 install 단계에서 자동 생성). ` +
+          `또는 'acorn install --adopt' 으로 비파괴 흡수.`,
+      );
+    }
   }
 
   // 4. vendors clone
@@ -296,9 +311,21 @@ function runInstallInner(ctx: InnerContext): InstallResult {
         commit: tool.commit,
         vendorsRoot: vRoot,
         git,
+        adopt: opts.adopt ?? false,
+        followSymlink: opts.followSymlink ?? false,
       });
       vendors[name] = r;
-      log(`      ${name}: ${r.action} (${r.commit.slice(0, 7)})`);
+      if (r.action === 'adopted' && r.preAdoptPath) {
+        log(
+          `      ${name}: adopted (preserved ${r.preAdoptPath}, re-cloned @ ${r.commit.slice(0, 7)})`,
+        );
+      } else if (r.action === 'preserved') {
+        log(
+          `      ${name}: preserved (symlink, lock SHA 변경 없음${opts.followSymlink ? ' — target HEAD 확인됨' : ''})`,
+        );
+      } else {
+        log(`      ${name}: ${r.action} (${r.commit.slice(0, 7)})`);
+      }
     } catch (e) {
       throw new InstallError(
         `vendor 설치 실패 (${name}): ${e instanceof Error ? e.message : String(e)}`,
@@ -393,8 +420,16 @@ function runInstallInner(ctx: InnerContext): InstallResult {
       settingsPath,
       harnessRoot,
       desired,
+      adopt: opts.adopt ?? false,
     });
-    log(`      action=${settings.action} added=[${settings.added.join(', ')}]`);
+    if (settings.action === 'adopted' && settings.movedKeys?.length) {
+      log(`      action=adopted added=[${settings.added.join(', ')}]`);
+      for (const m of settings.movedKeys) {
+        log(`      adopt: env.${m.key} → env.${m.to}`);
+      }
+    } else {
+      log(`      action=${settings.action} added=[${settings.added.join(', ')}]`);
+    }
   } catch (e) {
     if (e instanceof SettingsError && e.code === 'CONFLICT') {
       throw new InstallError(

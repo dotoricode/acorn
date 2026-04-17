@@ -128,6 +128,42 @@ export function mergeEnv(current: SettingsObject, desired: EnvMap): SettingsObje
   return { ...current, env: newEnv };
 }
 
+/**
+ * §15 v0.3.0 S4 / ADR-018 — adopt 경로의 conflict 처리.
+ * 충돌 키를 `env.<key>.pre-adopt-<ts>` 로 이름 바꿔 보존하고 기대값으로 덮어쓴다.
+ * 삭제 일절 없음, 복구 가능. 반환 값은 새 settings 객체 + 이동 기록.
+ */
+export interface AdoptMergeResult {
+  readonly next: SettingsObject;
+  readonly movedKeys: readonly { key: string; to: string }[];
+  readonly addedKeys: readonly EnvKey[];
+}
+
+export function mergeEnvAdopt(
+  current: SettingsObject,
+  desired: EnvMap,
+): AdoptMergeResult {
+  const plan = planMerge(current, desired);
+  const currentEnv = getEnvSection(current);
+  const newEnv: Record<string, unknown> = { ...currentEnv };
+  const ts = isoTimestamp();
+  const movedKeys: { key: string; to: string }[] = [];
+  for (const conflict of plan.conflicts) {
+    const preserveKey = `${conflict.key}.pre-adopt-${ts}`;
+    newEnv[preserveKey] = currentEnv[conflict.key];
+    newEnv[conflict.key] = conflict.desired;
+    movedKeys.push({ key: conflict.key, to: preserveKey });
+  }
+  for (const key of plan.toAdd) {
+    newEnv[key] = desired[key];
+  }
+  return {
+    next: { ...current, env: newEnv },
+    movedKeys,
+    addedKeys: plan.toAdd,
+  };
+}
+
 function isoTimestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
@@ -177,13 +213,17 @@ export interface InstallEnvOptions {
   readonly settingsPath?: string;
   readonly harnessRoot?: string;
   readonly desired: EnvMap;
+  /** §15 S4: adopt — 충돌 키를 env.<key>.pre-adopt-<ts> 로 이동 후 기대값 덮어쓰기 */
+  readonly adopt?: boolean;
 }
 
 export interface InstallEnvResult {
-  readonly action: MergePlan['action'];
+  readonly action: MergePlan['action'] | 'adopted';
   readonly added: readonly EnvKey[];
   readonly backupPath: string | null;
   readonly settingsPath: string;
+  /** adopt 경로에서 이동된 충돌 키와 보존 경로 */
+  readonly movedKeys?: readonly { key: string; to: string }[];
 }
 
 export function installEnv(opts: InstallEnvOptions): InstallEnvResult {
@@ -192,6 +232,19 @@ export function installEnv(opts: InstallEnvOptions): InstallEnvResult {
   const plan = planMerge(current, opts.desired);
 
   if (plan.action === 'conflict') {
+    if (opts.adopt) {
+      // §15 S4: 충돌 키를 pre-adopt 접미어로 이동하고 기대값 덮어쓰기.
+      const backup = backupSettings(settingsPath, opts.harnessRoot);
+      const adoptResult = mergeEnvAdopt(current, opts.desired);
+      atomicWriteJson(settingsPath, adoptResult.next);
+      return {
+        action: 'adopted',
+        added: adoptResult.addedKeys,
+        backupPath: backup.backupPath,
+        settingsPath,
+        movedKeys: adoptResult.movedKeys,
+      };
+    }
     throw new SettingsError(
       `env 키 충돌 — 비파괴적 머지 불가: ${plan.conflicts
         .map((c) => `${c.key} (현재="${c.current}", 기대="${c.desired}")`)

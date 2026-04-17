@@ -514,6 +514,115 @@ test('runInstall: logger 호출 (진행 추적)', () => {
   }
 });
 
+test('runInstall --adopt: non-git vendor → 이동 후 clone + preAdoptPath 반환 (§15 S4)', () => {
+  const w = makeWorkspace();
+  try {
+    // vendors/omc 에 수동 설치된 non-git 디렉토리 시뮬
+    const squatted = join(w.harnessRoot, 'vendors', 'omc');
+    mkdirSync(squatted, { recursive: true });
+    writeFileSync(join(squatted, 'manual.txt'), 'user stuff', 'utf8');
+
+    const git = makeFakeGit({ heads: new Map() });
+    const result = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+      adopt: true,
+    });
+    assert.equal(result.vendors.omc.action, 'adopted');
+    const preAdopt = result.vendors.omc.preAdoptPath;
+    assert.ok(preAdopt, 'preAdoptPath 필드 존재');
+    assert.ok(existsSync(preAdopt!));
+    assert.equal(
+      readFileSync(join(preAdopt!, 'manual.txt'), 'utf8'),
+      'user stuff',
+    );
+    // 새 clone 이 원래 경로에 자리 잡음
+    assert.ok(existsSync(join(squatted, '.git')));
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runInstall --adopt: settings 충돌 → env.<key>.pre-adopt-<ts> 이동 + adopted action (§15 S4)', () => {
+  const w = makeWorkspace();
+  try {
+    // 기존 settings 에 충돌하는 env 값 존재
+    writeFileSync(
+      w.settingsPath,
+      JSON.stringify({
+        theme: 'dark',
+        env: {
+          CLAUDE_PLUGIN_ROOT: '/wrong/path',
+          OMC_PLUGIN_ROOT: '/wrong/omc',
+          ECC_ROOT: '/wrong/ecc',
+          MY_OWN_KEY: 'keep-me',
+        },
+      }),
+    );
+    const git = makeFakeGit({ heads: new Map() });
+    const result = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+      adopt: true,
+    });
+    assert.equal(result.settings.action, 'adopted');
+    assert.ok(result.settings.movedKeys && result.settings.movedKeys.length === 3);
+    const written = JSON.parse(readFileSync(w.settingsPath, 'utf8')) as {
+      theme: string;
+      env: Record<string, string>;
+    };
+    // 기대값으로 덮어쓰임
+    assert.equal(written.env['CLAUDE_PLUGIN_ROOT'], join(w.harnessRoot, 'vendors'));
+    // 기존 충돌 값이 pre-adopt 접미어로 보존됨
+    const preserved = Object.keys(written.env).find((k) =>
+      k.startsWith('CLAUDE_PLUGIN_ROOT.pre-adopt-'),
+    );
+    assert.ok(preserved, 'CLAUDE_PLUGIN_ROOT 의 pre-adopt 복사본 존재');
+    assert.equal(written.env[preserved!], '/wrong/path');
+    // 비-env 키 보존
+    assert.equal(written.theme, 'dark');
+    assert.equal(written.env['MY_OWN_KEY'], 'keep-me');
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runInstall: settings 충돌 + --adopt 없음 → 여전히 SETTINGS_CONFLICT (regression guard)', () => {
+  const w = makeWorkspace();
+  try {
+    writeFileSync(
+      w.settingsPath,
+      JSON.stringify({
+        env: { CLAUDE_PLUGIN_ROOT: '/wrong', OMC_PLUGIN_ROOT: '/w', ECC_ROOT: '/w' },
+      }),
+    );
+    const git = makeFakeGit({ heads: new Map() });
+    assert.throws(
+      () =>
+        runInstall({
+          lockPath: w.lockPath,
+          harnessRoot: w.harnessRoot,
+          claudeRoot: w.claudeRoot,
+          settingsPath: w.settingsPath,
+          git,
+          skipGstackSetup: true,
+          // adopt 미지정 (기본 false)
+        }),
+      (e: unknown) => e instanceof InstallError && e.code === 'SETTINGS_CONFLICT',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('runInstall: 빈 harness root → lock 템플릿 시드 + LOCK_SEEDED 에러 (§15 C1)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'acorn-c1-'));
   const harnessRoot = join(dir, 'harness-fresh');

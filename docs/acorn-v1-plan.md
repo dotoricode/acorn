@@ -483,6 +483,42 @@ acorn 완성 후: acorn 자체로 환경 구축하여 차기 개발 진행
 
 ---
 
+### ADR-018: `--adopt` — "lock 은 진실, 현실은 이름 바꿔 보존" (v0.3.0)
+
+**결정**: `acorn install --adopt` 는 기존 수동 설치 상태 (`NOT_A_REPO` vendor, settings.json env 충돌) 를 파괴 없이 흡수한다. 삭제는 일절 없음 — 항상 `<path>.pre-adopt-<ISO8601>/` 또는 `env.<key>.pre-adopt-<ISO8601>` 로 이동 후 lock 기준값을 덮어쓴다.
+
+**배경**: Round 1 도그푸딩에서 Mac personal 머신이 수동 설치된 vendors/OMC, gstack 을 가지고 있던 탓에 `acorn install` 이 `NOT_A_REPO` 로 막혔다. 사용자 조치는 `rm -rf` 또는 수동 mv — acorn 의 "비파괴" 원칙과 맞지 않는 외부 지시였다.
+
+**원칙**:
+1. Lock 은 진실의 단일 소스. 현실이 lock 과 다르면 **현실을 바꾼다**, 단 파괴 없이
+2. `.pre-adopt-<ts>` 접미어 디스크/JSON 이동만 사용 — 복구 가능
+3. 사용자 후처리: 이동된 디렉토리/키는 직접 확인·머지·폐기 (acorn 은 재접근 안 함)
+
+**범위 (v0.3.0)**:
+- vendor 경로가 non-git 디렉토리 → `preAdoptMove` 후 clone + checkout
+- settings.json env 충돌 → 충돌 키 이름 바꾸기 + 기대값 덮어쓰기
+- vendor 경로가 파일 (ENOTDIR) → `IO` 에러 (§15 H4) 유지, adopt 도 거부 (이동 안 됨)
+
+**비범위**:
+- 심링크 vendor — ADR-019 참조
+- `tx.log`/`harness.lock` 자체 adopt — 이미 다른 메커니즘으로 커버 (C1 seed, H3 corrupt)
+
+### ADR-019: 심링크 vendor 는 "dev 레포" 로 간주, 기본 preserve (v0.3.0)
+
+**결정**: `vendors/<tool>` 이 심링크면 adopt 대상에서 기본 제외. `--follow-symlink` 를 명시적으로 지정하면 target 의 HEAD 를 revParse 로 읽어 lock SHA 와 비교만 한다. 어떤 경우에도 심링크 target 자체는 acorn 이 수정하지 않는다.
+
+**배경**: Round 1 실환경에서 `vendors/ecc` 가 사용자의 개발 레포 (`~/01_private/everything-claude-code`) 를 가리키는 심링크였다. 여기에 acorn 이 checkout 을 강요하면 사용자 작업 브랜치가 망가진다. 심링크는 "이 경로는 내 작업공간" 이라는 사용자 의도의 표식으로 해석.
+
+**동작**:
+- 기본: `action='preserved'`, `previousCommit=null`, lock 변경 없음
+- `--follow-symlink`: `revParse(target)` 로 HEAD 확인. 일치하면 `adopted`, 불일치면 `preserved` + `previousCommit` 채워서 상위가 판단 (자동 lock 갱신 안 함)
+
+**상위 판단 (install 출력)**:
+- `preserved` + follow-symlink → 로그에 "symlink target HEAD 확인됨" 표기
+- drift 감지되면 사용자가 `acorn config ... lock` 으로 직접 갱신 (v0.3 범위 밖, v0.4+ `acorn lock bump`)
+
+---
+
 ## 12. 검증 현황
 
 | 항목 | 상태 | 결과 |
