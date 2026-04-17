@@ -2,7 +2,7 @@
 
 Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
-> **Status**: v0.1.1 — 도그푸딩 Round 1 기반 hotfix 반영
+> **Status**: v0.3.2 — v0.3.1 hotfix (4-agent 검토 blocker 4건) + v0.3.2 quick-sweep (S3/S4/S5)
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
 > 변경 이력: [`CHANGELOG.md`](CHANGELOG.md)
@@ -60,8 +60,20 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
 - `--force` — 이전 `tx.log in_progress` 우회 (수동 검사 후 사용)
 - `--skip-gstack-setup` — gstack setup 콜백 생략
 - `--run-gstack-setup` — `<vendors/gstack>/setup --host auto` 자동 실행 (v0.1.1+) · `--skip` 과 상호 배타
-- `--adopt` — 기존 수동 설치된 vendors/settings 을 비파괴 흡수 (v0.3.0+). non-git 디렉토리는 `<path>.pre-adopt-<ts>/` 로 이동 후 clone, settings 충돌 키는 `env.<key>.pre-adopt-<ts>` 로 이동 후 기대값 덮어쓰기
-- `--follow-symlink` — vendor 경로가 심링크면 target 의 HEAD 를 lock SHA 와 비교 (v0.3.0+). 미지정 시 심링크는 그대로 보존
+- `--adopt` — 기존 수동 설치된 vendors/settings 을 비파괴 흡수 (v0.3.0+). non-git 디렉토리는 `<path>.pre-adopt-<ts>/` 로 이동 후 clone, settings 충돌 키는 `env.<key>.pre-adopt-<ts>` 로 이동 후 기대값 덮어쓰기. **v0.3.1+ B3**: destructive rename 이므로 TTY 에선 Y/n 프롬프트, non-TTY + `--yes` 미지정 시 `[install/ARGS]` USAGE 에러로 차단
+- `--follow-symlink` — vendor 경로가 심링크면 target 의 HEAD 를 lock SHA 와 비교 (v0.3.0+). **v0.3.1+ B1**: 미지정 시 심링크를 만나면 `NOT_A_REPO` 로 fail-close (이전 v0.3.0 의 silent preserve 는 lock-as-truth 계약 위반이라 제거됨)
+- `--yes` — destructive 플래그용 확인 프롬프트 스킵 (v0.3.1+, `--adopt` / `config` set 시 non-TTY/CI 에서 필수)
+
+**config 서브커맨드 (v0.3.0+)**
+- `acorn config` — 현재 guard 설정 요약 (mode / patterns)
+- `acorn config <key>` — key 의 현재 값 출력
+- `acorn config guard.mode <block|warn|log> [--yes]` — 차단 모드 변경
+- `acorn config guard.patterns <strict|moderate|minimal> [--yes]` — 패턴 세트 변경
+- `acorn config env.reset [--yes]` — settings.json 의 env 3키 (`CLAUDE_PLUGIN_ROOT` / `OMC_PLUGIN_ROOT` / `ECC_ROOT`) 만 제거 (다른 키 보존)
+- 모든 쓰기는 preflight 검증 → backup → atomic write → parseLock 재검증 + `tx.log` 기록 (v0.3.1+ B2)
+
+**lock 서브커맨드 (v0.2.0+)**
+- `acorn lock validate [path]` — `harness.lock` schema 검증 (read-only). CI 한 줄 gate 로 꽂기 좋음. 실패 시 exit 78
 
 **요구사항**
 - Node.js 24.x (`.nvmrc` 참고, `nvm use` 권장)
@@ -190,7 +202,7 @@ if (!ok) process.exit(1);
 
 출력 예:
 ```
-acorn v0.1.0  •  ~/.claude/skills/harness
+acorn v0.3.2  •  ~/.claude/skills/harness
 ────────────────────────────────────────────────────────────
   omc     04655ee  ✅  locked
   gstack  c6e6a21  ✅  locked  (symlinked)
@@ -292,7 +304,7 @@ const r = installVendor({
   commit: '<40자 SHA>',
   vendorsRoot: '/path/to/harness/vendors',
 });
-// r.action: 'cloned' | 'noop' | 'checked_out'
+// r.action: 'cloned' | 'noop' | 'checked_out' | 'adopted' | 'preserved'
 ```
 
 | 기존 상태 | 결과 |
@@ -300,7 +312,11 @@ const r = installVendor({
 | 없음 / 빈 폴더 | **cloned** (clone → checkout → rev-parse 검증) |
 | 같은 SHA | **noop** (rev-parse만 실행) |
 | 다른 SHA | **checked_out** (checkout → rev-parse 검증) |
-| git 저장소 아님 | **NOT_A_REPO 에러** (자동 교체 거부) |
+| git 저장소 아님, `--adopt` 없음 | **NOT_A_REPO 에러** (자동 교체 거부). hint 는 `acorn install --adopt` 1차 제안 (v0.3.2+ S4) |
+| git 저장소 아님, `--adopt` 있음 | **adopted** (`<path>.pre-adopt-<ts>/` 로 rename 후 clone, v0.3.0+) |
+| 심링크, `--follow-symlink` 없음 | **NOT_A_REPO 에러** (v0.3.1+ B1 — 이전 v0.3.0 silent preserve 제거) |
+| 심링크, `--follow-symlink` + HEAD 일치 | **adopted** (v0.3.0+) |
+| 심링크, `--follow-symlink` + HEAD 불일치 | **preserved** + drift 경고 (v0.3.0+) |
 | checkout 후 SHA 불일치 | **SHA_MISMATCH 에러** |
 
 ### `src/core/symlink.ts` — gstack 심링크 관리 (Sprint 5)
