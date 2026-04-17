@@ -15,6 +15,7 @@ import {
   type EnvKey,
   type EnvMap,
 } from './env.ts';
+import { stripBom } from './bom.ts';
 
 export type SettingsErrorCode = 'PARSE' | 'CONFLICT' | 'IO';
 
@@ -59,6 +60,9 @@ export function readSettings(path?: string): SettingsObject {
       'IO',
     );
   }
+  // §15 v0.4.1 #4 — Windows 에디터 UTF-8 BOM 제거. parseLock 과 동일 정책 (core/bom.ts).
+  // 이전엔 lock.ts 에만 있어서 settings.json 이 BOM 포함 저장되면 PARSE 에러로 탈락.
+  raw = stripBom(raw);
   if (raw.trim() === '') return {};
   let data: unknown;
   try {
@@ -81,12 +85,28 @@ export interface MergePlan {
   readonly conflicts: readonly EnvConflict[];
 }
 
-function getEnvSection(s: SettingsObject): Record<string, unknown> {
+/**
+ * §15 v0.4.1 #2 — 잘못된 `env` 형식은 fail-close.
+ * 이전: env 가 object 가 아니면 조용히 `{}` 반환 → planMerge 가 모든 키를 "missing"
+ * 으로 보고 mergeEnv 가 덮어쓰며 사용자 설정을 silent 유실. codex review 에서 포착.
+ * 현재: absent (`undefined`) 만 빈 섹션으로 받고, null/array/scalar 는 PARSE throw.
+ */
+function getEnvSection(
+  s: SettingsObject,
+  settingsPath?: string,
+): Record<string, unknown> {
   const env = s['env'];
+  if (env === undefined) return {};
   if (typeof env === 'object' && env !== null && !Array.isArray(env)) {
     return env as Record<string, unknown>;
   }
-  return {};
+  const where = settingsPath ? ` (${settingsPath})` : '';
+  throw new SettingsError(
+    `env 형식 오류 — object 여야 합니다${where}. ` +
+      `현재 타입: ${Array.isArray(env) ? 'array' : env === null ? 'null' : typeof env}. ` +
+      `수동 수정 후 재실행.`,
+    'PARSE',
+  );
 }
 
 export function planMerge(current: SettingsObject, desired: EnvMap): MergePlan {

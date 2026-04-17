@@ -51,6 +51,19 @@ test('readSettings: 빈 파일 → 빈 객체', () => {
   }
 });
 
+// §15 v0.4.1 #4 — Windows 에디터 BOM. parseLock 에는 있었는데 readSettings 엔 없었음.
+test('readSettings: UTF-8 BOM 접두부 자동 제거 (Windows 에디터 저장 대응)', () => {
+  const w = makeWorkspace();
+  try {
+    const body = JSON.stringify({ env: { CLAUDE_PLUGIN_ROOT: '/v' } });
+    writeFileSync(w.settingsPath, '\uFEFF' + body, 'utf8');
+    const parsed = readSettings(w.settingsPath) as any;
+    assert.equal(parsed.env.CLAUDE_PLUGIN_ROOT, '/v');
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('readSettings: 잘못된 JSON → PARSE 에러', () => {
   const w = makeWorkspace();
   try {
@@ -82,6 +95,36 @@ test('planMerge: 빈 settings → action=add, toAdd=3', () => {
   assert.equal(plan.action, 'add');
   assert.equal(plan.toAdd.length, 3);
   assert.equal(plan.conflicts.length, 0);
+});
+
+// §15 v0.4.1 #2 — malformed env (object 가 아님) 는 fail-close.
+// 이전: planMerge 가 env 를 조용히 {} 로 코어스해 모든 키를 add 로 몰고
+// mergeEnv 가 사용자 설정을 덮어썼다.
+test('planMerge: env 가 null → PARSE throw (silent overwrite 방지)', () => {
+  assert.throws(
+    () => planMerge({ env: null } as any, DESIRED),
+    (e: unknown) => e instanceof SettingsError && e.code === 'PARSE',
+  );
+});
+
+test('planMerge: env 가 배열 → PARSE throw', () => {
+  assert.throws(
+    () => planMerge({ env: ['x'] } as any, DESIRED),
+    (e: unknown) => e instanceof SettingsError && e.code === 'PARSE',
+  );
+});
+
+test('planMerge: env 가 문자열 → PARSE throw', () => {
+  assert.throws(
+    () => planMerge({ env: 'oops' } as any, DESIRED),
+    (e: unknown) => e instanceof SettingsError && e.code === 'PARSE',
+  );
+});
+
+test('planMerge: env 누락 (undefined) 은 기존대로 빈 섹션으로 처리', () => {
+  const plan = planMerge({ theme: 'dark' }, DESIRED);
+  assert.equal(plan.action, 'add');
+  assert.equal(plan.toAdd.length, 3);
 });
 
 test('planMerge: env 모두 일치 → action=noop', () => {
