@@ -3,6 +3,32 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.2.0] — 2026-04-17
+
+`acorn-v1-plan.md §15` v0.2.0 버킷 전 항목 (H1 + M1~M5) + 도그푸딩 Round 2 실증 feature (S2, S5, S6) 완료. 동일 세션 내 v0.1.2 / v0.1.3 연속 릴리스 직후 추가 패스.
+
+### Added
+
+- **§15 S5 / `acorn lock validate` CLI**: `harness.lock` 을 읽기만 해서 schema 검증하고 1줄 요약을 내는 read-only CLI. Round 1 "수동 편집 위험" 실증에 대한 직접 대응. `acorn_version: "0.0.0-dev"` 같은 실수 사전 차단. 성공 시 `✅ harness.lock OK (schema_version=1, acorn_version=X, tools=3, guard=block/strict)`, 실패 시 기존 `LockError` 포맷 + exit 78. CI 파이프라인에 한 줄로 꽂기 좋음.
+- **§15 S6 / Windows `npm link` 대체 shim 스크립트**: `scripts/install-shim-windows.sh`. Round 2 도그푸딩 (Windows 집 머신) 에서 발견한 "Node 24 가 npm link junction child 를 traverse 못 해 `acorn --version` 실패" 를 자동화. `.cmd` + bash shim 2개만 생성하여 junction 회피. `npm run shim:windows` 로 호출 가능.
+- **§15 M3 / doctor env runtime 체크**: `StatusReport.envRuntime` 필드 신규. `settings.json` 은 정확하나 Claude Code 세션이 설치 후 reload 안 한 상태 (`process.env` 에 env 3키 미반영) 를 info severity 의 별도 issue 로 노출. hint 는 "Claude Code 완전 재시작 / direnv allow 재실행". `CollectOptions.runtimeEnv` 로 테스트 주입 가능.
+
+### Fixed
+
+- **§15 H1 / `guard.patterns` dead config**: v0.1.x 까지 `harness.lock.guard.patterns` 는 스키마만 존재했고 hook 은 `.mode` 만 읽어 strict→minimal 변경해도 차단 동작 무변화. 이제 `hooks/guard-check.sh` 가 `.patterns` 도 파싱해 3단계 dispatch: `strict`(전체 AI 실수 방어) / `moderate`(strict - `push --force`·`reset --hard`: git 일상 허용) / `minimal`(catastrophic 만 — fork bomb / mkfs / dd of=/dev/* / DROP DATABASE). `push --force-with-lease` 는 모든 레벨 통과. `ACORN_GUARD_PATTERNS` env override 추가. 차단 메시지에 `mode=X patterns=Y` 노출.
+- **§15 S2 / drift SHA 착시 + CHECKOUT hint cause 분기**: Round 2 S4 실증 — status/doctor 의 drift 메시지가 7-char short SHA 만 보여줘서 `lock=c6e6a21, 실제=c6e6a21` (끝자리만 다른 SHA) 같은 착시. `src/core/sha-display.ts`의 `distinguishingPair(a, b)` 가 첫 차이 위치까지 확장. install 의 CHECKOUT 에러 hint 도 generic "git fsck" → "① SHA upstream 없음 → fetch / ② lock SHA 오타 / ③ 저장소 손상 → fsck" 3단계 원인 분기.
+- **§15 M4 / Windows case-insensitive 경로 비교**: `inspectSymlink` 가 strict string equality 로 resolved vs expected 를 비교하여 Windows NTFS (기본 케이스 비민감) 에서 `D:\Dotori` vs `D:\dotori` 가 false `wrong_target` 로 보고되던 문제. `normalizePathForCompare(p, platform)` helper 가 win32 → lowercase, POSIX → strict 로 분기.
+- **§15 M1 / `registry.json` phantom**: CLAUDE.md·plan §9 에서 `registry.json` 을 마치 current artifact 처럼 언급했지만 `src/` 는 read/write 하지 않음. 현재 상태 (v1.1+ 연기) 를 문서 양쪽에 명시 주석.
+- **§15 M5 / CLAUDE.md drift**: 존재하지 않는 `core/registry` / `core/guard` 모듈 언급 제거, `--force` "노출 예정" → `v0.1.0+` 명시, `D:\dotori\...` 경로 실제 `D:\.claude\...` 로 교정, pipeline 서술 8-step 으로 갱신.
+
+### Changed
+
+- **`doctor --json` 출력**: `.summary: {critical, warning, info}` + `.okCritical` 편의 필드는 이미 v0.1.2 에서 shipped. v0.2.0 에선 `envRuntime` 기반 info issue 가 추가로 노출될 수 있음 (M3).
+
+### Testing
+
+- 177 단위 테스트 (v0.1.3 의 154 + v0.2.0 신규 23). Mac 기준 177/177 예상. Windows 20 실패는 기존 symlinkSync EPERM / 경로구분자 케이스.
+
 ## [0.1.3] — 2026-04-17
 
 `acorn-v1-plan.md §15` v0.1.3 버킷 전 항목 처리 — 멱등 복원 + 백업 복원 + fail-close 두 건. 같은 날 v0.1.2 릴리스 직후 연속 수정.
