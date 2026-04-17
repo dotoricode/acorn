@@ -291,6 +291,114 @@ test('runConfig: 알 수 없는 key → UNKNOWN_KEY 에러', () => {
   }
 });
 
+test('§15 B2: set guard.mode → tx.log 에 phase=config-guard.mode + commit 기록', () => {
+  const w = makeWS();
+  try {
+    runConfig('guard.mode', 'warn', {
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      yes: true,
+    });
+    const txPath = join(w.harnessRoot, 'tx.log');
+    assert.ok(existsSync(txPath), 'tx.log 생성됨');
+    const lines = readFileSync(txPath, 'utf8').trim().split('\n');
+    const events = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    assert.equal(events[0]?.['status'], 'begin');
+    assert.equal(events[1]?.['status'], 'phase');
+    assert.equal(events[1]?.['phase'], 'config-guard.mode');
+    assert.equal(events[events.length - 1]?.['status'], 'commit');
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 B2: set guard.patterns → phase=config-guard.patterns', () => {
+  const w = makeWS();
+  try {
+    runConfig('guard.patterns', 'moderate', {
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      yes: true,
+    });
+    const lines = readFileSync(join(w.harnessRoot, 'tx.log'), 'utf8')
+      .trim()
+      .split('\n');
+    const phases = lines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .filter((e) => e['status'] === 'phase')
+      .map((e) => e['phase']);
+    assert.deepEqual(phases, ['config-guard.patterns']);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 B2: env.reset → phase=config-env.reset + commit', () => {
+  const w = makeWS();
+  try {
+    writeFileSync(
+      w.settingsPath,
+      JSON.stringify({ env: { CLAUDE_PLUGIN_ROOT: '/x' } }, null, 2),
+      'utf8',
+    );
+    runConfig('env.reset', undefined, {
+      lockPath: w.lockPath,
+      settingsPath: w.settingsPath,
+      harnessRoot: w.harnessRoot,
+      yes: true,
+    });
+    const lines = readFileSync(join(w.harnessRoot, 'tx.log'), 'utf8')
+      .trim()
+      .split('\n');
+    const events = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    assert.ok(
+      events.some(
+        (e) => e['status'] === 'phase' && e['phase'] === 'config-env.reset',
+      ),
+    );
+    assert.equal(events[events.length - 1]?.['status'], 'commit');
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 B2: SCHEMA 실패 → tx.log 에 abort 기록', () => {
+  const w = makeWS();
+  try {
+    assert.throws(() =>
+      runConfig('guard.mode', 'bogus', {
+        lockPath: w.lockPath,
+        harnessRoot: w.harnessRoot,
+        yes: true,
+      }),
+    );
+    const lines = readFileSync(join(w.harnessRoot, 'tx.log'), 'utf8')
+      .trim()
+      .split('\n');
+    const events = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    assert.equal(events[events.length - 1]?.['status'], 'abort');
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 B2: read-only 경로 (summary, get) 는 tx.log 건드리지 않음', () => {
+  const w = makeWS();
+  try {
+    runConfig(undefined, undefined, {
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+    });
+    runConfig('guard.mode', undefined, {
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+    });
+    assert.equal(existsSync(join(w.harnessRoot, 'tx.log')), false);
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('renderConfigAction: 사람 친화 출력 포맷', () => {
   assert.ok(renderConfigAction({ kind: 'get', key: 'guard.mode', value: 'block' }).includes('block'));
   assert.ok(

@@ -25,6 +25,7 @@ import {
   defaultBackupRoot,
 } from '../core/settings.ts';
 import { defaultHarnessRoot } from '../core/env.ts';
+import { beginTx } from '../core/tx.ts';
 
 /**
  * §15 v0.3.0 S3 — acorn config 오케스트레이터.
@@ -267,6 +268,28 @@ function summary(opts: ConfigOptions): ConfigAction {
 }
 
 /**
+ * 쓰기 경로를 tx.log 로 감싼다 (v0.3-plan §S3: phase=`config-<key>`).
+ * read-only 경로(summary, get)는 tx 생략 — 디스크 변경 없음.
+ */
+function runMutation(
+  phase: string,
+  opts: ConfigOptions,
+  fn: () => ConfigAction,
+): ConfigAction {
+  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
+  const tx = beginTx(harnessRoot);
+  try {
+    tx.phase(phase);
+    const result = fn();
+    tx.commit();
+    return result;
+  } catch (e) {
+    tx.abort(e instanceof Error ? e.message : String(e));
+    throw e;
+  }
+}
+
+/**
  * Router — argv[0] = key (optional), argv[1] = value (optional).
  * 지원 키: guard.mode / guard.patterns / env.reset.
  */
@@ -280,15 +303,19 @@ export function runConfig(
   }
   if (key === 'guard.mode') {
     if (value === undefined) return getGuardField('mode', opts);
-    return setGuardField('mode', GUARD_MODES, value, opts);
+    return runMutation('config-guard.mode', opts, () =>
+      setGuardField('mode', GUARD_MODES, value, opts),
+    );
   }
   if (key === 'guard.patterns') {
     if (value === undefined) return getGuardField('patterns', opts);
-    return setGuardField('patterns', GUARD_PATTERNS, value, opts);
+    return runMutation('config-guard.patterns', opts, () =>
+      setGuardField('patterns', GUARD_PATTERNS, value, opts),
+    );
   }
   if (key === 'env.reset') {
     // env.reset 은 action — value 무시
-    return resetEnv(opts);
+    return runMutation('config-env.reset', opts, () => resetEnv(opts));
   }
   throw new ConfigError(
     `알 수 없는 config key: "${key}". 지원: guard.mode / guard.patterns / env.reset`,
