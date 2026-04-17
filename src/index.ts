@@ -154,7 +154,13 @@ function exitFor(e: unknown): number {
     if (e.code === 'IN_PROGRESS') return EXIT.IN_PROGRESS;
     if (e.code === 'SETTINGS_CONFLICT') return EXIT.CONFIG;
   }
-  if (e instanceof LockError && e.code === 'SCHEMA') return EXIT.CONFIG;
+  // §15 v0.4.3 Round 3 F1: PARSE 도 CONFIG — 파일 손상은 사용자의 config 문제.
+  // 이전엔 SCHEMA 만 CONFIG(78), PARSE 는 FAILURE(1) 로 새어 CI 게이트 일관성이
+  // 깨졌다 (lock validate 가 같은 "lock 파일이 잘못됐다" 를 두 exit 로 보고).
+  // NOT_FOUND/IO 는 인프라 이슈 (파일 부재/권한) 라 FAILURE 로 유지.
+  if (e instanceof LockError && (e.code === 'SCHEMA' || e.code === 'PARSE')) {
+    return EXIT.CONFIG;
+  }
   if (e instanceof ConfigError) {
     if (e.code === 'SCHEMA' || e.code === 'UNKNOWN_KEY') return EXIT.CONFIG;
     if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;

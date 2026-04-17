@@ -143,6 +143,23 @@ test('runCli: lock validate <invalid> → CONFIG exit + schema 에러', () => {
   }
 });
 
+// §15 v0.4.3 Round 3 F1 — PARSE 에러도 CONFIG (exit=78) 로 매핑.
+// 이전 (v0.4.2 까지): bare Exit.FAILURE (1) 로 새어 CI 게이트가 SCHEMA 와
+// PARSE 를 서로 다른 exit 로 보고해 일관성이 깨졌다.
+test('runCli: lock validate <깨진 JSON> → CONFIG exit + PARSE 에러', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-cli-lock-parse-'));
+  const lockPath = join(dir, 'harness.lock');
+  writeFileSync(lockPath, '{this is not valid json', 'utf8');
+  const c = capture();
+  try {
+    const code = runCli(['lock', 'validate', lockPath], c.io);
+    assert.equal(code, EXIT.CONFIG);
+    assert.ok(c.err.some((l) => /lock\/PARSE/.test(l)));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('runCli: lock (서브커맨드 없음) → usage 출력', () => {
   const c = capture();
   const code = runCli(['lock'], c.io);
