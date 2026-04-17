@@ -3,6 +3,21 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.1.3] — 2026-04-17
+
+`acorn-v1-plan.md §15` v0.1.3 버킷 전 항목 처리 — 멱등 복원 + 백업 복원 + fail-close 두 건. 같은 날 v0.1.2 릴리스 직후 연속 수정.
+
+### Fixed
+
+- **§15 C3 / gstack setup 멱등 위반**: 두 번째 `runInstall()` 호출 시 `gstack ./setup --host auto` 가 무조건 재실행되어 "두 번째 호출은 모든 단계 noop" 불변식을 어기던 문제. `<harnessRoot>/.gstack-setup.sha` 마커 파일로 "어떤 SHA 에서 setup 성공했는지" 기록. marker == `lock.tools.gstack.commit` 이면 `[6/8] gstack setup (noop — SHA xxx 에 대해 이미 실행됨)` 로 skip. 40-char hex 검증 실패 시 null 반환해 재실행 유도 (fail-close).
+- **§15 C4 / symlink `wrong_target` 교체 시 백업 없음**: `ensureSymlink` 의 `wrong_target` 분기가 이전 잘못된 symlink 를 기록 없이 덮어쓰던 "비파괴" 원칙 위반. `backupSymlinkInfo(opts)` 신규 함수가 `<backupDir>/<basename(target)>.info` JSON 으로 `{target, link_target, backed_up_at, reason}` 기록. `installGstackSymlink` 는 `<harnessRoot>/backup/{ISO8601}/symlinks/` 를 자동 주입. `EnsureResult` 에 optional `backup: string` 필드 추가. §15 M2 의 `symlinks/{path}.info` 미생성 갭도 같이 해소.
+- **§15 H3 / tx.log partial-write crash 시 fail-open**: `readEvents` 가 JSON 파싱 실패 라인을 빈 `catch {}` 로 skip 하여 `commit` 뒤에 손상 라인이 있어도 `lastInProgress=null` 을 반환 = install 이 "clean" 으로 오판. 이제 `readEvents` 가 `{events, corrupt}` 반환. `lastInProgress` 가 corrupt 감지 시 synthesized `{phase: '<corrupt-tx-log>', status: 'begin', reason: 'partial-write crash 의심'}` 을 돌려보내 `IN_PROGRESS` 경로를 탄다. 사용자는 수동 검사 또는 `--force` 필요.
+- **§15 H4 / `isEmptyDir` EACCES 흡수**: `readdirSync` 예외를 모두 catch 로 삼켜 EACCES/ENOTDIR 같은 실 장애가 "not empty" 로 둔갑, 이후 `isGitRepo=false` 분기에서 `NOT_A_REPO` 로 잘못 결론내며 "rm -rf" 힌트를 제공하던 파괴적 조치 유도 문제. `isEmptyDir` 는 이제 ENOENT (race) 만 "empty" 로 수용하고 나머지는 propagate. `installVendor` 가 `VendorError('IO')` 로 번역해 "경로 접근 실패 (ENOTDIR): ..." 정확한 메시지 제공. `vendorHint` 의 IO 분기도 `mv ${vPath} ${vPath}.bak` 같은 비파괴적 안내로 교체.
+
+### Testing
+
+- 154 단위 테스트 (0.1.2 의 142 + v0.1.3 신규 12). Mac 기준 전부 pass 예상. Windows 20 실패는 기존 symlinkSync EPERM / 경로구분자 케이스.
+
 ## [0.1.2] — 2026-04-17
 
 2026-04-17 3-critic 병렬 audit (`docs/acorn-v1-plan.md §15`) 에서 식별된 CRITICAL 4건 수정 + v0.2.0 S1 선행. 도그푸딩 Round 2 (Windows, 38회 실행 / 메모 11건) 로는 blocker 0 이었으나 코드-구조 audit 이 silent-lie 와 fresh-install 시나리오에서 놓친 지점을 드러냄.
