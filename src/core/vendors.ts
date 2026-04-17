@@ -192,10 +192,19 @@ export interface InstallVendorResult {
  *
  * 현재: ENOENT (existsSync 와 readdirSync 사이 race) 만 "비었다" 로 받고,
  * 그 외 에러는 호출자에게 propagate.
+ *
+ * §15 v0.4.2 (Round 3 dogfood): 심링크는 "empty dir" 이 아니다.
+ * 이전엔 `readdirSync` 가 심링크를 follow 해 target 의 empty 여부를 반환,
+ * target 이 빈 디렉토리인 심링크가 `treatAsClone=true` 로 판정돼
+ * `--follow-symlink` handling 경로가 차단되고 심링크가 clone 대상으로
+ * rm 된 뒤 clone 이 시도되는 회귀. v0.3.4 부터 CI Linux 에서 H-3 회귀
+ * 테스트 실패 (Windows 는 EPERM 으로 skip 되어 로컬엔 안 보였음).
+ * 이제 lstat 기준 심링크면 즉시 false — 심링크 handling 은 상위에서 담당.
  */
 function isEmptyDir(dir: string): boolean {
   if (!existsSync(dir)) return true;
   try {
+    if (lstatSync(dir).isSymbolicLink()) return false;
     return readdirSync(dir).length === 0;
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
