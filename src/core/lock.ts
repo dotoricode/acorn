@@ -7,6 +7,7 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultHarnessRoot } from './env.ts';
+import { stripBom } from './bom.ts';
 
 export const SCHEMA_VERSION = 1 as const;
 export const TOOL_NAMES = ['omc', 'gstack', 'ecc'] as const;
@@ -135,7 +136,8 @@ function validateGuard(raw: unknown): GuardConfig {
 export function parseLock(raw: string): HarnessLock {
   // Windows 에디터가 UTF-8 BOM 을 삽입한 경우 JSON.parse 가 실패한다.
   // fail-close 원칙 위반 없이 조용히 제거한다. (DOGFOOD Round 1 §v0.1.1 #1)
-  const stripped = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+  // v0.4.1: stripBom 을 core/bom.ts 로 통합.
+  const stripped = stripBom(raw);
 
   let data: unknown;
   try {
