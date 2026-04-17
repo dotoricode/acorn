@@ -3,6 +3,54 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.3.2] — 2026-04-17
+
+v0.3.1 hotfix 직후 🟠 quick-sweep 패치. 4-agent 검토의 soft-priority
+항목 중 저비용·고가치 3건 처리. 기능 추가 없음, 발견성·플랫폼 호환성
+정비.
+
+### Fixed
+
+- **§15 S3 / `tests/lock.test.ts` POSIX 경로 하드코딩**: `defaultLockPath`
+  테스트 2건이 `/custom/root/harness.lock` 리터럴을 기대값으로 썼다.
+  `node:path.join` 은 Windows 에서 `\` 를 반환하므로 Windows assertion
+  fail. 기대값도 `join()` 으로 계산해 플랫폼 중립화. 이전 HANDOVER 의
+  "Windows 20 failure" 서술은 실제 "18 EPERM + 2 assertion bug" 였음 —
+  이번 패치로 원래 서술한 의미의 20 failure 중 2건이 해소되고 남은 18건
+  은 순수 Windows 개발자 모드 `symlinkSync` EPERM.
+- **§15 S4 / `NOT_A_REPO` hint 에 `--adopt` 1차 제안**: v0.3.0 에서
+  도입한 `acorn install --adopt` 의 discoverability 가 0 이었다. 기존
+  non-git vendor 를 만난 사용자가 받는 hint 는 `rm -rf` / `mv` 만
+  안내해 ADR-018 ("삭제 없음, 항상 rename") 과 모순. 이제 hint 는
+  `acorn install --adopt` 를 1차 제안하고, `rm -rf` 안내는 제거, `mv`
+  는 수동 대안으로 유지. install 테스트의 regression guard 도
+  `/rm -rf|mv /` 느슨한 disjunction → `--adopt` 포함 명시적 assert 로
+  강화.
+
+### Docs
+
+- **§15 S5 / `usage()` 에 `config` 서브커맨드 상세**: v0.3.1 에서
+  install 플래그는 한 줄씩 풀었으나 config 는 "guard.mode /
+  guard.patterns / env.reset 조작" 한 줄 요약만 있었다. 별도 "config
+  서브커맨드" 블록을 추가해 get / set / env.reset 호출 형태, 값 enum
+  (`block|warn|log`, `strict|moderate|minimal`), `--yes` 플래그를
+  명시. 예시 블록에 `acorn install --adopt --yes`, `acorn config
+  guard.mode warn --yes`, `acorn config env.reset --yes` 추가.
+
+### Testing
+
+- 208 단위 테스트 (v0.3.1 의 207 + S5 usage regression guard 1).
+  Mac 기준 전부 pass 예상. Windows 는 **20 → 18** 실패 (S3 로 2건
+  해소). 남은 18은 symlinkSync EPERM (Windows 개발자 모드 미활성
+  환경에서만 발현).
+
+### Deferred to v0.4.x
+
+v0.3.1 과 동일 큐 중 S3/S4/S5 3건만 해소. 남은 🟠: H-3 (follow-symlink
+revParse 흡수 강화), H-1 (setup 콜백 silent no-op 경고), security HIGH-2
+(sha256 pinning + npm provenance), HIGH-3 (`ACORN_GUARD_BYPASS` nonce
+재설계). 🟡 6건 + 🟢 Round 3 도그푸딩 1건은 유지.
+
 ## [0.3.1] — 2026-04-17
 
 v0.3.0 직후 4-agent 독립 검토(critic / code-reviewer / architect / security-reviewer)
