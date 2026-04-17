@@ -1,9 +1,9 @@
-# acorn 사용법 (v0.1.0)
+# acorn 사용법
 
 일상적으로 acorn 을 어떻게 꺼내 쓰는지 정리한 치트시트.
 
 > **큰 그림**
-> v0.1.0 은 "설치·검증 도구". 실제 Claude Code 세션에서 OMC / gstack / ECC 스킬을
+> acorn 은 "설치·검증 도구". 실제 Claude Code 세션에서 OMC / gstack / ECC 스킬을
 > **사용하는 것** 은 Claude Code 자체이지 acorn 이 아니다.
 > acorn 은 **인프라가 흔들릴 때** 꺼내 쓰는 계측·복구 장비다.
 > 하루 5분도 안 쓰는 게 정상이다.
@@ -12,20 +12,22 @@
 
 ## 전제 — 셋업이 끝난 상태
 
-아래 커맨드는 다음이 이미 완료돼 있다고 가정한다:
+npm 배포판(`npm i -g @dotoricode/acorn`) 이나 로컬 `npm link` 로
+`acorn` 이 전역 호출 가능한 상태.
 
-- `npm link` 로 `acorn` 이 전역에서 호출 가능
-- `~/.zshrc` (또는 `~/.bashrc`) 에 세 개의 alias 가 등록됨
-
-```bash
-export ACORN_REPO=~/01_private/acorn
-alias adog="$ACORN_REPO/scripts/dogfood/wrap.sh"
-alias dn="$ACORN_REPO/scripts/dogfood/note.sh"
-alias dreport="$ACORN_REPO/scripts/dogfood/report.sh"
-```
-
-`adog` 는 `acorn` 대체 + 자동 로깅. 도그푸딩 중에는 `adog` 를 쓰고,
-정기 사용 단계(도그푸딩 종료 후)에는 그냥 `acorn` 으로 바꿔도 된다.
+> **도그푸딩 개발자 전용 (npm 배포판 사용자는 무시)**
+>
+> 레포를 직접 체크아웃해 도그푸딩할 때는 `scripts/dogfood/` 하에
+> `adog` (wrap), `dn` (note), `dreport` (report) alias 를 쓸 수 있다.
+> npm 배포판에는 포함되지 않는다 (v0.3.1+ `files` 화이트리스트).
+> ```bash
+> export ACORN_REPO=~/01_private/acorn
+> alias adog="$ACORN_REPO/scripts/dogfood/wrap.sh"
+> alias dn="$ACORN_REPO/scripts/dogfood/note.sh"
+> alias dreport="$ACORN_REPO/scripts/dogfood/report.sh"
+> ```
+> 이 문서의 예시는 `acorn` 기준으로 읽으면 된다. 도그푸딩 모드에선
+> `acorn` 을 `adog` 로 바꿔도 동일하게 동작 + 자동 로깅.
 
 ---
 
@@ -34,13 +36,13 @@ alias dreport="$ACORN_REPO/scripts/dogfood/report.sh"
 ### 1. 상태 확인 — 뭔가 이상한 감이 있을 때
 
 ```bash
-adog status
+acorn status
 ```
 
-3줄 전부 ✅ 뜨면 끝.
+3툴 전부 ✅ 뜨면 끝.
 
 ```
-acorn v0.1.0  •  ~/.claude-personal/skills/harness
+acorn v0.3.2  •  ~/.claude/skills/harness
 ────────────────────────────────────────────────────────────
   omc     04655ee  ✅  locked
   gstack  c6e6a21  ✅  locked  (symlinked)
@@ -54,7 +56,18 @@ acorn v0.1.0  •  ~/.claude-personal/skills/harness
   gstack link   ✅  correct
 ```
 
-### 2. 메모 — 1줄, 생각나는 즉시
+### 2. 설정 요약 — 현재 guard 모드 / 패턴 한눈에 (v0.3.0+)
+
+```bash
+acorn config
+```
+
+```
+guard.mode:     block
+guard.patterns: strict
+```
+
+### 3. 메모 (도그푸딩 모드 전용) — 1줄, 생각나는 즉시
 
 ```bash
 dn ux "status 가 해석에 시간 걸림"
@@ -63,6 +76,7 @@ dn bug "install 로그 줄바꿈 이상"
 ```
 
 라벨 (선택): `bug` / `ux` / `idea` / `question` / `blocker`
+(배포판 사용자는 이 스킬을 쓰지 않는다.)
 
 ---
 
@@ -72,16 +86,16 @@ dn bug "install 로그 줄바꿈 이상"
 
 ```bash
 cd ~/01_private/dotfiles && git pull origin main    # lock 받기
-adog status                                          # drift 있나 확인
-adog install                                         # drift 있으면 재설치
+acorn status                                         # drift 있나 확인
+acorn install                                        # drift 있으면 재설치
 ```
 
-`status` 가 다 ✅ 면 `install` 건너뛰어도 된다. 대부분 노op.
+`status` 가 다 ✅ 면 `install` 건너뛰어도 된다. 대부분 noop.
 
 ### "뭔가 이상한데" 싶을 때
 
 ```bash
-adog doctor
+acorn doctor
 ```
 
 출력 예:
@@ -94,23 +108,69 @@ adog doctor
 
 힌트 그대로 따라가면 된다.
 
+### lock 파일 검증만 하고 싶을 때 (CI 친화, v0.2.0+)
+
+```bash
+acorn lock validate                 # defaultLockPath
+acorn lock validate ./harness.lock  # 명시 경로
+```
+
+```
+✅ harness.lock OK  (schema_version=1, acorn_version=0.3.2, tools=3, guard=block/strict)
+```
+
+실패 시 exit 78 + `[lock/SCHEMA] ...`. CI pipeline 한 줄 gate 로 꽂기 좋음.
+
+### 기존 수동 설치를 acorn 관리로 옮길 때 (v0.3.0+ `--adopt`)
+
+lock 기준으로 새로 clone 하되, 기존 수동 설치물은 `.pre-adopt-<ts>/`
+접미어로 **비파괴 보존**. ADR-018 원칙상 삭제는 없다.
+
+```bash
+acorn install --adopt             # TTY 에서 Y/n 확인 (v0.3.1+ B3)
+acorn install --adopt --yes       # CI / 비대화형 환경
+```
+
+동작:
+
+- vendor 경로가 non-git 디렉토리 → `<path>.pre-adopt-<ISO8601>/` 로 이름
+  변경 후 lock SHA 로 clone → `action=adopted`
+- settings.json 의 env 키 충돌 → `env.<key>.pre-adopt-<ISO8601>` 로 키 이름
+  변경 후 기대값 덮어쓰기
+
+> **주의**: v0.3.1 부터 `--adopt` 는 destructive rename 으로 분류되어
+> non-TTY + `--yes` 미지정이면 `[install/ARGS]` USAGE 에러로 차단된다.
+
+### vendor 가 심링크인 환경 (dev 레포 직링크, v0.3.0+ `--follow-symlink`)
+
+```bash
+acorn install --follow-symlink    # target HEAD 를 lock SHA 와 비교
+```
+
+- `--follow-symlink` 없이 심링크를 만나면 **NOT_A_REPO 로 fail-close**
+  (v0.3.1 B1 이후). 이전 v0.3.0 의 silent preserve 는 제거됨.
+- `--follow-symlink` 지정 시 target 의 HEAD 를 `git rev-parse HEAD` 로
+  읽어 lock 과 비교. 일치하면 `adopted`, 불일치면 `preserved` + drift 경고.
+
 ### dotfiles 의 harness.lock 이 바뀐 뒤
 
 ```bash
-adog install
+acorn install
 ```
 
-출력 `[4/7]` 줄에서 각 툴 상태 확인:
+출력 `[4/8]` 줄에서 각 툴 상태 확인:
 
 - `cloned` — 처음 설치
 - `checked_out` — SHA 변경으로 재체크아웃
 - `noop` — 이미 lock 과 일치
+- `adopted` — `--adopt` 로 기존 수동 설치 흡수 (v0.3.0+)
+- `preserved` — 심링크 dev 레포 그대로 유지 (v0.3.0+)
 
 ### install 이 중간에 중단됐을 때 (Ctrl-C 등)
 
 ```bash
-adog install             # → [install/IN_PROGRESS] 에러
-adog install --force     # 우회
+acorn install             # → [install/IN_PROGRESS] 에러
+acorn install --force     # 우회
 ```
 
 `--force` 는 이전 트랜잭션이 `commit` / `abort` 로 마감 안 된 경우만 필요.
@@ -122,46 +182,89 @@ adog install --force     # 우회
 ### JSON 자동화 — CI / 스크립트 / Claude Code hook
 
 ```bash
-adog status --json | jq .ok                         # true/false 로 게이트
-adog doctor --json | jq '.issues[].hint'            # 이슈 힌트만
-adog status --json > /tmp/acorn-report.json         # 저장
+acorn status --json | jq .ok                            # true/false 로 게이트
+acorn doctor --json | jq '.okCritical'                  # critical 만 gate (v0.1.2+)
+acorn doctor --json | jq '.summary'                     # {critical, warning, info} 카운트
+acorn doctor --json | jq '.issues[].hint'               # 이슈 힌트만
+acorn status --json > /tmp/acorn-report.json            # 저장
+acorn lock validate && echo ok                          # v0.2.0+ lock schema gate
 ```
 
-`status` / `doctor` 둘 다 exit code 로 CI 분기 가능 — `.md` 하단 Exit code 표 참조.
+`status` / `doctor` / `lock validate` 모두 exit code 로 CI 분기 가능
+— 아래 Exit code 표 참조.
 
-### 도그푸딩 누적 요약
+### guard 모드 / 패턴 전환 (v0.3.0+)
+
+개발 중 위험 커맨드 차단을 잠시 완화하거나 다시 잠글 때.
+
+```bash
+acorn config guard.mode warn --yes           # block → warn (차단 대신 경고만)
+acorn config guard.patterns minimal --yes    # strict → minimal (catastrophic 만)
+acorn config guard.mode block --yes          # 복귀
+```
+
+모든 쓰기는 preflight 검증 → backup → atomic write → parseLock 재검증 4단계.
+`tx.log` 에 `phase=config-guard.mode` 등으로 기록 (v0.3.1+ B2).
+
+### env 3키 초기화 (v0.3.0+)
+
+`CLAUDE_PLUGIN_ROOT` / `OMC_PLUGIN_ROOT` / `ECC_ROOT` 만 `settings.json`
+에서 제거 (다른 키 보존). 수동 재설치 전 정리용.
+
+```bash
+acorn config env.reset --yes
+```
+
+backup 자동 생성. 이후 `acorn install` 로 재주입.
+
+### 도그푸딩 누적 요약 (도그푸딩 모드 전용)
 
 ```bash
 dreport
 ```
 
 주 1회 정도. 본인이 언제 뭘 썼고 뭘 적었는지 구조화된 요약이 나온다.
+(배포판 사용자에게는 없음.)
 
-### 처음부터 재설치 (극단 상황)
+### 기존 수동 설치물을 acorn 관리로 이관 (v0.3.0+)
+
+> **❌ rm -rf 로 지우지 말 것** (ADR-018). acorn 은 "삭제 없음,
+> 항상 rename" 원칙.
 
 ```bash
-rm -rf ~/.claude-personal/skills/harness/vendors
-adog install
+acorn install --adopt              # TTY 확인 후 <path>.pre-adopt-<ts>/ 로 rename + clone
+acorn install --adopt --yes        # non-TTY/CI
 ```
 
-`settings.json` 의 env 3키는 그대로 두면 재사용 — 충돌 안 난다.
+기존 디렉토리는 `<path>.pre-adopt-<ISO8601>/` 로 보존되므로 문제 시
+수동 복구 가능. `settings.json` 의 env 3키는 그대로 두면 재사용 — 충돌
+안 난다 (충돌하면 `env.<key>.pre-adopt-<ts>` 로 이동).
 
 ---
 
 ## 📋 전체 커맨드 치트시트
 
-| 커맨드 | 의미 | 빈도 |
-|---|---|---|
-| `adog status` | 3툴 + env + symlink 요약 | 하루 0~2회 |
-| `adog doctor` | 이슈 + 복구 힌트 | 주 0~2회 |
-| `adog install` | lock 기준 설치·갱신 | 머신 바꿀 때 |
-| `adog install --force` | tx 중단 무시 | 비상시 |
-| `adog install --skip-gstack-setup` | gstack setup 생략 | 특수 |
-| `adog --version` | `0.1.0` | 확인용 |
-| `adog --help` | usage | 까먹었을 때 |
-| `dn <메모>` | 1줄 관찰 기록 | 생각날 때마다 |
-| `dn ux/bug/idea/blocker <메모>` | 라벨 + 메모 | 〃 |
-| `dreport` | 누적 요약 | 주 1회 |
+| 커맨드 | 의미 | 빈도 | 도입 |
+|---|---|---|---|
+| `acorn status` | 3툴 + env + symlink 요약 | 하루 0~2회 | v0.1.0 |
+| `acorn doctor` | 이슈 + 복구 힌트 | 주 0~2회 | v0.1.0 |
+| `acorn install` | lock 기준 설치·갱신 | 머신 바꿀 때 | v0.1.0 |
+| `acorn install --force` | tx 중단 무시 | 비상시 | v0.1.0 |
+| `acorn install --skip-gstack-setup` | gstack setup 생략 | 특수 | v0.1.0 |
+| `acorn install --run-gstack-setup` | gstack setup 자동 실행 | 첫 설치 | v0.1.1 |
+| `acorn install --adopt` | 기존 수동 설치 흡수 + rename 보존 | 이관 | v0.3.0 |
+| `acorn install --follow-symlink` | 심링크 vendor target HEAD 검증 | dev 환경 | v0.3.0 |
+| `acorn install --yes` | destructive 프롬프트 스킵 | CI | v0.3.1 |
+| `acorn lock validate [path]` | harness.lock schema 검증 | CI gate | v0.2.0 |
+| `acorn config` | guard 현재 설정 요약 | 수시 | v0.3.0 |
+| `acorn config guard.mode <v>` | `block\|warn\|log` 전환 | 개발 중 | v0.3.0 |
+| `acorn config guard.patterns <v>` | `strict\|moderate\|minimal` 전환 | 개발 중 | v0.3.0 |
+| `acorn config env.reset` | env 3키 제거 (다른 키 보존) | 드물게 | v0.3.0 |
+| `acorn --version` | `0.3.2` | 확인용 | v0.1.0 |
+| `acorn --help` | usage | 까먹었을 때 | v0.1.0 |
+| `dn <메모>` | 1줄 관찰 기록 (도그푸딩) | — | dev-only |
+| `dn ux/bug/idea/blocker <메모>` | 라벨 + 메모 | — | dev-only |
+| `dreport` | 누적 요약 | — | dev-only |
 
 ---
 
@@ -184,16 +287,16 @@ Claude Code 가 자동 인식한다. acorn 은 그 연결을 만들고 감시하
 
 ```bash
 cd ~/01_private/acorn && git pull
-adog status       # 전부 ✅ 확인
+acorn status      # 전부 ✅ 확인 (도그푸딩 모드는 adog)
 # Claude Code 세션 시작 → 평소 작업
 ```
 
 ### 작업 중 뭔가 이상함
 
 ```bash
-adog doctor
+acorn doctor
 # 힌트 따라 처리
-dn bug "doctor 가 지적한 N 이슈 — 실제론 정상이었음"
+dn bug "doctor 가 지적한 N 이슈 — 실제론 정상이었음"    # 도그푸딩 모드 전용
 ```
 
 ### 저녁 집에 가기 전
@@ -201,7 +304,7 @@ dn bug "doctor 가 지적한 N 이슈 — 실제론 정상이었음"
 특별히 할 일 없음. `dotfiles` 에 lock 변경 있으면 commit + push.
 acorn 자체는 건드릴 일 거의 없음.
 
-### 주말 / 주간 회고
+### 주말 / 주간 회고 (도그푸딩 모드 전용)
 
 ```bash
 dreport   # 이번 주 얼마나 썼나, 뭐 적었나
@@ -212,9 +315,11 @@ dreport   # 이번 주 얼마나 썼나, 뭐 적었나
 
 ## 🚫 안 해도 되는 것
 
-- `adog install` 을 매일 돌리기 — **불필요**. lock 안 바뀌면 전부 noop.
+- `acorn install` 을 매일 돌리기 — **불필요**. lock 안 바뀌면 전부 noop.
 - `status` / `doctor` 를 반복 확인 — **불필요**. 평소 한 번 보면 충분.
 - 수동으로 `vendors/` 건드리기 — **비권장**. dirty warning 이 쌓인다.
+  이관이 필요하면 `acorn install --adopt` (v0.3.0+).
+- `rm -rf vendors/` 같은 파괴적 조치 — **금지**. ADR-018 대신 `--adopt` 사용.
 
 ---
 
@@ -239,11 +344,16 @@ dreport   # 이번 주 얼마나 썼나, 뭐 적었나
 |---|---|
 | `[lock/PARSE] JSON 파싱 실패` | `harness.lock` 확인 — BOM 또는 JSON 문법 오류 |
 | `[lock/SCHEMA] schema_version 불일치` | lock 에 `"schema_version": 1` 추가 |
-| `[install/SETTINGS_CONFLICT]` | `settings.json` 의 해당 env 키를 기대값으로 교체 또는 삭제 후 재실행 |
-| `[install/IN_PROGRESS]` | `adog install --force` 또는 `harness/tx.log` 확인 |
-| `[vendor/NOT_A_REPO]` | `vendors/<tool>/` 에 git 아닌 내용 있음. 확인 후 이동 또는 삭제 |
+| `[install/LOCK_SEEDED]` (v0.1.2+) | 템플릿이 시드됨. 각 tool `commit` 을 실제 SHA 로 바꾼 뒤 재실행 |
+| `[install/SETTINGS_CONFLICT]` | `acorn install --adopt` 로 흡수 (충돌 키를 `env.<key>.pre-adopt-<ts>` 로 이동, v0.3.0+), 또는 수동으로 기대값 교체 |
+| `[install/IN_PROGRESS]` | `acorn install --force` 또는 `harness/tx.log` 확인 |
+| `[install/ARGS] --adopt ... --yes 필요` | non-TTY 에서 `--adopt` 는 `--yes` 명시 필수 (v0.3.1+ B3) |
+| `[vendor/NOT_A_REPO]` non-git | `acorn install --adopt` 로 자동 흡수 (v0.3.0+, ADR-018). 수동 대안: `mv <path> <path>.bak` 후 재실행. **rm -rf 금지** |
+| `[vendor/NOT_A_REPO]` 심링크 | v0.3.1+ 부터 `--follow-symlink` 없이는 fail-close. 심링크 dev 레포면 `acorn install --follow-symlink`, 아니면 심링크 제거 후 재실행 |
 | `[vendor/CLONE]` | 네트워크 / 레포 접근권한 확인 |
-| gstack dirty warning 계속 | `cd vendors/gstack && git status` 로 원인 파악 후 커밋·스태시·reset 중 선택 |
+| `[config/CONFIRM_REQUIRED]` (v0.3.0+) | non-TTY 에서 `acorn config ... --yes` 로 재실행 |
+| `[config/SCHEMA]` (v0.3.0+) | 값 enum 확인: `guard.mode=block\|warn\|log`, `guard.patterns=strict\|moderate\|minimal` |
+| gstack dirty warning 계속 | `cd vendors/gstack && git status` 로 원인 파악 후 커밋·스태시·reset 중 선택. `.agents/` 같은 setup 부산물은 자동 허용 (v0.1.1+) |
 
 ---
 
@@ -252,9 +362,9 @@ dreport   # 이번 주 얼마나 썼나, 뭐 적었나
 **acorn 이 조용할수록 정상이다.**
 
 시끄러워질 때만 꺼내 보면 된다.
-평소엔 `adog status` 한 번 스쳐 보고, 전부 ✅ 면 닫으면 된다.
+평소엔 `acorn status` 한 번 스쳐 보고, 전부 ✅ 면 닫으면 된다.
 
-모르는 게 있으면 `adog --help` 가 언제나 첫 진입점.
+모르는 게 있으면 `acorn --help` 가 언제나 첫 진입점.
 
 ---
 
