@@ -13,7 +13,15 @@ import {
   renderDoctor,
   renderDoctorJson,
 } from './commands/doctor.ts';
-import { readSync } from 'node:fs';
+import {
+  collectList,
+  renderList,
+  renderListJson,
+  summarizeList,
+} from './commands/list.ts';
+import { readSync, readFileSync } from 'node:fs';
+import { dirname, join as pathJoin } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { LockError, readLock } from './core/lock.ts';
 import {
   runConfig,
@@ -25,7 +33,25 @@ import { VendorError } from './core/vendors.ts';
 import { SettingsError } from './core/settings.ts';
 import { SymlinkError } from './core/symlink.ts';
 
-export const VERSION = '0.4.0';
+/**
+ * §15 v0.6.0: VERSION 을 package.json 에서 런타임 로드.
+ * 이전엔 hardcode 문자열이라 릴리스 때마다 수동 동기화가 필요했고 v0.4.0+
+ * 에서 실제로 '0.4.0' 에 머물러 있었다 (lock 은 독립적으로 acorn_version
+ * 필드를 유지하지만 CLI `-V` 출력은 틀린 값). 이제 single source = package.json.
+ */
+function loadVersion(): string {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    // dev (src/index.ts) 와 prod (dist/index.js) 둘 다 `<pkg>/..` 기준.
+    const pkgPath = pathJoin(here, '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
+    return typeof pkg.version === 'string' ? pkg.version : '0.0.0-unknown';
+  } catch {
+    return '0.0.0-unknown';
+  }
+}
+
+export const VERSION = loadVersion();
 
 export interface CliIO {
   readonly stdout: (line: string) => void;
@@ -54,6 +80,7 @@ export function usage(): string {
 Commands:
   install        harness.lock 기준으로 OMC/gstack/ECC 설치 + env 주입
   status         현재 설치 상태 요약 (read-only)
+  list           lock 기준 tool 목록 + SHA + 상태 (read-only, v0.6.0+)
   doctor         진단 + 권장 조치
   lock validate  harness.lock schema 검증 (read-only, CI 친화)
   config         guard.mode / guard.patterns / env.reset 조작 (v0.3.0+)
@@ -61,7 +88,7 @@ Commands:
 Global flags:
   -h, --help      도움말
   -V, --version   버전 출력
-  --json          JSON 출력 (status, doctor)
+  --json          JSON 출력 (status, list, doctor)
 
 install flags:
   --force              이전 tx.log in_progress 우회
@@ -93,6 +120,8 @@ config 서브커맨드:
   acorn install --run-gstack-setup
   acorn install --adopt --yes
   acorn status --json
+  acorn list
+  acorn list --json
   acorn doctor
   acorn config guard.mode warn --yes
   acorn config env.reset --yes
@@ -257,6 +286,21 @@ function cmdStatus(parsed: ParsedArgs, io: CliIO): number {
   }
 }
 
+function cmdList(parsed: ParsedArgs, io: CliIO): number {
+  try {
+    const r = collectList();
+    if (parsed.flags.has('json')) {
+      io.stdout(renderListJson(r));
+    } else {
+      io.stdout(renderList(r));
+    }
+    return summarizeList(r).ok ? EXIT.OK : EXIT.FAILURE;
+  } catch (e) {
+    io.stderr(formatError(e));
+    return exitFor(e);
+  }
+}
+
 function cmdDoctor(parsed: ParsedArgs, io: CliIO): number {
   try {
     // §15 M3: doctor 도 runtime env check 활성.
@@ -293,6 +337,8 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
       return cmdInstall(parsed, io);
     case 'status':
       return cmdStatus(parsed, io);
+    case 'list':
+      return cmdList(parsed, io);
     case 'doctor':
       return cmdDoctor(parsed, io);
     case 'lock':
@@ -385,7 +431,7 @@ function cmdConfig(rest: readonly string[], io: CliIO): number {
 
 // ESM entrypoint: 직접 실행될 때만 process.exit
 // Windows 경로/심링크 환경에서도 일치시키기 위해 realpath 해석 후 pathToFileURL 로 정규화
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
 function sameFile(a: string, b: string): boolean {
   try {
