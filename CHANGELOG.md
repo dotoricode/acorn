@@ -3,6 +3,37 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.3.3] — 2026-04-17
+
+v0.3.1 / v0.3.2 코드 패치 이후 전역 문서 현행화. 기능 변경 0, 테스트
+변경 0. 핵심 동기: `docs/USAGE.md` 는 v0.3.1 `files` 화이트리스트로
+npm 패키지에 동봉되지만 내용은 v0.1.0 상태였음 — 배포판 사용자가
+보는 문서와 실제 CLI 사이 큰 gap.
+
+### Docs
+
+- **`docs/USAGE.md` 전면 갱신**: title version-neutral, 샘플 출력
+  v0.3.2, `acorn config` / `lock validate` / `--adopt` / `--follow-symlink`
+  / `--yes` 전용 섹션. "처음부터 재설치" 의 `rm -rf` 제거 → `--adopt`
+  로 교체 (ADR-018 준수). 도그푸딩 alias (`adog` / `dn` / `dreport`) 를
+  sidebar 로 분리 — npm 배포판에 미포함임을 명시. 치트시트 10+ 행 추가,
+  "막혔을 때" 표에 LOCK_SEEDED / ARGS / NOT_A_REPO 심링크 분기 /
+  CONFIRM_REQUIRED 추가.
+- **`README.md` v0.3.x 반영**: status 뱃지 v0.1.1 → v0.3.2,
+  `--follow-symlink` 설명 정반대 교정 (v0.3.0 "그대로 보존" → v0.3.1+
+  "fail-close"), `--adopt` Y/n / non-TTY `--yes` 요구사항, `--yes`
+  신설, `config` / `lock validate` 서브커맨드 블록, vendors 동작
+  매트릭스 4행 확장 (adopted / preserved / symlink 분기).
+- **`CLAUDE.md` 커맨드 섹션 현행화 + npm pack 화이트리스트 가이드**:
+  존재하지 않던 `install --repo .` 제거, 현재 구현 vs 미구현 (list /
+  uninstall / lock bump) 명시적 분리. "npm pack 화이트리스트 (v0.3.1+
+  CRIT-1)" 섹션 신설 — 미래 세션이 새 top-level 디렉토리 추가 시
+  `files` 등록 누락으로 배포판에서 빠지는 회귀 방지.
+
+### Testing
+
+변경 없음. 208 tests (Windows 190/208).
+
 ## [0.3.2] — 2026-04-17
 
 v0.3.1 hotfix 직후 🟠 quick-sweep 패치. 4-agent 검토의 soft-priority

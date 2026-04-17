@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-17 (Windows / **v0.3.2 quick-sweep — S3/S4/S5 3건 해소**)
+> 마지막 갱신: 2026-04-17 (Windows / **v0.3.3 docs patch — USAGE/README/CLAUDE.md 전역 현행화**)
 
 ---
 
@@ -9,13 +9,14 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 과 동기), 태그 **`v0.3.2`** 최신 (+ v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
-| 진행 중 작업 | **v0.3.2 quick-sweep 완료** — 4-agent 검토 큐의 🟠 soft-priority 중 저비용·고가치 3건: S3 (tests/lock.test.ts POSIX 하드코딩 → Windows failure 20→18), S4 (NOT_A_REPO hint 에 `--adopt` 1차 제안, `rm -rf` 안내 제거 — ADR-018 준수), S5 나머지 (`usage()` 에 config 서브커맨드 key/값 enum 노출). 기능 추가 없음 — 발견성·플랫폼 호환성 정비. |
+| 브랜치 | `main` (origin 과 동기), 태그 **`v0.3.3`** 최신 (+ v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
+| 진행 중 작업 | **v0.3.3 docs patch 완료** — v0.3.1 / v0.3.2 코드 패치 이후 누락된 전역 문서 현행화. `docs/USAGE.md` (npm 배포 동반 — 가장 심각하게 stale, title 이 v0.1.0), `README.md` (`--follow-symlink` 설명 정반대 오류), `CLAUDE.md` (존재하지 않는 `install --repo .` 커맨드 + npm pack 화이트리스트 guard). 기능 변경 0. |
 | 다음 작업 | **🟠 v0.4.x queue (4건)**: H-3 (follow-symlink revParse 흡수 강화), H-1 (setup 콜백 + skipGstackSetup silent no-op), security HIGH-2 (sha256 pinning + npm provenance), HIGH-3 (`ACORN_GUARD_BYPASS` 의미 재정의). **🟡 v1.0 전 부채 6건** (core/adopt+sha-display 흡수, InstallErrorCode naming 통일, integration test, isoTs 중복, 백업 ts 단일화, Windows junction 이슈 재검증) + **🟢 Round 3 도그푸딩 필수** (v0.3.x 신기능 실증 미이행 — plan.md:207-209 exit criteria). 상세 리스트는 `~/.gstack/projects/acorn/checkpoints/20260417-230009-v0-3-1-hotfix-shipped.md` |
-| 테스트 | Windows: **190/208** (18 실패 — 순수 Windows 개발자 모드 `symlinkSync` EPERM). Mac 기준 208/208 예상. v0.3.2 신규: S5 usage regression guard 1 + S4 tests 강화 1. S3 로 Windows 기존 2건 해소. |
-| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 (`b3c7668`) → v0.1.2 (`1a8e2a6`) → v0.1.3 (`d1590e0`) → v0.2.0 (`640f214`) → v0.3.0 (`c287dfd`) → v0.3.1 (`b159bcc`) → **v0.3.2** |
+| 테스트 | Windows: **190/208** (18 실패 — 순수 Windows 개발자 모드 `symlinkSync` EPERM). Mac 기준 208/208 예상. v0.3.3 은 docs-only, 테스트 변경 없음. |
+| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 (`c287dfd`) → v0.3.1 (`b159bcc`) → v0.3.2 (`9cb7519`) → **v0.3.3** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |
-| v0.3.2 본문 | `16a2e40` S3 · `fbd3a60` S4 · `c81e2ef` S5 · (+ release commit) |
+| v0.3.2 본문 | `16a2e40` S3 · `fbd3a60` S4 · `c81e2ef` S5 · `9cb7519` release |
+| v0.3.3 본문 | `209f325` docs(usage) · `6050cf7` docs(readme) · `388191c` docs(claude-md) · (+ release commit) |
 | v0.1.2 본문 | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
 | v0.1.3 본문 | `cdeacff` C4 / `cf0518d` H3 / `4f59193` H4 / `1c797d2` C3 |
 | v0.2.0 본문 | `f660b4e` S2 · `a5738b6` M5 · `77a209e` H1 · `b574f05` M4 · `08022fc` M3 · `0165b46` S6 · `6b269ba` S5 |
