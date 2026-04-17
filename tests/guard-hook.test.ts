@@ -1,3 +1,6 @@
+// §15 HIGH-2 / ADR-020 (v0.4.0): 가짜 repo 사용 — allowlist bypass.
+process.env['ACORN_ALLOW_ANY_REPO'] = '1';
+
 /**
  * §15 H1 (v0.2.0): harness.lock.guard.patterns 가 실제로 hook 차단 행동을
  * 바꾸는지 검증한다. 이전엔 dead config 였음.

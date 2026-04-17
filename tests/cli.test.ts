@@ -1,3 +1,6 @@
+// §15 HIGH-2 / ADR-020 (v0.4.0): 가짜 repo 사용 — allowlist bypass.
+process.env['ACORN_ALLOW_ANY_REPO'] = '1';
+
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';

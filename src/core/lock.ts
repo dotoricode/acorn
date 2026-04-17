@@ -18,6 +18,17 @@ export type GuardMode = (typeof GUARD_MODES)[number];
 export const GUARD_PATTERNS = ['strict', 'moderate', 'minimal'] as const;
 export type GuardPatterns = (typeof GUARD_PATTERNS)[number];
 
+/**
+ * §15 HIGH-2 / ADR-020 (v0.4.0): `harness.lock.tools.<name>.repo` allowlist.
+ * 악성 lock 이 공격자 저장소를 지정하지 못하도록 acorn 이 아는 저장소만 허용.
+ * Escape hatch: `ACORN_ALLOW_ANY_REPO=1` (fork / 내부 미러 / 로컬 dev).
+ */
+export const ALLOWED_REPOS: Readonly<Record<ToolName, readonly string[]>> = {
+  omc: ['Yeachan-Heo/oh-my-claudecode'],
+  gstack: ['garrytan/gstack'],
+  ecc: ['affaan-m/everything-claude-code'],
+};
+
 export interface ToolEntry {
   readonly repo: string;
   readonly commit: string;
@@ -59,6 +70,17 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+/**
+ * §15 HIGH-2 / ADR-020 (v0.4.0): repo allowlist 검증.
+ * `ACORN_ALLOW_ANY_REPO=1` 이면 검증 skip (escape hatch).
+ * `parseLock` 호출 시점에 process.env 를 읽어 결정 — env 기반이라
+ * 테스트는 env 조작으로 양 케이스 확인 가능.
+ */
+function isRepoAllowed(tool: ToolName, repo: string): boolean {
+  if (process.env['ACORN_ALLOW_ANY_REPO'] === '1') return true;
+  return (ALLOWED_REPOS[tool] as readonly string[]).includes(repo);
+}
+
 function validateToolEntry(tool: ToolName, raw: unknown): ToolEntry {
   if (!isObject(raw)) {
     throw new LockError(`tools.${tool}: object 가 아닙니다`, 'SCHEMA');
@@ -66,6 +88,17 @@ function validateToolEntry(tool: ToolName, raw: unknown): ToolEntry {
   const { repo, commit, verified_at } = raw;
   if (typeof repo !== 'string' || !REPO_RE.test(repo)) {
     throw new LockError(`tools.${tool}.repo: "owner/name" 형식이어야 합니다`, 'SCHEMA');
+  }
+  // §15 HIGH-2 / ADR-020: allowlist 검증. 악성 lock 이 공격자 저장소를 지정하는
+  // 공급망 공격 방어. Fork / 내부 미러 필요 시 ACORN_ALLOW_ANY_REPO=1 로 우회.
+  if (!isRepoAllowed(tool, repo)) {
+    const allowed = ALLOWED_REPOS[tool].join(', ');
+    throw new LockError(
+      `tools.${tool}.repo: "${repo}" 는 허용 목록에 없습니다. ` +
+        `허용: [${allowed}]. ` +
+        `fork/미러 사용 중이라면 ACORN_ALLOW_ANY_REPO=1 로 실행.`,
+      'SCHEMA',
+    );
   }
   if (typeof commit !== 'string' || !SHA1_RE.test(commit)) {
     throw new LockError(`tools.${tool}.commit: 40자 SHA1 이어야 합니다`, 'SCHEMA');

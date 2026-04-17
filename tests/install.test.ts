@@ -1,3 +1,8 @@
+// §15 HIGH-2 / ADR-020 (v0.4.0): 테스트 fixtures 는 "org/omc" 같은 가짜 repo
+// 를 쓰므로 lock allowlist 검증을 bypass. escape hatch (fork/미러/dev) 의 실전
+// 용도와 정확히 같은 플래그라 production code path 는 건드리지 않는다.
+process.env['ACORN_ALLOW_ANY_REPO'] = '1';
+
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import {

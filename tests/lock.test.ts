@@ -255,3 +255,53 @@ test('seedLockTemplate: 부모 디렉토리 자동 생성 (recursive mkdir)', ()
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('§15 HIGH-2 / ADR-020 (v0.4.0): allowlist 통과 — 실 repo 3종', () => {
+  // VALID_LOCK 이 이미 Yeachan-Heo/oh-my-claudecode, garrytan/gstack,
+  // affaan-m/everything-claude-code 를 쓰므로 allowlist 통과 예상.
+  const original = process.env['ACORN_ALLOW_ANY_REPO'];
+  delete process.env['ACORN_ALLOW_ANY_REPO'];
+  try {
+    const lock = parseLock(JSON.stringify(VALID_LOCK));
+    assert.equal(lock.tools.omc.repo, 'Yeachan-Heo/oh-my-claudecode');
+    assert.equal(lock.tools.gstack.repo, 'garrytan/gstack');
+    assert.equal(lock.tools.ecc.repo, 'affaan-m/everything-claude-code');
+  } finally {
+    if (original === undefined) delete process.env['ACORN_ALLOW_ANY_REPO'];
+    else process.env['ACORN_ALLOW_ANY_REPO'] = original;
+  }
+});
+
+test('§15 HIGH-2 / ADR-020: allowlist 차단 — 임의 repo 는 SCHEMA', () => {
+  const original = process.env['ACORN_ALLOW_ANY_REPO'];
+  delete process.env['ACORN_ALLOW_ANY_REPO'];
+  const poisoned = JSON.parse(JSON.stringify(VALID_LOCK)) as typeof VALID_LOCK;
+  (poisoned.tools.omc as { repo: string }).repo = 'attacker/omc';
+  try {
+    assert.throws(
+      () => parseLock(JSON.stringify(poisoned)),
+      (e: unknown) =>
+        e instanceof LockError &&
+        e.code === 'SCHEMA' &&
+        /"attacker\/omc" 는 허용 목록에 없습니다/.test(e.message) &&
+        /ACORN_ALLOW_ANY_REPO=1/.test(e.message),
+    );
+  } finally {
+    if (original === undefined) delete process.env['ACORN_ALLOW_ANY_REPO'];
+    else process.env['ACORN_ALLOW_ANY_REPO'] = original;
+  }
+});
+
+test('§15 HIGH-2 / ADR-020: ACORN_ALLOW_ANY_REPO=1 escape — 임의 repo 허용', () => {
+  const original = process.env['ACORN_ALLOW_ANY_REPO'];
+  process.env['ACORN_ALLOW_ANY_REPO'] = '1';
+  const forked = JSON.parse(JSON.stringify(VALID_LOCK)) as typeof VALID_LOCK;
+  (forked.tools.gstack as { repo: string }).repo = 'myfork/gstack';
+  try {
+    const lock = parseLock(JSON.stringify(forked));
+    assert.equal(lock.tools.gstack.repo, 'myfork/gstack');
+  } finally {
+    if (original === undefined) delete process.env['ACORN_ALLOW_ANY_REPO'];
+    else process.env['ACORN_ALLOW_ANY_REPO'] = original;
+  }
+});
