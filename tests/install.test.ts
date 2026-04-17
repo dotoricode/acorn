@@ -14,7 +14,9 @@ import {
   existsSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import {
   runInstall,
   InstallError,
@@ -512,6 +514,29 @@ test('defaultGstackSetup: setup 스크립트 없으면 명확한 에러', () => 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// §15 v0.4.4 / codex review #7 — dist 에 shell:true 가 되살아나지 않도록.
+// 회귀 방지: Windows 에서도 shell:false 가 보장되고 bash 를 argv[0] 로 호출해야.
+// 빌드 산출물을 소스 수준에서 간단 grep 으로 확인 (AST 구문 분석 없이 회귀 가드).
+test('defaultGstackSetup: 소스에 shell:true 패턴 없음 (v0.4.4 codex #7)', async () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = await readFile(join(here, '..', 'src', 'commands', 'install.ts'), 'utf8');
+  // shell: true 또는 shell: process.platform === 'win32' 는 금지.
+  // 회귀 테스트: 이 두 패턴이 다시 들어가면 즉시 fail.
+  assert.ok(
+    !/shell:\s*true/.test(src),
+    'defaultGstackSetup 에 shell:true 가 되살아남 (cmd.exe injection 표면)',
+  );
+  assert.ok(
+    !/shell:\s*process\.platform\s*===\s*['"]win32['"]/.test(src),
+    'defaultGstackSetup 에 Windows-shell 분기가 되살아남',
+  );
+  // shell:false 는 명시적으로 있어야 (주석/문자열 포함 허용).
+  assert.ok(
+    /shell:\s*false/.test(src),
+    'defaultGstackSetup 이 shell:false 를 명시해야 함',
+  );
 });
 
 test('runInstall: 기존 non-git 경로 → VENDOR 에러 + NOT_A_REPO hint', () => {

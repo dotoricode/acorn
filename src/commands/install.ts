@@ -96,17 +96,29 @@ export function verifyGstackSetupArtifacts(gstackSource: string): void {
  * `<gstackSource>/setup --host auto` 를 spawn 하고 exit code 0 을 기대한다.
  * (DOGFOOD Round 1 §v0.1.1 #4: 기존에는 콜백 없이는 수동 `cd vendors/gstack && ./setup` 필요)
  * post-spawn 에 verifyGstackSetupArtifacts 를 호출해 silent-pass 를 차단한다 (§15 C5).
+ *
+ * §15 v0.4.4 / codex review #7: 이전엔 Windows 에서 spawnSync 를 shell 옵션
+ * 활성 상태로 호출해 cmd.exe 가 경로 내 `&`, `|`, `<`, `>`, caret 등을
+ * command-line 으로 해석할 수 있었다 (예: homedir 에 `&` 가 들어간 Windows
+ * 사용자 → injection 표면). 이제 bash 를 argv[0] 로 직접 호출하고 shell 옵션
+ * 은 비활성. bash 는 hooks/guard-check.sh 와 동일하게 acorn 전제
+ * (Git Bash/MSYS). argv 배열은 child_process 가 shell 해석 없이 그대로 전달
+ * → injection 표면 차단.
  */
 export const defaultGstackSetup: GstackSetupFn = ({ gstackSource }) => {
   const script = join(gstackSource, 'setup');
   if (!existsSync(script)) {
     throw new Error(`gstack setup 스크립트 없음: ${script}`);
   }
-  const res = spawnSync(script, ['--host', 'auto'], {
+  const isWindows = process.platform === 'win32';
+  const cmd = isWindows ? 'bash' : script;
+  const args = isWindows
+    ? [script, '--host', 'auto']
+    : ['--host', 'auto'];
+  const res = spawnSync(cmd, args, {
     cwd: gstackSource,
     stdio: 'inherit',
-    // Windows: .sh 파일은 shell 경유 필요. Unix: 실행비트가 있으면 직접 spawn.
-    shell: process.platform === 'win32',
+    shell: false, // §15 v0.4.4: cmd.exe injection 표면 차단. argv 배열로 직접 전달.
   });
   if (res.error) throw res.error;
   if (typeof res.status === 'number' && res.status !== 0) {
