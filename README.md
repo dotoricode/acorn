@@ -133,6 +133,26 @@ acorn doctor  •  ~/.claude/skills/harness
 각 이슈는 `{area, severity, subject, message, hint}` 구조로 — area 는
 `vendor|env|symlink|tx|lock|settings`. `renderDoctorJson` 은 전체 리포트를 JSON 으로.
 
+JSON 출력 상단에 CI 게이트용 편의 필드가 포함된다 (v0.2.0+):
+
+```json
+{
+  "ok": false,
+  "okCritical": true,
+  "summary": { "critical": 0, "warning": 1, "info": 0 },
+  "issues": [...]
+}
+```
+
+- `ok`: critical + warning 없음
+- `okCritical`: critical 만 기준 (warning 은 허용) — "경고는 로그만, 크리티컬만 fail" 패턴
+- `summary`: severity 별 카운트 (한 줄 jq 필터 없이 바로 읽힘)
+
+CI 한 줄 gate 예:
+```bash
+acorn doctor --json | jq -e '.okCritical' >/dev/null || exit 1
+```
+
 doctor 는 status 와 달리 다음을 추가 검사:
 - vendor 디렉토리가 실제로 비어있지는 않은지
 - vendor 가 dirty 상태인지 (`git status --porcelain`)

@@ -293,3 +293,102 @@ test('renderDoctorJson: 기계 판독 가능 구조 (Done Definition)', () => {
     w.cleanup();
   }
 });
+
+test('runDoctor: warning-only → ok=false, okCritical=true (CI "crit-fail/warn-pass" 패턴)', () => {
+  const w = makeWorkspace();
+  try {
+    setupHealthy(w);
+    // omc SHA 만 drift 시킨다 → warning-only 상태
+    const heads: Record<string, string> = {
+      [join(w.harnessRoot, 'vendors', 'omc')]: 'd'.repeat(40),
+      [join(w.harnessRoot, 'vendors', 'gstack')]: SHA_GSTACK,
+      [join(w.harnessRoot, 'vendors', 'ecc')]: SHA_ECC,
+    };
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock(heads),
+    });
+    assert.equal(r.summary.critical, 0);
+    assert.equal(r.summary.warning, 1);
+    assert.equal(r.ok, false);
+    assert.equal(r.okCritical, true);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runDoctor: critical 혼재 → ok=false, okCritical=false, summary 카운트 정확', () => {
+  const w = makeWorkspace();
+  try {
+    // 아무 setup 도 안 함: vendors 전부 missing (critical 3개)
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+    });
+    assert.ok(r.summary.critical >= 3);
+    assert.equal(r.ok, false);
+    assert.equal(r.okCritical, false);
+    assert.equal(
+      r.summary.critical + r.summary.warning + r.summary.info,
+      r.issues.length,
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runDoctor: 정상 상태 → ok=true, okCritical=true, summary 전부 0', () => {
+  const w = makeWorkspace();
+  try {
+    const { heads } = setupHealthy(w);
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock(heads),
+    });
+    assert.equal(r.ok, true);
+    assert.equal(r.okCritical, true);
+    assert.deepEqual(r.summary, { critical: 0, warning: 0, info: 0 });
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('renderDoctorJson: okCritical / summary 필드 포함 (S9 실증 반영)', () => {
+  const w = makeWorkspace();
+  try {
+    setupHealthy(w);
+    const heads: Record<string, string> = {
+      [join(w.harnessRoot, 'vendors', 'omc')]: 'd'.repeat(40),
+      [join(w.harnessRoot, 'vendors', 'gstack')]: SHA_GSTACK,
+      [join(w.harnessRoot, 'vendors', 'ecc')]: SHA_ECC,
+    };
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock(heads),
+    });
+    const parsed = JSON.parse(renderDoctorJson(r)) as {
+      ok: boolean;
+      okCritical: boolean;
+      summary: { critical: number; warning: number; info: number };
+    };
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.okCritical, true);
+    assert.equal(parsed.summary.critical, 0);
+    assert.equal(parsed.summary.warning, 1);
+    assert.equal(parsed.summary.info, 0);
+  } finally {
+    w.cleanup();
+  }
+});

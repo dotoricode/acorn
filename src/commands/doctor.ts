@@ -30,10 +30,18 @@ export interface DoctorIssue {
   readonly hint: string;
 }
 
+export interface DoctorSummary {
+  readonly critical: number;
+  readonly warning: number;
+  readonly info: number;
+}
+
 export interface DoctorReport {
   readonly status: StatusReport;
   readonly issues: readonly DoctorIssue[];
+  readonly summary: DoctorSummary;
   readonly ok: boolean;
+  readonly okCritical: boolean;
 }
 
 export interface DoctorOptions extends CollectOptions {
@@ -231,10 +239,18 @@ export function runDoctor(opts: DoctorOptions = {}): DoctorReport {
   issues.push(...symlinkIssues(status));
   issues.push(...txIssues(status));
 
+  const summary: DoctorSummary = {
+    critical: issues.filter((i) => i.severity === 'critical').length,
+    warning: issues.filter((i) => i.severity === 'warning').length,
+    info: issues.filter((i) => i.severity === 'info').length,
+  };
+
   return {
     status,
     issues,
-    ok: issues.every((i) => i.severity !== 'critical' && i.severity !== 'warning'),
+    summary,
+    ok: summary.critical === 0 && summary.warning === 0,
+    okCritical: summary.critical === 0,
   };
 }
 
@@ -257,13 +273,8 @@ export function renderDoctor(r: DoctorReport): string {
     lines.push('✅ 이슈 없음. 설치 상태 정상.');
     return lines.join('\n');
   }
-  const counts = {
-    critical: r.issues.filter((i) => i.severity === 'critical').length,
-    warning: r.issues.filter((i) => i.severity === 'warning').length,
-    info: r.issues.filter((i) => i.severity === 'info').length,
-  };
   lines.push(
-    `발견된 이슈: critical=${counts.critical} warning=${counts.warning} info=${counts.info}`,
+    `발견된 이슈: critical=${r.summary.critical} warning=${r.summary.warning} info=${r.summary.info}`,
   );
   lines.push('');
   for (const issue of r.issues) {
@@ -279,6 +290,8 @@ export function renderDoctorJson(r: DoctorReport): string {
   return JSON.stringify(
     {
       ok: r.ok,
+      okCritical: r.okCritical,
+      summary: r.summary,
       harnessRoot: r.status.harnessRoot,
       acornVersion: r.status.acornVersion,
       issues: r.issues,
