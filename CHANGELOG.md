@@ -3,6 +3,33 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.4.4] — 2026-04-18
+
+🟠 **Codex review P1 #7 — `defaultGstackSetup` Windows cmd.exe injection
+표면 제거**. 이전 `spawnSync` 가 Windows 에서 `shell` 옵션 활성 상태로
+실행돼 cmd.exe 가 경로 내 `&`, `|`, `<`, `>`, caret 등을 command-line
+으로 해석할 수 있었다 (homedir/경로에 해당 문자가 포함된 Windows 사용자
+→ injection 표면). argv 배열 전달 + shell 비활성으로 교정.
+
+### Fixed
+
+- **§15 v0.4.4 / codex #7 / `src/commands/install.ts`**: `defaultGstackSetup`
+  가 Windows 에서 `bash` 를 argv[0] 로 직접 호출하고 script 경로를
+  argv[1] 로 전달. shell 옵션 비활성. bash 는 `hooks/guard-check.sh` 와
+  동일하게 이미 acorn 전제 (Git Bash/MSYS). Unix 는 기존대로 script
+  직접 spawn. argv 배열은 child_process 가 shell 해석 없이 그대로 전달
+  → 특수문자 경로에서도 안전.
+- 회귀 가드 테스트: `tests/install.test.ts` 가 `src/commands/install.ts`
+  를 읽어 `shell:\s*true` / `shell:\s*process\.platform` 패턴이 다시
+  들어가지 못하도록 +1 (소스 grep 방식, CI 환경 의존성 없음).
+
+### Deferred (v0.5.0 예정)
+
+- **codex P1 #1 / F3 통합 refactor**: `installVendor` 진입부를 lstat-first
+  로 재설계. P1 #1 (tool name path traversal guard) + Round 3 F3 (Node 24
+  Windows `existsSync(junction)=false` → `--follow-symlink` 비작동) 이
+  같은 함수 진입부라 한 refactor 로 묶음.
+
 ## [0.4.3] — 2026-04-18
 
 🟠 **Round 3 도그푸딩 Finding #1 (F1) — exit code 일관성 복원**. 격리
