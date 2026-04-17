@@ -12,6 +12,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
 import {
   inspectSymlink,
   createDirSymlink,
@@ -20,6 +21,7 @@ import {
   inspectGstackSymlink,
   gstackSymlinkPath,
   gstackSymlinkSource,
+  backupSymlinkInfo,
   SymlinkError,
 } from '../src/core/symlink.ts';
 
@@ -152,6 +154,31 @@ test('ensureSymlink: 다른 target → replaced', () => {
   }
 });
 
+test('ensureSymlink: wrong_target 교체 시 backupDir 제공되면 info 백업 (§15 C4)', () => {
+  const w = makeWorkspace();
+  try {
+    const other = join(w.dir, 'other');
+    mkdirSync(other);
+    mkdirSync(dirname(w.target), { recursive: true });
+    symlinkSync(other, w.target, 'dir');
+    const backupDir = join(w.dir, 'backup', 'symlinks');
+    const r = ensureSymlink(w.source, w.target, { backupDir });
+    assert.equal(r.action, 'replaced');
+    assert.ok(r.backup, 'replaced 결과에 backup 경로 포함되어야 함');
+    assert.ok(existsSync(r.backup!));
+    // info 내용 검증
+    const parsed = JSON.parse(readFileSync(r.backup!, 'utf8')) as {
+      target: string;
+      link_target: string | null;
+    };
+    assert.equal(parsed.target, w.target);
+    // link_target 이 이전 잘못된 symlink 의 대상
+    assert.equal(resolve(parsed.link_target ?? ''), resolve(other));
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('ensureSymlink: 일반 디렉토리 존재 → NOT_SYMLINK throw, 보존', () => {
   const w = makeWorkspace();
   try {
@@ -228,6 +255,67 @@ test('createDirSymlink: 기존 심링크를 rename 으로 원자 교체', () => 
     // 기존 symlink 위에 직접 교체 (unlink 선행 없이)
     createDirSymlink(source2, target);
     assert.equal(readlinkSync(target), source2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('backupSymlinkInfo: info JSON 파일 생성 + 필드 완비 (§15 C4)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-sym-backup-'));
+  const backupDir = join(dir, 'backup', '2026-04-17T14-00-00-000Z', 'symlinks');
+  const target = join(dir, 'skills', 'gstack');
+  const linkTarget = '/old/wrong/path';
+  try {
+    const infoPath = backupSymlinkInfo({
+      target,
+      linkTarget,
+      backupDir,
+      reason: 'test',
+    });
+    assert.ok(existsSync(infoPath));
+    assert.ok(infoPath.endsWith('gstack.info'));
+    const parsed = JSON.parse(readFileSync(infoPath, 'utf8')) as {
+      target: string;
+      link_target: string | null;
+      backed_up_at: string;
+      reason: string;
+    };
+    assert.equal(parsed.target, target);
+    assert.equal(parsed.link_target, linkTarget);
+    assert.equal(parsed.reason, 'test');
+    assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(parsed.backed_up_at));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('backupSymlinkInfo: backupDir 자동 생성 (recursive mkdir)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-sym-backup-'));
+  try {
+    const deep = join(dir, 'a', 'b', 'c', 'symlinks');
+    const infoPath = backupSymlinkInfo({
+      target: join(dir, 'target'),
+      linkTarget: '/x',
+      backupDir: deep,
+      reason: 'deep',
+    });
+    assert.ok(existsSync(infoPath));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('backupSymlinkInfo: linkTarget null (symlink 이지만 readlink 실패 상상) → JSON 에 null 기록', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-sym-backup-'));
+  try {
+    const infoPath = backupSymlinkInfo({
+      target: join(dir, 'broken'),
+      linkTarget: null,
+      backupDir: join(dir, 'backup'),
+      reason: 'null-case',
+    });
+    const parsed = JSON.parse(readFileSync(infoPath, 'utf8')) as { link_target: unknown };
+    assert.equal(parsed.link_target, null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

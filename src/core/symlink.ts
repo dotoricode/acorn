@@ -6,9 +6,10 @@ import {
   unlinkSync,
   mkdirSync,
   existsSync,
+  writeFileSync,
 } from 'node:fs';
 import { platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { defaultClaudeRoot, defaultHarnessRoot } from './env.ts';
 
 export type SymlinkErrorCode = 'NOT_SYMLINK' | 'SOURCE_MISSING' | 'IO';
@@ -146,9 +147,49 @@ export interface EnsureResult {
   readonly target: string;
   readonly source: string;
   readonly previousLink: string | null;
+  readonly backup?: string;
 }
 
-export function ensureSymlink(source: string, target: string): EnsureResult {
+function timestampDirName(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+/**
+ * wrong_target 교체 직전에 현재 symlink 의 메타 (link target + target path + ts)
+ * 를 JSON 파일로 보관한다. 실제 교체는 atomic rename 이 담당하므로
+ * 이 info 파일은 사후 복구용 기록이다.
+ * §15 C4: "symlink 교체 시 백업 없음 → 비파괴 원칙 위반" 해소.
+ * §15 M2 의 "symlinks/{path}.info 미생성" 도 같은 갭 — 여기서 충족.
+ */
+export function backupSymlinkInfo(opts: {
+  target: string;
+  linkTarget: string | null;
+  backupDir: string;
+  reason: string;
+}): string {
+  const { target, linkTarget, backupDir, reason } = opts;
+  mkdirSync(backupDir, { recursive: true });
+  const infoPath = join(backupDir, `${basename(target)}.info`);
+  const info = {
+    target,
+    link_target: linkTarget,
+    backed_up_at: new Date().toISOString(),
+    reason,
+  };
+  writeFileSync(infoPath, JSON.stringify(info, null, 2), 'utf8');
+  return infoPath;
+}
+
+export interface EnsureSymlinkOptions {
+  /** wrong_target 교체 시 info 백업 대상 디렉토리. 미지정이면 백업 생략. */
+  readonly backupDir?: string;
+}
+
+export function ensureSymlink(
+  source: string,
+  target: string,
+  opts: EnsureSymlinkOptions = {},
+): EnsureResult {
   const inspection = inspectSymlink(target, source);
   switch (inspection.status) {
     case 'correct':
@@ -161,8 +202,20 @@ export function ensureSymlink(source: string, target: string): EnsureResult {
       );
     case 'wrong_target': {
       const prev = inspection.currentLink;
+      // §15 C4: 교체 전에 info 백업 (backupDir 제공된 경우).
+      let backup: string | undefined;
+      if (opts.backupDir) {
+        backup = backupSymlinkInfo({
+          target,
+          linkTarget: prev,
+          backupDir: opts.backupDir,
+          reason: 'ensureSymlink wrong_target → replace',
+        });
+      }
       createDirSymlink(source, target);
-      return { action: 'replaced', target, source, previousLink: prev };
+      return backup !== undefined
+        ? { action: 'replaced', target, source, previousLink: prev, backup }
+        : { action: 'replaced', target, source, previousLink: prev };
     }
     case 'absent':
       createDirSymlink(source, target);
@@ -176,9 +229,13 @@ export interface InstallGstackOptions {
 }
 
 export function installGstackSymlink(opts: InstallGstackOptions = {}): EnsureResult {
-  const source = gstackSymlinkSource(opts.harnessRoot);
+  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
+  const source = gstackSymlinkSource(harnessRoot);
   const target = gstackSymlinkPath(opts.claudeRoot);
-  return ensureSymlink(source, target);
+  // §15 C4: wrong_target 교체 시 <harnessRoot>/backup/{ISO8601}/symlinks/ 에 info 백업.
+  // 시점별 1회 계산 (wrong_target 분기 아닐 때는 디렉토리 미생성).
+  const backupDir = join(harnessRoot, 'backup', timestampDirName(), 'symlinks');
+  return ensureSymlink(source, target, { backupDir });
 }
 
 export function inspectGstackSymlink(opts: InstallGstackOptions = {}): SymlinkInspection {
