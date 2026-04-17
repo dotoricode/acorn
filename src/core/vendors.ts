@@ -286,9 +286,9 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
   }
 
   // §15 S4 / ADR-019: 심링크 vendor 는 "사용자 dev 레포" 로 간주.
-  // 기본: preserve (건드리지 않음). --follow-symlink 면 target 의 HEAD 를 revParse
-  // 로 확인하고 lock SHA 일치 여부 체크. 일치하면 adopted, 불일치면 drift 관찰용
-  // preserved + previousCommit 채워서 상위가 lock 갱신 여부 판단하게 맡김.
+  // v0.3.1 B1 hotfix: 명시적 `--follow-symlink` opt-in 없이 심링크를 만나면
+  // silent preserve 대신 NOT_A_REPO 로 fail-close. v0.3.0 은 검증 없이 success
+  // 를 반환해 v0.2.0 의 "자동 교체 거부" 계약을 회귀시켰다.
   let isSymlink = false;
   try {
     isSymlink = lstatSync(path).isSymbolicLink();
@@ -296,27 +296,27 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
     // ignore — 상위 처리
   }
   if (isSymlink) {
-    if (opts.followSymlink) {
-      let head: string | null = null;
-      try {
-        head = git.revParse(path);
-      } catch {
-        // 심링크 target 이 git 이 아닐 수도 있음 — 그냥 preserved 로
-      }
-      return {
-        tool: opts.tool,
-        action: head === opts.commit ? 'adopted' : 'preserved',
-        path,
-        previousCommit: head,
-        commit: opts.commit,
-      };
+    if (!opts.followSymlink) {
+      throw new VendorError(
+        `vendor 경로가 심링크 — lock SHA 검증을 위해 --follow-symlink 필요, ` +
+          `또는 심링크 제거 후 재실행: ${path}`,
+        'NOT_A_REPO',
+        opts.tool,
+      );
     }
-    // 기본: 심링크는 그대로 둔다. lock SHA 와 일치 여부 상위가 판단.
+    // --follow-symlink: target 의 HEAD 를 lock SHA 와 비교.
+    // revParse throw 흡수는 H-3 (v0.4.x) 에서 별도 강화 예정.
+    let head: string | null = null;
+    try {
+      head = git.revParse(path);
+    } catch {
+      // 심링크 target 이 git 이 아닐 수도 있음 — 그냥 preserved 로
+    }
     return {
       tool: opts.tool,
-      action: 'preserved',
+      action: head === opts.commit ? 'adopted' : 'preserved',
       path,
-      previousCommit: null,
+      previousCommit: head,
       commit: opts.commit,
     };
   }

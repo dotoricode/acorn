@@ -8,6 +8,7 @@ import {
   readFileSync,
   existsSync,
   chmodSync,
+  symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -574,6 +575,74 @@ test('installVendor: adopt=false (기본) + non-git 디렉토리 → NOT_A_REPO 
     );
     // 사용자 파일 건드리지 않음
     assert.ok(existsSync(join(existing, 'manual.txt')));
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 B1 regression: 심링크 vendor + --follow-symlink 없음 → NOT_A_REPO 로 fail-close', () => {
+  // v0.3.0 은 여기서 silent `preserved` 반환 → lock SHA 검증 없이 install success
+  // 로 회귀. v0.3.1 B1 hotfix 는 명시적 opt-in 없는 심링크를 거부한다.
+  const w = makeWorkspace();
+  try {
+    mkdirSync(w.vendorsRoot, { recursive: true });
+    const target = join(w.dir, 'real-gstack');
+    mkdirSync(target, { recursive: true });
+    mkdirSync(join(target, '.git'), { recursive: true });
+    const linkPath = join(w.vendorsRoot, 'gstack');
+    try {
+      symlinkSync(target, linkPath, 'dir');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EPERM' || code === 'EACCES') {
+        // Windows 개발자 모드 미활성 — regression guard 는 POSIX/dev-mode 에서 유효
+        return;
+      }
+      throw e;
+    }
+    const { git } = makeFakeGit({ headByDir: new Map([[linkPath, SHA_A]]) });
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'gstack',
+          repo: 'org/gstack',
+          commit: SHA_B,
+          vendorsRoot: w.vendorsRoot,
+          git,
+        }),
+      (e: unknown) => e instanceof VendorError && e.code === 'NOT_A_REPO',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 B1: 심링크 vendor + --follow-symlink + HEAD 일치 → adopted', () => {
+  const w = makeWorkspace();
+  try {
+    mkdirSync(w.vendorsRoot, { recursive: true });
+    const target = join(w.dir, 'real-gstack');
+    mkdirSync(target, { recursive: true });
+    mkdirSync(join(target, '.git'), { recursive: true });
+    const linkPath = join(w.vendorsRoot, 'gstack');
+    try {
+      symlinkSync(target, linkPath, 'dir');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EPERM' || code === 'EACCES') return;
+      throw e;
+    }
+    const { git } = makeFakeGit({ headByDir: new Map([[linkPath, SHA_B]]) });
+    const r = installVendor({
+      tool: 'gstack',
+      repo: 'org/gstack',
+      commit: SHA_B,
+      vendorsRoot: w.vendorsRoot,
+      git,
+      followSymlink: true,
+    });
+    assert.equal(r.action, 'adopted');
+    assert.equal(r.previousCommit, SHA_B);
   } finally {
     w.cleanup();
   }
