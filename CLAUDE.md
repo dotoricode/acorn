@@ -13,10 +13,14 @@ Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 ## 디렉토리 구조
 
 src/
-├── commands/   사용자 커맨드 (install[S6], status, list, config, uninstall)
-├── core/       핵심 로직 (lock, env, settings, symlink, vendors, tx, registry, guard)
-└── dev/        dotori 전용 커맨드 (check, lock, validate, release)
-                빌드 타임에 배포판에서 제거됨
+├── commands/   사용자 커맨드 현재 구현: install, status, doctor
+│               (list, config, uninstall 은 v0.2.0+ 예정)
+├── core/       핵심 로직 현재 구현: lock, env, settings, symlink, vendors,
+│               tx, hooks, gstack-marker, sha-display
+│               (registry 는 v1.1+ 연기, 별도 core/guard 모듈 없음 —
+│                guard 정책은 harness.lock + hooks/guard-check.sh 에 존재)
+└── dev/        dotori 전용 커맨드 (check, lock, validate, release) —
+                빌드 타임에 배포판에서 제거됨 (src/dev 는 아직 구현 전)
 
 ## 경로 단일화 (Sprint 6.5 이후)
 
@@ -29,32 +33,43 @@ defaultClaudeRoot / defaultHarnessRoot 는 src/core/env.ts 단일 소스.
 
 runInstall 은 모든 단계를 src/core/tx.ts 의 beginTx/phase/commit 으로 감싼다.
 이전 실행이 commit/abort 없이 중단된 경우 다음 runInstall 은 IN_PROGRESS 에러.
-강제 진행은 `force: true` 옵션 (CLI 에서 --force 로 노출 예정).
+강제 진행은 `force: true` 옵션 — CLI 에서 `acorn install --force` 로 노출 (v0.1.0+).
 위치: <harnessRoot>/tx.log (JSONL)
+§15 H3 (v0.1.3): tx.log 에 partial-write 로 인한 corrupt 라인이 있으면
+lastInProgress 가 fail-close 로 IN_PROGRESS 를 반환 — 사용자 수동 검사 유도.
 
-## Sprint 6 — runInstall 오케스트레이터
+## runInstall 오케스트레이터 (8단계)
 
-src/commands/install.ts 의 runInstall() 은 7단계 preflight-우선 파이프라인:
+src/commands/install.ts 의 runInstall() 은 8단계 preflight-우선 파이프라인:
+
+  pre-0: harness.lock 부트스트랩 (§15 C1, v0.1.2+) — 없으면 템플릿 시드 후
+         LOCK_SEEDED 에러. 사용자가 SHA 채운 뒤 재실행.
   [1] lock 파싱 → [2] env 계산 → [3] settings 충돌 읽기전용 체크
   → [4] vendors clone/checkout → [5] gstack 심링크
-  → [6] gstack setup (주입 콜백) → [7] settings 원자 쓰기
+  → [6] gstack setup (주입 콜백, SHA marker 로 멱등 §15 C3)
+  → [7] hooks 배포 (§15 C2 / ADR-017)
+  → [8] settings 원자 쓰기
 
 핵심 불변식:
 - [3] preflight 실패 시 디스크 변경 없음
-- [7] 은 반드시 마지막 (백업 후 원자 쓰기)
-- 두 번째 호출은 모든 단계 noop (멱등)
+- [8] 은 반드시 마지막 (백업 후 원자 쓰기) — settings.json 이 참조하는
+  모든 artifact (vendors / symlink / hooks) 가 이 시점에 디스크에 존재해야 함
+- 두 번째 호출은 모든 단계 noop (멱등) — gstack setup 도 SHA marker 덕분에 포함
 
 git 의존성은 GitRunner 인터페이스(core/vendors.ts)로 주입 가능.
 테스트는 stub git 으로 네트워크 없이 실행.
 
 ## 주요 경로 (Windows 기준)
 
-harness 루트:  D:\dotori\.claude\skills\harness\
-harness.lock:  D:\dotori\.claude\skills\harness\harness.lock
-registry:      D:\dotori\.claude\skills\harness\registry.json
-vendors:       D:\dotori\.claude\skills\harness\vendors\
-hooks:         D:\dotori\.claude\skills\harness\hooks\guard-check.sh
-gstack 심링크: D:\dotori\.claude\skills\gstack\ -> vendors\gstack\
+harness 루트:   D:\.claude\skills\harness\
+harness.lock:   D:\.claude\skills\harness\harness.lock
+tx.log:         D:\.claude\skills\harness\tx.log
+vendors:        D:\.claude\skills\harness\vendors\
+hooks:          D:\.claude\skills\harness\hooks\guard-check.sh (install 이 자동 배포, v0.1.2+)
+gstack 심링크:  D:\.claude\skills\gstack\ -> vendors\gstack\
+gstack marker:  D:\.claude\skills\harness\.gstack-setup.sha (v0.1.3+ / §15 C3)
+backup:         D:\.claude\skills\harness\backup\{ISO8601}\ (settings / hooks / symlinks)
+(registry.json 은 §15 M1 로 v1.1+ 연기 — 현재 코드가 read/write 하지 않음)
 
 ## 툴별 설치 방식
 
@@ -64,7 +79,7 @@ ECC     환경변수 주입 (CLAUDE_PLUGIN_ROOT, ECC_ROOT)
 
 ## guard 훅
 
-위치: D:\dotori\.claude\skills\harness\hooks\guard-check.sh
+위치: D:\.claude\skills\harness\hooks\guard-check.sh
 방식: stdin JSON 파싱, readFileSync(0) fd 0 방식 (크로스 플랫폼)
 원칙: fail-close - 파싱 실패 시 반드시 차단
 기본값: block + strict
