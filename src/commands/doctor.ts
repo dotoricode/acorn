@@ -178,8 +178,13 @@ function toolIssues(
 
 function envIssues(status: StatusReport): DoctorIssue[] {
   const out: DoctorIssue[] = [];
+  // settings.json 기반 이슈 (기존)
+  const settingsOkKeys = new Set<string>();
   for (const e of status.env) {
-    if (e.status === 'match') continue;
+    if (e.status === 'match') {
+      settingsOkKeys.add(e.key);
+      continue;
+    }
     out.push({
       area: 'env',
       severity: e.status === 'missing' ? 'warning' : 'critical',
@@ -192,6 +197,23 @@ function envIssues(status: StatusReport): DoctorIssue[] {
         e.status === 'missing'
           ? 'acorn install 이 settings.json 에 추가'
           : 'settings.json 을 수동으로 정리 후 acorn install',
+    });
+  }
+  // §15 M3: settings 는 정확하지만 runtime (process.env) 은 미반영인 경우.
+  // Claude Code 세션이 설치 후 reload 안 했다는 뜻 → info severity 로 안내.
+  for (const r of status.envRuntime) {
+    if (r.status === 'match') continue;
+    if (!settingsOkKeys.has(r.key)) continue; // settings 도 틀리면 위에서 이미 보고
+    out.push({
+      area: 'env',
+      severity: 'info',
+      subject: r.key,
+      message:
+        `${r.key} 는 settings.json 기준 정확하나 Claude Code 세션 runtime 에 반영 안 됨 ` +
+        `(runtime="${r.actual ?? '(undefined)'}")`,
+      hint:
+        'Claude Code 를 완전히 재시작하거나 새 세션 열어서 settings reload. ' +
+        'direnv 사용 시 direnv allow 재실행 가능.',
     });
   }
   return out;

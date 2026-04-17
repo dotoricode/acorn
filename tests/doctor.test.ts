@@ -362,6 +362,106 @@ test('runDoctor: 정상 상태 → ok=true, okCritical=true, summary 전부 0', 
   }
 });
 
+test('runDoctor: §15 M3 — settings match + runtime missing → info issue per key', () => {
+  const w = makeWorkspace();
+  try {
+    // setupHealthy 안 씀 (symlinkSync EPERM 회피). settings.json 만 올바르게 설정.
+    writeFileSync(
+      w.settingsPath,
+      JSON.stringify({
+        env: {
+          CLAUDE_PLUGIN_ROOT: join(w.harnessRoot, 'vendors'),
+          OMC_PLUGIN_ROOT: join(w.harnessRoot, 'vendors', 'omc'),
+          ECC_ROOT: join(w.harnessRoot, 'vendors', 'ecc'),
+        },
+      }),
+    );
+    // runtimeEnv: {} — Claude Code 세션이 reload 안 한 상태 시뮬
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+      runtimeEnv: {},
+    });
+    const infoEnv = r.issues.filter(
+      (i) => i.area === 'env' && i.severity === 'info',
+    );
+    assert.equal(infoEnv.length, 3, '3개 env 키 모두 info issue 나와야 함');
+    assert.ok(
+      infoEnv.every((i) => /reload|재시작/.test(i.hint)),
+      'hint 에 reload/재시작 안내',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runDoctor: §15 M3 — settings match + runtime match → info issue 없음 (정상 케이스)', () => {
+  const w = makeWorkspace();
+  try {
+    const vendors = join(w.harnessRoot, 'vendors');
+    const desired = {
+      CLAUDE_PLUGIN_ROOT: vendors,
+      OMC_PLUGIN_ROOT: join(vendors, 'omc'),
+      ECC_ROOT: join(vendors, 'ecc'),
+    };
+    writeFileSync(w.settingsPath, JSON.stringify({ env: desired }));
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+      runtimeEnv: desired,
+    });
+    const infoEnv = r.issues.filter(
+      (i) => i.area === 'env' && i.severity === 'info',
+    );
+    assert.equal(infoEnv.length, 0);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runDoctor: §15 M3 — settings mismatch 는 기존대로 보고 (M3 가 덮지 않음)', () => {
+  const w = makeWorkspace();
+  try {
+    // settings.json 에 잘못된 env (mismatch). runtimeEnv 도 누락.
+    writeFileSync(
+      w.settingsPath,
+      JSON.stringify({
+        env: {
+          CLAUDE_PLUGIN_ROOT: '/wrong/path',
+          OMC_PLUGIN_ROOT: '/also/wrong',
+          ECC_ROOT: '/also/wrong',
+        },
+      }),
+    );
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+      runtimeEnv: {},
+    });
+    // settings mismatch → critical env issues (기존 동작)
+    const criticalEnv = r.issues.filter(
+      (i) => i.area === 'env' && i.severity === 'critical',
+    );
+    assert.equal(criticalEnv.length, 3, 'settings mismatch 는 critical');
+    // M3 의 info 는 추가되지 않아야 함 (settings 가 이미 틀렸으면 runtime 체크는 무의미)
+    const infoEnv = r.issues.filter(
+      (i) => i.area === 'env' && i.severity === 'info',
+    );
+    assert.equal(infoEnv.length, 0, 'settings OK 가 아닌 키는 M3 info 생략');
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('runDoctor: isDirty 실패 → warning issue 노출 (§15 C6 silent-lie 방지)', () => {
   const w = makeWorkspace();
   try {

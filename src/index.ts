@@ -152,7 +152,8 @@ function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
 
 function cmdStatus(parsed: ParsedArgs, io: CliIO): number {
   try {
-    const r = collectStatus();
+    // §15 M3: CLI 진입 시 process.env 를 명시 전달해 runtime env check 활성.
+    const r = collectStatus({ runtimeEnv: process.env });
     if (parsed.flags.has('json')) {
       io.stdout(renderStatusJson(r));
     } else {
@@ -167,7 +168,8 @@ function cmdStatus(parsed: ParsedArgs, io: CliIO): number {
 
 function cmdDoctor(parsed: ParsedArgs, io: CliIO): number {
   try {
-    const r = runDoctor();
+    // §15 M3: doctor 도 runtime env check 활성.
+    const r = runDoctor({ runtimeEnv: process.env });
     if (parsed.flags.has('json')) {
       io.stdout(renderDoctorJson(r));
     } else {

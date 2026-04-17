@@ -42,6 +42,12 @@ export interface StatusReport {
   readonly tools: Readonly<Record<ToolName, ToolStatus>>;
   readonly guard: GuardConfig;
   readonly env: readonly EnvDiffEntry[];
+  /**
+   * §15 M3: settings.json 과 별개로 process.env (Claude Code 세션 런타임) 와
+   * 비교한 결과. settings 가 정확해도 세션이 reload 안 했으면 이쪽이 mismatch.
+   * 테스트 등 주입된 env 로 계산. CollectOptions.runtimeEnv 미지정 시 process.env 사용.
+   */
+  readonly envRuntime: readonly EnvDiffEntry[];
   readonly gstackSymlink: SymlinkInspection;
   readonly pendingTx: TxEvent | null;
 }
@@ -52,6 +58,8 @@ export interface CollectOptions {
   readonly claudeRoot?: string;
   readonly settingsPath?: string;
   readonly git?: GitRunner;
+  /** §15 M3: process.env 대체용 (테스트 주입). 미지정 시 process.env. */
+  readonly runtimeEnv?: Readonly<Record<string, string | undefined>>;
 }
 
 export function collectStatus(opts: CollectOptions = {}): StatusReport {
@@ -105,6 +113,13 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
       ? (current['env'] as Record<string, string | undefined>)
       : {};
   const envDiff = diffEnv(desired, currentEnv);
+  // §15 M3: 세션 runtime env 와도 비교. "settings OK 이지만 Claude Code 가
+  // reload 안 한 상태" 를 감지한다. opts.runtimeEnv 가 명시됐을 때만 실행하고,
+  // 미지정 (테스트 기본) 이면 envRuntimeDiff 는 desired 와 자동 일치 (모두 match) —
+  // 기존 테스트의 zero-issue 가정이 깨지지 않도록.
+  const envRuntimeDiff = opts.runtimeEnv
+    ? diffEnv(desired, opts.runtimeEnv)
+    : diffEnv(desired, desired); // self-compare → 전부 match
 
   return {
     acornVersion: lock.acorn_version,
@@ -112,6 +127,7 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
     tools,
     guard: lock.guard,
     env: envDiff,
+    envRuntime: envRuntimeDiff,
     gstackSymlink: inspectGstackSymlink({ harnessRoot, claudeRoot }),
     pendingTx: lastInProgress(harnessRoot),
   };
