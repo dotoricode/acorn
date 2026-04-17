@@ -157,9 +157,14 @@ function vendorHint(name: ToolName, cause: unknown, vendorsRootPath: string): st
   const vPath = `${vendorsRootPath}/${name}`;
   switch (cause.code) {
     case 'NOT_A_REPO':
+      // §15 S4 (v0.3.2): v0.3.0 의 `--adopt` 를 1차 제안으로 승격.
+      // "rm -rf" 안내는 ADR-018 (삭제 없음, 항상 rename) 과 모순이라 제거.
+      // mv 는 사용자가 수동으로 경로 밖으로 비파괴 이동을 원할 때의 대안.
       return (
         `${vPath} 이 git 저장소가 아닙니다. ` +
-        `수동 설치물이면 rm -rf ${vPath} 또는 mv ${vPath} ${vPath}.bak 후 재실행.`
+        `수동 설치물이면 acorn install --adopt 로 자동 흡수 ` +
+        `(기존 디렉토리는 ${vPath}.pre-adopt-<ISO8601> 로 비파괴 보존). ` +
+        `수동 대안: mv ${vPath} ${vPath}.bak 후 재실행.`
       );
     case 'LOCAL_CHANGES':
       return (

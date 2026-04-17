@@ -484,7 +484,8 @@ test('runInstall: 기존 non-git 경로 → VENDOR 에러 + NOT_A_REPO hint', ()
         err instanceof InstallError &&
         err.code === 'VENDOR' &&
         typeof err.hint === 'string' &&
-        /rm -rf|mv /.test(err.hint) &&
+        // §15 S4 (v0.3.2): --adopt 를 1차 제안으로 포함해야 함 (discoverability).
+        err.hint.includes('--adopt') &&
         err.hint.includes('vendors'),
     );
   } finally {
