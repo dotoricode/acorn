@@ -35,6 +35,10 @@ import {
 } from '../core/vendors.ts';
 import { beginTx, lastInProgress } from '../core/tx.ts';
 import { installGuardHook, HooksError, type HooksResult } from '../core/hooks.ts';
+import {
+  readGstackSetupMarker,
+  writeGstackSetupMarker,
+} from '../core/gstack-marker.ts';
 
 export type InstallErrorCode =
   | 'IN_PROGRESS'
@@ -312,11 +316,17 @@ function runInstallInner(ctx: InnerContext): InstallResult {
     );
   }
 
-  // 6. gstack setup
+  // 6. gstack setup — §15 C3: 같은 gstack SHA 에서 이미 setup 실행됐으면 noop.
   let gstackSetupRan = false;
   tx.phase('gstack-setup');
+  const expectedGstackSha = lock.tools.gstack.commit;
+  const markerSha = readGstackSetupMarker(harnessRoot);
   if (opts.skipGstackSetup) {
     log(`[6/8] gstack setup (스킵)`);
+  } else if (markerSha === expectedGstackSha) {
+    log(
+      `[6/8] gstack setup (noop — SHA ${expectedGstackSha.slice(0, 7)} 에 대해 이미 실행됨)`,
+    );
   } else {
     log(`[6/8] gstack setup 실행`);
     try {
@@ -327,6 +337,8 @@ function runInstallInner(ctx: InnerContext): InstallResult {
           claudeRoot,
         });
         gstackSetupRan = true;
+        // 성공 시 SHA marker 기록 → 다음 install 은 noop
+        writeGstackSetupMarker(harnessRoot, expectedGstackSha);
       } else {
         log(`      setup 콜백 미제공 — 수동으로 gstack setup 실행 필요`);
       }

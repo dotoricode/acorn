@@ -546,6 +546,44 @@ test('runInstall: 빈 harness root → lock 템플릿 시드 + LOCK_SEEDED 에�
   }
 });
 
+test('runInstall: gstack setup 은 같은 SHA 에선 두 번째 install 에 재실행 안 함 (§15 C3)', () => {
+  const w = makeWorkspace();
+  try {
+    const git = makeFakeGit({ heads: new Map() });
+    let setupCalls = 0;
+    const setupFn = () => {
+      setupCalls++;
+    };
+    const first = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      gstackSetup: setupFn,
+    });
+    assert.equal(setupCalls, 1, '첫 install 에선 setup 이 실행되어야 함');
+    assert.equal(first.gstackSetupRan, true);
+
+    const second = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      gstackSetup: setupFn,
+    });
+    assert.equal(
+      setupCalls,
+      1,
+      'SHA 동일 → 두 번째 install 에선 setup 재실행 안 함 (C3 regression guard)',
+    );
+    assert.equal(second.gstackSetupRan, false);
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('runInstall: hooks 배포 phase 추가 (§15 C2 / ADR-017)', () => {
   const w = makeWorkspace();
   try {
