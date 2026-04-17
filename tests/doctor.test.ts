@@ -362,6 +362,44 @@ test('runDoctor: 정상 상태 → ok=true, okCritical=true, summary 전부 0', 
   }
 });
 
+test('runDoctor: isDirty 실패 → warning issue 노출 (§15 C6 silent-lie 방지)', () => {
+  const w = makeWorkspace();
+  try {
+    const { heads } = setupHealthy(w);
+    const omcPath = join(w.harnessRoot, 'vendors', 'omc');
+    // isDirty / getDirtyPaths 가 throw 하는 git 러너.
+    // 현실 시나리오: git status 가 권한/잠금/손상으로 실패.
+    const failingGit: GitRunner = {
+      ...gitMock(heads),
+      isDirty(dir) {
+        if (dir === omcPath) throw new Error('EACCES: git status failed');
+        return false;
+      },
+    };
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: failingGit,
+    });
+    // 이전 동작: catch 흡수로 issue 0 → .ok=true (silent-lie)
+    // 신규 동작: warning 으로 노출 → .ok=false, .okCritical=true
+    const omcIssue = r.issues.find(
+      (i) => i.area === 'vendor' && i.subject === 'omc',
+    );
+    assert.ok(omcIssue, 'dirty 감지 실패가 issue 로 노출되어야 함 (C6 regression guard)');
+    assert.equal(omcIssue?.severity, 'warning');
+    assert.ok(omcIssue?.message.includes('dirty'));
+    assert.ok(omcIssue?.message.includes('EACCES'));
+    assert.ok(omcIssue?.hint.includes('git -C'));
+    assert.equal(r.ok, false);
+    assert.equal(r.okCritical, true);
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('renderDoctorJson: okCritical / summary 필드 포함 (S9 실증 반영)', () => {
   const w = makeWorkspace();
   try {

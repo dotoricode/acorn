@@ -106,8 +106,20 @@ function checkVendorIntegrity(
           'acorn install 은 dirty tree 를 감지하면 중단됨.',
       };
     }
-  } catch {
-    // isDirty 실패는 critical 까지는 아님 (별도 issue 로는 만들지 않음)
+  } catch (e) {
+    // dirty 감지 실패를 silent 흡수하면 "install 은 거부 / doctor 는 통과" silent-lie 발생 (§15 C6).
+    // warning 으로 노출해 사용자가 수동 확인하도록 유도한다.
+    return {
+      area: 'vendor',
+      severity: 'warning',
+      subject: tool.tool,
+      message:
+        `dirty 상태 감지 실패: ${vendorPath} ` +
+        `(${e instanceof Error ? e.message : String(e)})`,
+      hint:
+        `git -C ${vendorPath} status --porcelain 을 수동 실행해 저장소 ` +
+        '권한·잠금·손상 여부 확인. 확인 전에는 dirty 여부 불명확 상태.',
+    };
   }
   return null;
 }
