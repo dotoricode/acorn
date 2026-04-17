@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-17 (Windows / **v0.1.2 CRITICAL 4/4 완료**, 릴리스 준비 지점)
+> 마지막 갱신: 2026-04-17 (Windows / **v0.1.2 + v0.1.3 동일 세션 연속 릴리스**, v0.2.0 S1 선행 포함)
 
 ---
 
@@ -9,13 +9,14 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 과 동기), 태그 `v0.1.1` push 완료 (+ `v0.1.0` 기존) |
-| 진행 중 작업 | **v0.1.2 CRITICAL 전 항목 완료** — C1 (lock 부트스트랩 + 템플릿 시드), C2 (hooks 배포 phase [7/8]), C5 (gstack setup artifact 검증), C6 (doctor isDirty 흡수 노출). 더불어 v0.2.0 S1 (doctor summary/okCritical) 선행 완료, 도그푸딩 Round 2 종료 |
-| 다음 작업 | (a) **v0.1.2 릴리스** — CHANGELOG 업데이트 + package.json 0.1.1→0.1.2 + tag v0.1.2 push + README 개선 내역 반영 → (b) v0.1.3 C3 (gstack setup 멱등) / C4 (symlink backup) / H3 (tx.log fail-close) / H4 (isEmptyDir propagate) → (c) v0.2.0 S2~S8 + §15 H1·M1~M5 |
-| 테스트 | Windows: 123/142 (19 실패 — 전부 기존 Windows EPERM symlinkSync / 경로구분자, 내 변경 무관). Mac 기준 142/142 예상 |
-| v0.1.1 구성 | 커밋 6개 (hotfix 5 + release 1): `aea3fdc` lock BOM → `730368f` schema_version 누락 → `e6dcdc2` install hint → `849fdad` --run-gstack-setup → `ddbc8a6` EXPECTED_DIRTY_PATHS → `b3c7668` release bump |
-| v0.1.2 구성 (이 세션) | `f502328` C6 doctor isDirty 노출 · `b2b700f` C1 lock 부트스트랩 · `37b85b4` C2 hooks phase [7/8] · `f75ee46` C5 gstack artifact verify. (동일 세션에서 v0.2.0 선행: `789ff8c` Round 2 종료 · `e38b29d` S1 doctor summary · `8e517b0` audit 크로스참조) |
-| 처리 계획 (정본) | **`acorn-v1-plan.md §15`** — ✅ v0.1.2 (C1/C2/C5/C6 완료) / ⏳ v0.1.3 (C3/C4/H3/H4) / ⏳ v0.2.0 (H1/M1~M5 + 도그푸딩 feature S2~S8) / 백로그 (L1~L3). §14 Done Definition 의 hooks 배포 체크박스는 C2 완료와 함께 [x] 로 전환 |
+| 브랜치 | `main` (origin 과 동기), 태그 `v0.1.3` + `v0.1.2` 푸시 완료 (+ `v0.1.1`, `v0.1.0`) |
+| 진행 중 작업 | **v0.1.3 릴리스 완료** — §15 v0.1.3 버킷 C3/C4/H3/H4 전 항목 + 부수적으로 M2 (symlinks/*.info 미생성 갭) 동시 해소. 동일 세션 직전에 v0.1.2 (C1/C2/C5/C6) + v0.2.0 S1 도 완료 |
+| 다음 작업 | (a) v0.2.0 S2 (drift/SHA 표시 개선 + checkout hint cause 분기) — Round 2 S4 실증 → (b) v0.2.0 M5 (CLAUDE.md drift 정리, 작음) 또는 M1 (registry.json phantom 결정) → (c) v0.2.0 S3/S4/S5 본 feature (`acorn config`, `--adopt`, `acorn lock`) → `--adopt` 전에 `docs/acorn-v2-plan.md` 설계 노트 1장 |
+| 테스트 | Windows: 134/154 (20 실패 — 전부 기존 Windows EPERM symlinkSync / 경로구분자 + C4 의 symlink 종속 1 케이스). Mac 기준 154/154 예상 |
+| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 (`b3c7668`) → v0.1.2 (`1a8e2a6`) → **v0.1.3 (`d1590e0`)** |
+| v0.1.2 본문 (이 세션) | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + v0.2.0 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
+| v0.1.3 본문 (이 세션) | `cdeacff` C4 / `cf0518d` H3 / `4f59193` H4 / `1c797d2` C3 |
+| 처리 계획 (정본) | **`acorn-v1-plan.md §15`** — ✅ v0.1.2 / ✅ v0.1.3 / ⏳ v0.2.0 (H1 + M1~M5 + 도그푸딩 feature S2~S8) / 백로그 (L1~L3). §14 Done Definition 의 hooks 배포 체크박스는 C2 완료와 함께 [x] 로 전환됨 |
 | 실사용 환경 | Mac personal, CLAUDE_CONFIG_DIR=~/.claude-personal, ECC 는 로컬 개발 레포 `~/01_private/everything-claude-code` 별도 관리. Windows: `D:\.claude\skills\harness\`, acorn 은 `C:\Users\SMILE\AppData\Roaming\npm\acorn.{cmd,}` 수동 shim (Node 24 가 Junction traverse 못 함) |
 | 별도 처리 | S7 Guard 훅 실전 (Claude Code UI) — bash tool 밖, DOGFOOD.md § S7 recipe 참조. **C2 완료로 `hooks/guard-check.sh` 는 이제 install 이 자동 배포하므로 recipe 의 수동 복사 전제 불필요** |
 
