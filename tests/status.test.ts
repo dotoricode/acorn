@@ -261,6 +261,45 @@ test('summarize: 모든 정상 → ok=true', () => {
   }
 });
 
+// §15 v0.4.1 #5 — runtimeEnv 미지정 시 envRuntime 은 빈 배열 (skip 의미) 이어야 한다.
+// 이전 (v0.4.0 까지) 은 `diffEnv(desired, desired)` 로 fake-match 반환했다.
+test('collectStatus: runtimeEnv 미지정 → envRuntime=[] (skip 의미, fake-match 금지)', () => {
+  const w = makeWorkspace();
+  try {
+    const heads = setupVendors(w, { omc: SHA_OMC, gstack: SHA_GSTACK, ecc: SHA_ECC });
+    const r = collectStatus({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: makeGitMock(heads),
+      // runtimeEnv 의도적 미지정
+    });
+    assert.equal(r.envRuntime.length, 0);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('collectStatus: runtimeEnv 명시 시 envRuntime 은 3키 모두 반환', () => {
+  const w = makeWorkspace();
+  try {
+    const heads = setupVendors(w, { omc: SHA_OMC, gstack: SHA_GSTACK, ecc: SHA_ECC });
+    const r = collectStatus({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: makeGitMock(heads),
+      runtimeEnv: {}, // 빈 runtime → 전부 missing 이어야 함
+    });
+    assert.equal(r.envRuntime.length, 3);
+    assert.ok(r.envRuntime.every((e) => e.status === 'missing'));
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('summarize: drift 하나만 있어도 ok=false + issues 나열', () => {
   const w = makeWorkspace();
   try {

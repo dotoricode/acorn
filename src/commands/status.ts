@@ -47,6 +47,10 @@ export interface StatusReport {
    * 비교한 결과. settings 가 정확해도 세션이 reload 안 했으면 이쪽이 mismatch.
    * 테스트 등 주입된 env 로 계산. CollectOptions.runtimeEnv 미지정 시 process.env 사용.
    */
+  /**
+   * §15 v0.4.1 #5: `runtimeEnv` 미지정 시 빈 배열 (runtime 체크 skip 의미) —
+   * 이전엔 `diffEnv(desired, desired)` self-compare 로 "모두 match" 거짓 반환.
+   */
   readonly envRuntime: readonly EnvDiffEntry[];
   readonly gstackSymlink: SymlinkInspection;
   readonly pendingTx: TxEvent | null;
@@ -58,7 +62,11 @@ export interface CollectOptions {
   readonly claudeRoot?: string;
   readonly settingsPath?: string;
   readonly git?: GitRunner;
-  /** §15 M3: process.env 대체용 (테스트 주입). 미지정 시 process.env. */
+  /**
+   * §15 M3: Claude Code 세션 runtime env. 미지정 시 runtime check 를 skip
+   * (envRuntime=[]) — 라이브러리 호출자에겐 "요청 안 함" 의미.
+   * CLI (index.ts) 는 process.env 명시 주입. v0.4.1 #5 에서 self-compare 제거.
+   */
   readonly runtimeEnv?: Readonly<Record<string, string | undefined>>;
 }
 
@@ -113,13 +121,14 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
       ? (current['env'] as Record<string, string | undefined>)
       : {};
   const envDiff = diffEnv(desired, currentEnv);
-  // §15 M3: 세션 runtime env 와도 비교. "settings OK 이지만 Claude Code 가
-  // reload 안 한 상태" 를 감지한다. opts.runtimeEnv 가 명시됐을 때만 실행하고,
-  // 미지정 (테스트 기본) 이면 envRuntimeDiff 는 desired 와 자동 일치 (모두 match) —
-  // 기존 테스트의 zero-issue 가정이 깨지지 않도록.
-  const envRuntimeDiff = opts.runtimeEnv
+  // §15 M3 / v0.4.1 #5: 세션 runtime env 와도 비교.
+  // runtimeEnv 미지정 = "runtime 체크 요청 안 함" → 빈 배열 반환.
+  // 이전 (v0.4.0 까지) 은 `diffEnv(desired, desired)` self-compare 로 "모두 match"
+  // 를 거짓 반환해 라이브러리 호출자가 실제 세션 상태를 확인한 줄 착각할 수 있었다.
+  // CLI 경로는 index.ts 에서 `runtimeEnv: process.env` 명시 전달하므로 영향 없음.
+  const envRuntimeDiff: readonly EnvDiffEntry[] = opts.runtimeEnv
     ? diffEnv(desired, opts.runtimeEnv)
-    : diffEnv(desired, desired); // self-compare → 전부 match
+    : [];
 
   return {
     acornVersion: lock.acorn_version,
