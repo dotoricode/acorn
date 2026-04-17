@@ -13,10 +13,12 @@ Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 ## 디렉토리 구조
 
 src/
-├── commands/   사용자 커맨드 현재 구현: install, status, doctor
-│               (list, config, uninstall 은 v0.2.0+ 예정)
+├── commands/   사용자 커맨드 현재 구현: install, status, doctor, config (v0.3.0+)
+│               (list, uninstall 은 v0.4+ 예정)
+│               (lock validate 는 src/index.ts 의 cmdLock 라우터에 인라인 —
+│                v0.2.0+)
 ├── core/       핵심 로직 현재 구현: lock, env, settings, symlink, vendors,
-│               tx, hooks, gstack-marker, sha-display
+│               tx, hooks, gstack-marker, sha-display, adopt (v0.3.0+)
 │               (registry 는 v1.1+ 연기, 별도 core/guard 모듈 없음 —
 │                guard 정책은 harness.lock + hooks/guard-check.sh 에 존재)
 └── dev/        dotori 전용 커맨드 (check, lock, validate, release) —
@@ -92,17 +94,28 @@ ECC     환경변수 주입 (CLAUDE_PLUGIN_ROOT, ECC_ROOT)
 
 ## 커맨드
 
-### 사용자 전용
+### 사용자 전용 (현재 구현 기준)
 acorn install
-acorn install --repo .
-acorn status
+acorn install --force                              v0.1.0+: tx.log IN_PROGRESS 우회
+acorn install --skip-gstack-setup                  v0.1.0+
+acorn install --run-gstack-setup                   v0.1.1+
+acorn install --adopt [--yes]                      v0.3.0+ / v0.3.1+ Y/n gate (B3)
+acorn install --follow-symlink                     v0.3.0+ / v0.3.1+ fail-close (B1)
+acorn status [--json]
+acorn doctor [--json]
+acorn lock validate [path]                         v0.2.0+
+acorn config                                       v0.3.0+: guard 요약
+acorn config guard.mode <block|warn|log> [--yes]   v0.3.0+
+acorn config guard.patterns <strict|moderate|minimal> [--yes]  v0.3.0+
+acorn config env.reset [--yes]                     v0.3.0+
+
+### 미구현 (v0.4+ 예정)
 acorn list
-acorn config guard.mode <block|warn|log>
-acorn config guard.patterns <strict|moderate|minimal>
 acorn uninstall
 acorn uninstall --tool <name>
+acorn lock bump                                    ADR-019 에서 암시 (v0.4+)
 
-### dotori 전용 (배포판 미포함)
+### dotori 전용 (배포판 미포함, 아직 구현 안 됨 — src/dev/ 빈 상태)
 acorn dev check
 acorn dev check --tool <name>
 acorn dev diff <skill>
@@ -112,15 +125,29 @@ acorn dev release
 
 ## 인터랙티브 확인 등급
 
-등급 1  확인 불필요 (status, list)
-등급 2  Y/n 확인 (install --repo, config 변경)
-등급 3  타이핑 확인 (uninstall)
---yes 플래그로 스킵 가능
+등급 1  확인 불필요 (status, doctor, list, lock validate, config get/summary)
+등급 2  Y/n 확인 (install --adopt, config set / env.reset)
+등급 3  타이핑 확인 (uninstall — v0.4+ 예정)
+--yes 플래그로 스킵 가능. non-TTY 에서 destructive 플래그(등급 2+)는
+--yes 명시 없으면 USAGE 에러 (v0.3.1+ B3 / v0.3.0+ CONFIRM_REQUIRED).
 
-## 빌드
+## 빌드 및 배포
 
 npm run build      사용자 배포판 (src/dev 제외)
 npm run build:dev  개발용 전체 빌드
+
+## npm pack 화이트리스트 (v0.3.1+ CRIT-1)
+
+package.json `files` 필드가 배포 파일을 화이트리스트로 제한한다.
+src/**/*.ts, tests/**/*.ts, docs/{HANDOVER,DOGFOOD,acorn-v*-plan}.md,
+scripts/dogfood/*.sh, tsconfig*.json 은 **배포판에 포함되지 않는다**.
+
+배포되는 파일: dist/**, hooks/guard-check.sh,
+templates/harness.lock.template.json, scripts/install-shim-windows.sh,
+docs/USAGE.md, README.md, LICENSE.
+
+새 top-level 디렉토리나 사용자 노출 파일을 추가할 때는 `files` 에
+명시해야 한다. `npm pack --dry-run` 으로 확인 가능.
 
 ## 테스트
 
