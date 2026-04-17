@@ -21,7 +21,8 @@ export type DoctorArea =
   | 'symlink'
   | 'tx'
   | 'lock'
-  | 'settings';
+  | 'settings'
+  | 'guard'; // §15 HIGH-3 lite (v0.3.5): ACORN_GUARD_BYPASS 세션 감지
 
 export interface DoctorIssue {
   readonly area: DoctorArea;
@@ -250,6 +251,38 @@ function symlinkIssues(status: StatusReport): DoctorIssue[] {
   }
 }
 
+/**
+ * §15 HIGH-3 lite (v0.3.5): ACORN_GUARD_BYPASS 세션 감지.
+ *
+ * guard-check.sh 는 env var 가 "1" 이면 단순 통과한다. 셸 semantics 상
+ * `VAR=val cmd` (inline, 해당 cmd 1회) 와 `export VAR=val` (세션 전체)
+ * 를 hook 코드가 구분할 수 없어, 사용자가 실수로 export 한 채 방치하면
+ * 세션 내 모든 위험 커맨드가 조용히 통과된다. 매 호출마다 stderr 에
+ * "⚠️ BYPASS ACTIVE" 가 찍히지만 noise 속에 묻히기 쉽다.
+ *
+ * doctor 가 runtime 의 ACORN_GUARD_BYPASS=1 을 critical 이슈로 노출해
+ * 사용자가 `acorn doctor` 한 번으로 상태를 확인하도록 한다.
+ * runtimeEnv 가 없으면 (테스트 등) skip — CLI 에선 항상 process.env 주입.
+ */
+function guardIssues(opts: DoctorOptions): DoctorIssue[] {
+  if (!opts.runtimeEnv) return [];
+  if (opts.runtimeEnv['ACORN_GUARD_BYPASS'] !== '1') return [];
+  return [
+    {
+      area: 'guard',
+      severity: 'critical',
+      subject: 'ACORN_GUARD_BYPASS',
+      message:
+        `ACORN_GUARD_BYPASS=1 이 현재 프로세스 env 에 설정됨 — ` +
+        `guard 훅이 위험 커맨드를 차단하지 않음.`,
+      hint:
+        `export 한 상태면 unset ACORN_GUARD_BYPASS 로 세션 복구. ` +
+        `inline 1회 우회 의도였다면 ACORN_GUARD_BYPASS=1 <cmd> 형태로 ` +
+        `해당 호출에만 붙여 실행하고 shell 환경에는 남기지 말 것.`,
+    },
+  ];
+}
+
 function txIssues(status: StatusReport): DoctorIssue[] {
   if (!status.pendingTx) return [];
   return [{
@@ -271,6 +304,8 @@ export function runDoctor(opts: DoctorOptions = {}): DoctorReport {
   const vRoot = join(status.harnessRoot, 'vendors');
 
   const issues: DoctorIssue[] = [];
+  // §15 HIGH-3 lite: guard 안전 점검을 먼저 — critical 시 가장 눈에 띄게.
+  issues.push(...guardIssues(opts));
   for (const name of TOOL_NAMES) {
     issues.push(...toolIssues(status.tools[name as ToolName], join(vRoot, name), git));
   }

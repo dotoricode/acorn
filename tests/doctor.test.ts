@@ -121,6 +121,76 @@ test('runDoctor: 정상 상태 → zero-issue, ok=true', () => {
   }
 });
 
+test('§15 HIGH-3 lite (v0.3.5): ACORN_GUARD_BYPASS=1 runtime → critical guard 이슈', () => {
+  // setupHealthy 는 symlinkSync 를 쓰므로 Windows 개발자 모드 의존.
+  // guard check 는 runtimeEnv 만 보므로 healthy 설정 없이 vendor missing
+  // 상태에서도 guard area 이슈의 존재 여부만 assert.
+  const w = makeWorkspace();
+  try {
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+      runtimeEnv: { ACORN_GUARD_BYPASS: '1' },
+    });
+    const guardIssue = r.issues.find((i) => i.area === 'guard');
+    assert.ok(guardIssue, 'guard area issue 노출 필요');
+    assert.equal(guardIssue?.severity, 'critical');
+    assert.equal(guardIssue?.subject, 'ACORN_GUARD_BYPASS');
+    assert.ok(/guard 훅이 위험 커맨드를 차단하지 않음/.test(guardIssue!.message));
+    assert.ok(/unset ACORN_GUARD_BYPASS/.test(guardIssue!.hint));
+    assert.equal(r.okCritical, false);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 HIGH-3 lite: ACORN_GUARD_BYPASS=0 → guard 이슈 없음 ("1" 만 발동)', () => {
+  const w = makeWorkspace();
+  try {
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+      runtimeEnv: { ACORN_GUARD_BYPASS: '0' },
+    });
+    assert.equal(
+      r.issues.filter((i) => i.area === 'guard').length,
+      0,
+      '"1" 이 아니면 guard 이슈 없음',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 HIGH-3 lite: runtimeEnv 미제공 시 guard check skip (backward compat)', () => {
+  // 기존 test/caller 가 runtimeEnv 를 안 넘길 때 guard 섹션이 발동하면
+  // 예상 못 한 실패가 나올 수 있다. 명시적 runtimeEnv 가 있을 때만 검사.
+  const w = makeWorkspace();
+  try {
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+      // runtimeEnv 없음
+    });
+    assert.equal(
+      r.issues.filter((i) => i.area === 'guard').length,
+      0,
+      'runtimeEnv 없으면 guard check skip',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('runDoctor: vendor missing → critical issue + hint', () => {
   const w = makeWorkspace();
   try {
