@@ -3,6 +3,47 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.3.0] — 2026-04-17
+
+v0.3 설계 문서 (`docs/acorn-v0.3-plan.md`) 기준 feature 2 개 완료 + ADR-018/019 신설. v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 으로 같은 날 네 번째 릴리스.
+
+### Added
+
+- **§15 v0.3.0 S3 / `acorn config`**: lock/settings 조작 helper. Round 1 도그푸딩 실증 "jq 저글링 대신 직접 편집 툴 필요" 대응.
+  - `acorn config` (인자 없음) — guard 현재 설정 요약
+  - `acorn config guard.mode` — 현재 값 출력 (get)
+  - `acorn config guard.mode <block|warn|log>` — 변경. Y/n 프롬프트, `--yes` 로 스킵
+  - `acorn config guard.patterns <strict|moderate|minimal>` — 동일 패턴
+  - `acorn config env.reset` — `settings.json` 의 env 3키 (CLAUDE_PLUGIN_ROOT / OMC_PLUGIN_ROOT / ECC_ROOT) 제거. 다른 키 보존
+  - 쓰기 안전장치 4단계: preflight schema 검증 → backup → atomic write → parseLock 로 쓴 결과 재검증
+  - non-TTY + no `--yes` → `CONFIRM_REQUIRED` (exit 64, "CI 에서 --yes 필요" 안내)
+- **§15 v0.3.0 S4 / `acorn install --adopt` + `--follow-symlink`**: 기존 수동 설치를 비파괴 흡수. Round 1 Mac personal 머신 `NOT_A_REPO` 실증 대응.
+  - ADR-018 원칙: "Lock 은 진실, 현실은 이름 바꿔 보존". 삭제 일절 없음
+  - vendor 경로가 non-git 디렉토리 → `<path>.pre-adopt-<ISO8601>/` 로 이동 후 clone + checkout (`action=adopted`, `preAdoptPath` 반환)
+  - settings 충돌 → `env.<key>.pre-adopt-<ISO8601>` 로 키 이름 변경 후 기대값 덮어쓰기 (`action=adopted`, `movedKeys` 반환)
+  - ADR-019: 심링크 vendor 는 기본 보존 (사용자 dev 레포로 간주). `--follow-symlink` 지정 시만 target HEAD 를 `revParse` 로 확인하고 lock 과 비교 (`action=preserved` 또는 `adopted`)
+  - `adopt` 미지정 시는 기존 동작 유지 (regression guard 테스트 포함)
+- **`src/core/adopt.ts`**: `preAdoptMove(original)` FS 유틸 + `preAdoptPathFor(path, ts?)`. collision 검증
+- **`src/core/settings.ts`**: `mergeEnvAdopt(current, desired)` — conflict 키를 pre-adopt 접미어로 이동 후 새 값 반환. `AdoptMergeResult` 로 이동 기록 노출
+
+### Changed
+
+- `InstallOptions` 에 `adopt` / `followSymlink` 필드 추가
+- `InstallVendorResult` 에 optional `preAdoptPath` 추가
+- `InstallEnvResult.action` 에 `'adopted'` 가능값 추가 + optional `movedKeys` 추가
+- `VendorAction` enum 에 `'adopted'` / `'preserved'` 추가
+- `SETTINGS_CONFLICT` 에러 hint 에 `acorn install --adopt` 옵션 안내 추가
+
+### Docs
+
+- `docs/acorn-v0.3-plan.md` (v0.2.0 직후 작성): v0.3 스코프·원칙·S3/S4 설계·테스트 케이스·릴리스 전략·미해결 질문
+- `docs/acorn-v1-plan.md §11`: ADR-018 (adopt 전략) + ADR-019 (심링크 preserve) 신설
+- README: 일상 사용 예시 확장 + install 플래그 섹션 업데이트
+
+### Testing
+
+- 199 단위 테스트 (v0.2.0 의 177 + v0.3 신규 22). Mac 기준 199/199 예상. Windows 20 실패는 기존 symlinkSync EPERM / 경로구분자 케이스.
+
 ## [0.2.0] — 2026-04-17
 
 `acorn-v1-plan.md §15` v0.2.0 버킷 전 항목 (H1 + M1~M5) + 도그푸딩 Round 2 실증 feature (S2, S5, S6) 완료. 동일 세션 내 v0.1.2 / v0.1.3 연속 릴리스 직후 추가 패스.
