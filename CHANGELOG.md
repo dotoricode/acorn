@@ -3,6 +3,23 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.6.1] — 2026-04-18
+
+📖 **docs: README + USAGE 현행화**. v0.3.2 기준으로 멈춰 있던 문서를
+v0.6.0 까지의 변경 (v0.3.3 ~ v0.6.0 = 10 릴리스) 을 반영해 갱신.
+코드 변경 없음.
+
+### Docs
+
+- `README.md`: Status 배너 v0.6.0 + 릴리스 체인 요약. 모듈 테이블에
+  `list.ts` / `config.ts` / `hooks.ts` / `time.ts` / `bom.ts` / `adopt.ts`
+  / `gstack-marker.ts` / `sha-display.ts` 추가. 빠른 시작 + list 섹션.
+  Troubleshooting 에 Round 3 F2 (mklink/PowerShell junction 감지 제약)
+  와 v0.5.0 에서 해소한 Windows `--follow-symlink` 설명 추가.
+  `InstallError.code` / `VendorErrorCode` 의 최신 union 반영.
+- `docs/USAGE.md`: status 출력 예시 v0.6.0 SHA 로, `acorn list` 치트시트
+  + CI 게이트 jq 예시 추가.
+
 ## [0.6.0] — 2026-04-18
 
 🟢 **`acorn list` 신규 커맨드 — CLAUDE.md 에 v0.4+ 예정 명시돼 있던

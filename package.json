@@ -1,6 +1,6 @@
 {
   "name": "@dotoricode/acorn",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Claude Code harness manager for OMC, gstack, and ECC",
   "type": "module",
   "main": "dist/index.js",
