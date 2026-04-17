@@ -22,6 +22,7 @@ import {
   gstackSymlinkPath,
   gstackSymlinkSource,
   backupSymlinkInfo,
+  normalizePathForCompare,
   SymlinkError,
 } from '../src/core/symlink.ts';
 
@@ -303,6 +304,31 @@ test('backupSymlinkInfo: backupDir 자동 생성 (recursive mkdir)', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('normalizePathForCompare: Windows 는 lowercase, POSIX 는 strict (§15 M4)', () => {
+  // 명시 플랫폼 인자로 양쪽 모두 검증 (현재 런타임과 무관)
+  assert.equal(
+    normalizePathForCompare('D:\\Foo\\BAR', 'win32'),
+    'd:\\foo\\bar',
+    'win32: lowercase 변환',
+  );
+  assert.equal(
+    normalizePathForCompare('/Foo/BAR', 'linux'),
+    '/Foo/BAR',
+    'POSIX: 변환 없음',
+  );
+  assert.equal(
+    normalizePathForCompare('/Foo/BAR', 'darwin'),
+    '/Foo/BAR',
+    'macOS: 변환 없음 (단 NTFS 마운트는 현재 범위 밖)',
+  );
+  // Windows 에서 대소문자만 다른 두 경로가 같다고 인식되어야 함
+  assert.equal(
+    normalizePathForCompare('D:\\same\\path', 'win32'),
+    normalizePathForCompare('d:\\SAME\\PATH', 'win32'),
+    '대소문자만 다른 경로는 win32 에서 동일',
+  );
 });
 
 test('backupSymlinkInfo: linkTarget null (symlink 이지만 readlink 실패 상상) → JSON 에 null 기록', () => {

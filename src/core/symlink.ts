@@ -48,6 +48,22 @@ export interface SymlinkInspection {
   readonly expectedSource: string;
 }
 
+/**
+ * 경로 비교를 위한 정규화.
+ * §15 M4: Windows NTFS 는 케이스-비민감 기본값 → `D:\Foo` 와 `D:\foo` 가
+ * 같은 대상을 가리키는데 strict string equality 로는 wrong_target 로 오판.
+ * Windows 에선 lowercase 비교, POSIX 에선 strict 유지.
+ *
+ * export 이유: 테스트 가능하게. 플랫폼 분기가 내부 로직이지만 해당 플랫폼에서
+ * 실 symlink 없이 검증하려면 public helper 로 두는 편이 실용적.
+ */
+export function normalizePathForCompare(
+  p: string,
+  plat: NodeJS.Platform = platform(),
+): string {
+  return plat === 'win32' ? p.toLowerCase() : p;
+}
+
 export function inspectSymlink(target: string, expectedSource: string): SymlinkInspection {
   let stat;
   try {
@@ -61,9 +77,11 @@ export function inspectSymlink(target: string, expectedSource: string): SymlinkI
   const link = readlinkSync(target);
   const resolved = resolve(dirname(target), link);
   const expectedResolved = resolve(expectedSource);
+  const matches =
+    normalizePathForCompare(resolved) === normalizePathForCompare(expectedResolved);
   return {
     target,
-    status: resolved === expectedResolved ? 'correct' : 'wrong_target',
+    status: matches ? 'correct' : 'wrong_target',
     currentLink: link,
     expectedSource,
   };
