@@ -26,6 +26,7 @@ import {
 } from '../core/settings.ts';
 import { defaultHarnessRoot } from '../core/env.ts';
 import { stripBom } from '../core/bom.ts';
+import { backupDirTs } from '../core/time.ts';
 import { beginTx } from '../core/tx.ts';
 
 /**
@@ -79,12 +80,8 @@ export interface ConfigOptions {
   readonly confirm?: ConfirmFn;
 }
 
-function isoTs(): string {
-  return new Date().toISOString().replace(/[:.]/g, '-');
-}
-
 function backupLock(lockPath: string, harnessRoot: string): string {
-  const dir = join(defaultBackupRoot(harnessRoot), isoTs(), 'config', 'lock');
+  const dir = join(defaultBackupRoot(harnessRoot), backupDirTs(), 'config', 'lock');
   mkdirSync(dir, { recursive: true });
   const dest = join(dir, `${basename(lockPath)}.bak`);
   copyFileSync(lockPath, dest);

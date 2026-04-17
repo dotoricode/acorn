@@ -11,6 +11,7 @@ import {
 import { platform } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { defaultClaudeRoot, defaultHarnessRoot } from './env.ts';
+import { backupDirTs } from './time.ts';
 
 export type SymlinkErrorCode = 'NOT_SYMLINK' | 'SOURCE_MISSING' | 'IO';
 
@@ -168,10 +169,6 @@ export interface EnsureResult {
   readonly backup?: string;
 }
 
-function timestampDirName(): string {
-  return new Date().toISOString().replace(/[:.]/g, '-');
-}
-
 /**
  * wrong_target 교체 직전에 현재 symlink 의 메타 (link target + target path + ts)
  * 를 JSON 파일로 보관한다. 실제 교체는 atomic rename 이 담당하므로
@@ -244,6 +241,12 @@ export function ensureSymlink(
 export interface InstallGstackOptions {
   readonly harnessRoot?: string;
   readonly claudeRoot?: string;
+  /**
+   * §15 v0.5.1 (부채 #5): runInstall 1회 실행의 모든 백업 (symlink / hooks /
+   * settings) 이 공유하는 디렉토리 ts. 미지정 시 이 함수 호출 시점 기준으로
+   * 새로 찍음 (이전 동작 호환). runInstall 은 진입부에서 1회 ts 계산해 주입.
+   */
+  readonly backupTs?: string;
 }
 
 export function installGstackSymlink(opts: InstallGstackOptions = {}): EnsureResult {
@@ -251,8 +254,12 @@ export function installGstackSymlink(opts: InstallGstackOptions = {}): EnsureRes
   const source = gstackSymlinkSource(harnessRoot);
   const target = gstackSymlinkPath(opts.claudeRoot);
   // §15 C4: wrong_target 교체 시 <harnessRoot>/backup/{ISO8601}/symlinks/ 에 info 백업.
-  // 시점별 1회 계산 (wrong_target 분기 아닐 때는 디렉토리 미생성).
-  const backupDir = join(harnessRoot, 'backup', timestampDirName(), 'symlinks');
+  const backupDir = join(
+    harnessRoot,
+    'backup',
+    opts.backupTs ?? backupDirTs(),
+    'symlinks',
+  );
   return ensureSymlink(source, target, { backupDir });
 }
 

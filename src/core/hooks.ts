@@ -10,6 +10,7 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { backupDirTs } from './time.ts';
 
 export type HooksErrorCode = 'SOURCE_MISSING' | 'IO';
 
@@ -45,10 +46,6 @@ function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex');
 }
 
-function timestampDirName(): string {
-  return new Date().toISOString().replace(/[:.]/g, '-');
-}
-
 /**
  * <harnessRoot>/hooks/guard-check.sh 를 패키지 동봉본에서 배포한다.
  * ADR-017 명세:
@@ -56,8 +53,16 @@ function timestampDirName(): string {
  *   - 비파괴: 내용 다르면 <harnessRoot>/backup/{ISO8601}/hooks/ 에 백업 후 교체
  *   - 실행권: chmod 0o755 (Windows 는 무시)
  * §15 C2: settings.json 이 참조하는 hook 이 install 로 배달되지 않던 갭 해소.
+ *
+ * §15 v0.5.1 (부채 #5): `backupTs` 를 주입받아 `runInstall` 1회 실행의 모든
+ * 백업 (symlink / hooks / settings) 이 같은 디렉토리를 공유하도록 한다.
+ * 이전엔 각 호출 시점에 `new Date()` 를 찍어 1회 install 에 3개 백업
+ * 디렉토리가 ms 단위로 조각나 추적이 어려웠다.
  */
-export function installGuardHook(harnessRoot: string): HooksResult {
+export function installGuardHook(
+  harnessRoot: string,
+  backupTs: string = backupDirTs(),
+): HooksResult {
   const source = packagedHookPath();
   if (!existsSync(source)) {
     throw new HooksError(
@@ -88,7 +93,7 @@ export function installGuardHook(harnessRoot: string): HooksResult {
     const backupPath = join(
       harnessRoot,
       'backup',
-      timestampDirName(),
+      backupTs,
       'hooks',
       'guard-check.sh.bak',
     );

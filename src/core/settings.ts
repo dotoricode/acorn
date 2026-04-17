@@ -16,6 +16,7 @@ import {
   type EnvMap,
 } from './env.ts';
 import { stripBom } from './bom.ts';
+import { backupDirTs } from './time.ts';
 
 export type SettingsErrorCode = 'PARSE' | 'CONFLICT' | 'IO';
 
@@ -166,7 +167,7 @@ export function mergeEnvAdopt(
   const plan = planMerge(current, desired);
   const currentEnv = getEnvSection(current);
   const newEnv: Record<string, unknown> = { ...currentEnv };
-  const ts = isoTimestamp();
+  const ts = backupDirTs();
   const movedKeys: { key: string; to: string }[] = [];
   for (const conflict of plan.conflicts) {
     const preserveKey = `${conflict.key}.pre-adopt-${ts}`;
@@ -184,9 +185,6 @@ export function mergeEnvAdopt(
   };
 }
 
-function isoTimestamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, '-');
-}
 
 export function defaultBackupRoot(harnessRoot?: string): string {
   return join(harnessRoot ?? defaultHarnessRoot(), 'backup');
@@ -200,7 +198,7 @@ export interface BackupResult {
 export function backupSettings(
   settingsPath: string,
   harnessRoot?: string,
-  timestamp: string = isoTimestamp(),
+  timestamp: string = backupDirTs(),
 ): BackupResult {
   if (!existsSync(settingsPath)) {
     return { backupPath: null, skipped: true };
@@ -235,6 +233,11 @@ export interface InstallEnvOptions {
   readonly desired: EnvMap;
   /** §15 S4: adopt — 충돌 키를 env.<key>.pre-adopt-<ts> 로 이동 후 기대값 덮어쓰기 */
   readonly adopt?: boolean;
+  /**
+   * §15 v0.5.1 (부채 #5): runInstall 1회 실행의 모든 백업 (symlink / hooks /
+   * settings) 이 공유하는 디렉토리 ts. 미지정 시 backupSettings 가 새로 찍음.
+   */
+  readonly backupTs?: string;
 }
 
 export interface InstallEnvResult {
@@ -254,7 +257,7 @@ export function installEnv(opts: InstallEnvOptions): InstallEnvResult {
   if (plan.action === 'conflict') {
     if (opts.adopt) {
       // §15 S4: 충돌 키를 pre-adopt 접미어로 이동하고 기대값 덮어쓰기.
-      const backup = backupSettings(settingsPath, opts.harnessRoot);
+      const backup = backupSettings(settingsPath, opts.harnessRoot, opts.backupTs);
       const adoptResult = mergeEnvAdopt(current, opts.desired);
       atomicWriteJson(settingsPath, adoptResult.next);
       return {
@@ -283,7 +286,7 @@ export function installEnv(opts: InstallEnvOptions): InstallEnvResult {
     };
   }
 
-  const backup = backupSettings(settingsPath, opts.harnessRoot);
+  const backup = backupSettings(settingsPath, opts.harnessRoot, opts.backupTs);
   const merged = mergeEnv(current, opts.desired);
   atomicWriteJson(settingsPath, merged);
 
