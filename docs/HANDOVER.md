@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-17 (Windows / **v0.1.2 + v0.1.3 동일 세션 연속 릴리스**, v0.2.0 S1 선행 포함)
+> 마지막 갱신: 2026-04-17 (Windows / **v0.1.2 + v0.1.3 + v0.2.0 동일 세션 삼중 릴리스**)
 
 ---
 
@@ -9,14 +9,15 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 과 동기), 태그 `v0.1.3` + `v0.1.2` 푸시 완료 (+ `v0.1.1`, `v0.1.0`) |
-| 진행 중 작업 | **v0.1.3 릴리스 완료** — §15 v0.1.3 버킷 C3/C4/H3/H4 전 항목 + 부수적으로 M2 (symlinks/*.info 미생성 갭) 동시 해소. 동일 세션 직전에 v0.1.2 (C1/C2/C5/C6) + v0.2.0 S1 도 완료 |
-| 다음 작업 | (a) v0.2.0 S2 (drift/SHA 표시 개선 + checkout hint cause 분기) — Round 2 S4 실증 → (b) v0.2.0 M5 (CLAUDE.md drift 정리, 작음) 또는 M1 (registry.json phantom 결정) → (c) v0.2.0 S3/S4/S5 본 feature (`acorn config`, `--adopt`, `acorn lock`) → `--adopt` 전에 `docs/acorn-v2-plan.md` 설계 노트 1장 |
-| 테스트 | Windows: 134/154 (20 실패 — 전부 기존 Windows EPERM symlinkSync / 경로구분자 + C4 의 symlink 종속 1 케이스). Mac 기준 154/154 예상 |
-| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 (`b3c7668`) → v0.1.2 (`1a8e2a6`) → **v0.1.3 (`d1590e0`)** |
-| v0.1.2 본문 (이 세션) | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + v0.2.0 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
+| 브랜치 | `main` (origin 과 동기), 태그 `v0.2.0` 최신 (+ `v0.1.3`, `v0.1.2`, `v0.1.1`, `v0.1.0`) |
+| 진행 중 작업 | **v0.2.0 릴리스 완료** — §15 v0.2.0 버킷 (H1, M1~M5) + 도그푸딩 Round 2 실증 feature (S2, S5, S6) 8개 모두 완료. 삼중 릴리스 세션 (v0.1.2 → v0.1.3 → v0.2.0). |
+| 다음 작업 | (a) **v0.3.0 (선택) 큐**: S3 `acorn config` (jq 저글링 대체) · S4 `acorn install --adopt` (기존 수동 설치 흡수 — **설계 문서 먼저**) · S7 `[6/7]` 라인 축약은 C3 의 `[6/8] noop` 메시지로 사실상 해소됨 · S8 jq 안내는 README/HANDOVER 에 이미 존재 → (b) 백로그 L1~L3 (CRLF, tx.log 회전, info-severity dead code) |
+| 테스트 | Windows: 157/177 (20 실패 — 전부 기존 Windows EPERM symlinkSync / 경로구분자 + C4 의 symlink 종속 1 케이스). Mac 기준 177/177 예상 |
+| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 (`b3c7668`) → v0.1.2 (`1a8e2a6`) → v0.1.3 (`d1590e0`) → **v0.2.0 (`640f214`)** |
+| v0.1.2 본문 (이 세션) | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
 | v0.1.3 본문 (이 세션) | `cdeacff` C4 / `cf0518d` H3 / `4f59193` H4 / `1c797d2` C3 |
-| 처리 계획 (정본) | **`acorn-v1-plan.md §15`** — ✅ v0.1.2 / ✅ v0.1.3 / ⏳ v0.2.0 (H1 + M1~M5 + 도그푸딩 feature S2~S8) / 백로그 (L1~L3). §14 Done Definition 의 hooks 배포 체크박스는 C2 완료와 함께 [x] 로 전환됨 |
+| v0.2.0 본문 (이 세션) | `f660b4e` S2 drift/CHECKOUT · `a5738b6` M5 CLAUDE.md · `77a209e` H1 guard patterns · `b574f05` M4 Windows case · `08022fc` M3 envRuntime · `0165b46` S6 Windows shim · `6b269ba` S5 lock validate |
+| 처리 계획 (정본) | **`acorn-v1-plan.md §15`** — ✅ v0.1.2 (C1/C2/C5/C6) / ✅ v0.1.3 (C3/C4/H3/H4) / ✅ v0.2.0 (H1/M1~M5) / ⏳ 백로그 (L1~L3). §15 밖 feature: ✅ S1/S2/S5/S6 ship, ⏳ S3/S4 는 v0.3 후보 |
 | 실사용 환경 | Mac personal, CLAUDE_CONFIG_DIR=~/.claude-personal, ECC 는 로컬 개발 레포 `~/01_private/everything-claude-code` 별도 관리. Windows: `D:\.claude\skills\harness\`, acorn 은 `C:\Users\SMILE\AppData\Roaming\npm\acorn.{cmd,}` 수동 shim (Node 24 가 Junction traverse 못 함) |
 | 별도 처리 | S7 Guard 훅 실전 (Claude Code UI) — bash tool 밖, DOGFOOD.md § S7 recipe 참조. **C2 완료로 `hooks/guard-check.sh` 는 이제 install 이 자동 배포하므로 recipe 의 수동 복사 전제 불필요** |
 
