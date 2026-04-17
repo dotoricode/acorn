@@ -6,14 +6,26 @@ export type EnvKey = (typeof ENV_KEYS)[number];
 
 export type EnvMap = Readonly<Record<EnvKey, string>>;
 
+/**
+ * §15 v0.4.1 #3 — 빈 문자열 환경변수도 fallback 한다.
+ * 이전: `??` 는 nullish 만 통과시켜 `CLAUDE_CONFIG_DIR=''` / `ACORN_HARNESS_ROOT=''`
+ * 가 그대로 새어나와 `join('', 'skills', 'harness')` → CWD 상대 `skills/harness`
+ * 로 모든 write path (settings, lock, tx.log, hooks, vendors) 를 오염시켰다.
+ * codex review (2026-04-18) 에서 포착. 이제 빈 문자열은 정의되지 않은 것으로 간주.
+ */
+function envOrDefault(key: string, fallback: string): string {
+  const v = process.env[key];
+  return v !== undefined && v !== '' ? v : fallback;
+}
+
 export function defaultClaudeRoot(): string {
-  return process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude');
+  return envOrDefault('CLAUDE_CONFIG_DIR', join(homedir(), '.claude'));
 }
 
 export function defaultHarnessRoot(): string {
-  return (
-    process.env['ACORN_HARNESS_ROOT'] ??
-    join(defaultClaudeRoot(), 'skills', 'harness')
+  return envOrDefault(
+    'ACORN_HARNESS_ROOT',
+    join(defaultClaudeRoot(), 'skills', 'harness'),
   );
 }
 

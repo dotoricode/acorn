@@ -117,3 +117,39 @@ test('diffEnv: process.env 기본값 사용 가능', () => {
   const diff = diffEnv(expected);
   assert.equal(diff.length, 3);
 });
+
+// §15 v0.4.1 #3 — 빈 문자열 env 는 fallback 해야 CWD 상대 경로 오염을 막는다.
+test('defaultClaudeRoot: CLAUDE_CONFIG_DIR="" 이면 기본값 (homedir) 로 fallback', () => {
+  const orig = process.env['CLAUDE_CONFIG_DIR'];
+  process.env['CLAUDE_CONFIG_DIR'] = '';
+  try {
+    // 빈 문자열이 join 에 그대로 들어가면 결과는 'skills/harness' 같은 상대 경로가 됨.
+    // 정상 동작이라면 homedir() 아래를 가리켜야 한다.
+    const harness = defaultHarnessRoot();
+    assert.ok(
+      harness.startsWith(homedir()),
+      `빈 CLAUDE_CONFIG_DIR 은 homedir 로 fallback 해야 함. 실제=${harness}`,
+    );
+  } finally {
+    if (orig === undefined) delete process.env['CLAUDE_CONFIG_DIR'];
+    else process.env['CLAUDE_CONFIG_DIR'] = orig;
+  }
+});
+
+test('defaultHarnessRoot: ACORN_HARNESS_ROOT="" 이면 claudeRoot 경유 기본값', () => {
+  const origH = process.env['ACORN_HARNESS_ROOT'];
+  const origC = process.env['CLAUDE_CONFIG_DIR'];
+  process.env['ACORN_HARNESS_ROOT'] = '';
+  process.env['CLAUDE_CONFIG_DIR'] = '/custom/claude';
+  try {
+    assert.equal(
+      defaultHarnessRoot(),
+      join('/custom/claude', 'skills', 'harness'),
+    );
+  } finally {
+    if (origH === undefined) delete process.env['ACORN_HARNESS_ROOT'];
+    else process.env['ACORN_HARNESS_ROOT'] = origH;
+    if (origC === undefined) delete process.env['CLAUDE_CONFIG_DIR'];
+    else process.env['CLAUDE_CONFIG_DIR'] = origC;
+  }
+});
