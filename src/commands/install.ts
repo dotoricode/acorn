@@ -135,11 +135,25 @@ export interface InstallOptions {
   readonly followSymlink?: boolean;
 }
 
+/**
+ * §15 H-1 (v0.3.4): gstack setup 이 왜 실행됐/안 됐는지 세부 사유.
+ * `gstackSetupRan` 만으로는 "스킵 플래그" / "marker noop" / "콜백 미제공"
+ * 세 가지 "실행 안 됨" 케이스가 구분되지 않아 silent no-op 경고를
+ * 내보낼 수 없었다. cmdInstall 이 `'no-callback'` 을 감지하면 최종
+ * 요약에 ⚠️ 경고를 덧붙인다.
+ */
+export type GstackSetupReason =
+  | 'ran' // 콜백 실행 성공, marker 기록됨
+  | 'skip-flag' // --skip-gstack-setup 으로 명시 스킵
+  | 'marker-noop' // 이미 같은 SHA 에서 실행됨 (멱등)
+  | 'no-callback'; // 콜백 미제공 + marker 불일치 = 실행이 필요했지만 묵시적 스킵
+
 export interface InstallResult {
   readonly lock: HarnessLock;
   readonly vendors: Readonly<Record<ToolName, InstallVendorResult>>;
   readonly gstackSymlink: EnsureResult;
   readonly gstackSetupRan: boolean;
+  readonly gstackSetupReason: GstackSetupReason;
   readonly hooks: HooksResult;
   readonly settings: InstallEnvResult;
 }
@@ -324,9 +338,10 @@ function runInstallInner(ctx: InnerContext): InstallResult {
         log(
           `      ${name}: adopted (preserved ${r.preAdoptPath}, re-cloned @ ${r.commit.slice(0, 7)})`,
         );
-      } else if (r.action === 'preserved') {
+      } else if (r.action === 'adopted' && opts.followSymlink) {
+        // v0.3.4 H-3: --follow-symlink 성공 경로 — target HEAD 가 lock SHA 와 일치
         log(
-          `      ${name}: preserved (symlink, lock SHA 변경 없음${opts.followSymlink ? ' — target HEAD 확인됨' : ''})`,
+          `      ${name}: adopted (symlink target HEAD=${r.commit.slice(0, 7)} — lock 일치)`,
         );
       } else {
         log(`      ${name}: ${r.action} (${r.commit.slice(0, 7)})`);
@@ -358,15 +373,18 @@ function runInstallInner(ctx: InnerContext): InstallResult {
 
   // 6. gstack setup — §15 C3: 같은 gstack SHA 에서 이미 setup 실행됐으면 noop.
   let gstackSetupRan = false;
+  let gstackSetupReason: GstackSetupReason;
   tx.phase('gstack-setup');
   const expectedGstackSha = lock.tools.gstack.commit;
   const markerSha = readGstackSetupMarker(harnessRoot);
   if (opts.skipGstackSetup) {
     log(`[6/8] gstack setup (스킵)`);
+    gstackSetupReason = 'skip-flag';
   } else if (markerSha === expectedGstackSha) {
     log(
       `[6/8] gstack setup (noop — SHA ${expectedGstackSha.slice(0, 7)} 에 대해 이미 실행됨)`,
     );
+    gstackSetupReason = 'marker-noop';
   } else {
     log(`[6/8] gstack setup 실행`);
     try {
@@ -377,10 +395,18 @@ function runInstallInner(ctx: InnerContext): InstallResult {
           claudeRoot,
         });
         gstackSetupRan = true;
+        gstackSetupReason = 'ran';
         // 성공 시 SHA marker 기록 → 다음 install 은 noop
         writeGstackSetupMarker(harnessRoot, expectedGstackSha);
       } else {
-        log(`      setup 콜백 미제공 — 수동으로 gstack setup 실행 필요`);
+        // §15 H-1 (v0.3.4): silent no-op. 콜백 미제공 + marker 불일치 =
+        // setup 이 필요했지만 안 돌았음. 경고는 cmdInstall 최종 요약에서
+        // GstackSetupReason === 'no-callback' 으로 감지해 ⚠️ 출력.
+        log(
+          `      setup 콜백 미제공 — 수동으로 gstack setup 실행 필요 ` +
+            `(최종 요약에서 ⚠️ 경고 노출)`,
+        );
+        gstackSetupReason = 'no-callback';
       }
     } catch (e) {
       throw new InstallError(
@@ -459,6 +485,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
     vendors,
     gstackSymlink,
     gstackSetupRan,
+    gstackSetupReason,
     hooks,
     settings,
   };

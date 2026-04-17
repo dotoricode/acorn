@@ -304,17 +304,45 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
         opts.tool,
       );
     }
-    // --follow-symlink: target 의 HEAD 를 lock SHA 와 비교.
-    // revParse throw 흡수는 H-3 (v0.4.x) 에서 별도 강화 예정.
-    let head: string | null = null;
+    // v0.3.4 H-3: --follow-symlink 는 "lock SHA 기준으로 target 을 검증" 의미.
+    // v0.3.0 ~ v0.3.3 은 revParse throw 를 silent 흡수 → preserved 로 success
+    // 반환 → drift 고지 실패. 이제 4 단계로 명확히 분기:
+    //   - target 이 git 저장소 아님 → NOT_A_REPO
+    //   - revParse 실행 실패 (git 바이너리/권한 문제 등) → REV_PARSE
+    //   - HEAD 가 lock SHA 와 불일치 → SHA_MISMATCH (drift 명시)
+    //   - HEAD 일치 → adopted (유일한 success)
+    if (!git.isGitRepo(path)) {
+      throw new VendorError(
+        `--follow-symlink: 심링크 target 이 git 저장소가 아님: ${path}. ` +
+          `심링크 제거 또는 target 을 올바른 git 저장소로 교체 후 재실행.`,
+        'NOT_A_REPO',
+        opts.tool,
+      );
+    }
+    let head: string;
     try {
       head = git.revParse(path);
-    } catch {
-      // 심링크 target 이 git 이 아닐 수도 있음 — 그냥 preserved 로
+    } catch (e) {
+      throw new VendorError(
+        `--follow-symlink: 심링크 target HEAD 읽기 실패: ${path} ` +
+          `(${e instanceof Error ? e.message : String(e)})`,
+        'REV_PARSE',
+        opts.tool,
+      );
+    }
+    if (head !== opts.commit) {
+      throw new VendorError(
+        `--follow-symlink: 심링크 target HEAD(${head.slice(0, 7)}) 가 ` +
+          `lock SHA(${opts.commit.slice(0, 7)}) 와 불일치 — drift 확정. ` +
+          `조치: cd ${path} && git checkout ${opts.commit} ` +
+          `(또는 acorn lock bump 로 upstream 반영 — v0.4+ 예정)`,
+        'SHA_MISMATCH',
+        opts.tool,
+      );
     }
     return {
       tool: opts.tool,
-      action: head === opts.commit ? 'adopted' : 'preserved',
+      action: 'adopted',
       path,
       previousCommit: head,
       commit: opts.commit,

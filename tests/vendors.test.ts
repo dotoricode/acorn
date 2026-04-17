@@ -648,6 +648,125 @@ test('§15 B1: 심링크 vendor + --follow-symlink + HEAD 일치 → adopted', (
   }
 });
 
+test('§15 H-3: 심링크 + --follow-symlink + target non-git → NOT_A_REPO', () => {
+  // v0.3.3 까지: revParse throw 를 silent 흡수해 `preserved` 로 success 반환.
+  // v0.3.4 H-3: target 이 git 저장소 아님을 isGitRepo 로 먼저 판정해 NOT_A_REPO 로 fail-close.
+  const w = makeWorkspace();
+  try {
+    mkdirSync(w.vendorsRoot, { recursive: true });
+    const target = join(w.dir, 'real-gstack');
+    mkdirSync(target, { recursive: true });
+    // .git 디렉토리 없음 — non-git
+    const linkPath = join(w.vendorsRoot, 'gstack');
+    try {
+      symlinkSync(target, linkPath, 'dir');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EPERM' || code === 'EACCES') return;
+      throw e;
+    }
+    const { git } = makeFakeGit({ headByDir: new Map() });
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'gstack',
+          repo: 'org/gstack',
+          commit: SHA_B,
+          vendorsRoot: w.vendorsRoot,
+          git,
+          followSymlink: true,
+        }),
+      (e: unknown) =>
+        e instanceof VendorError &&
+        e.code === 'NOT_A_REPO' &&
+        /심링크 target 이 git 저장소가 아님/.test(e.message),
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 H-3: 심링크 + --follow-symlink + revParse throw → REV_PARSE', () => {
+  // target 은 git 저장소지만 revParse 가 실패 (git 바이너리 문제, 권한, 손상 등).
+  // v0.3.3 까지: silent preserved. v0.3.4: 명시적 REV_PARSE.
+  const w = makeWorkspace();
+  try {
+    mkdirSync(w.vendorsRoot, { recursive: true });
+    const target = join(w.dir, 'real-gstack');
+    mkdirSync(target, { recursive: true });
+    mkdirSync(join(target, '.git'), { recursive: true });
+    const linkPath = join(w.vendorsRoot, 'gstack');
+    try {
+      symlinkSync(target, linkPath, 'dir');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EPERM' || code === 'EACCES') return;
+      throw e;
+    }
+    // failRevParse=true 로 revParse 가 항상 throw 하는 fake git
+    const { git } = makeFakeGit({
+      headByDir: new Map(),
+      failRevParse: true,
+    });
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'gstack',
+          repo: 'org/gstack',
+          commit: SHA_B,
+          vendorsRoot: w.vendorsRoot,
+          git,
+          followSymlink: true,
+        }),
+      (e: unknown) =>
+        e instanceof VendorError &&
+        e.code === 'REV_PARSE' &&
+        /심링크 target HEAD 읽기 실패/.test(e.message),
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 H-3: 심링크 + --follow-symlink + HEAD 불일치 → SHA_MISMATCH (drift 명시)', () => {
+  // v0.3.3 까지: head !== commit 시 silent `preserved` 반환.
+  // v0.3.4: drift 를 명시적으로 SHA_MISMATCH 로 fail-close.
+  const w = makeWorkspace();
+  try {
+    mkdirSync(w.vendorsRoot, { recursive: true });
+    const target = join(w.dir, 'real-gstack');
+    mkdirSync(target, { recursive: true });
+    mkdirSync(join(target, '.git'), { recursive: true });
+    const linkPath = join(w.vendorsRoot, 'gstack');
+    try {
+      symlinkSync(target, linkPath, 'dir');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EPERM' || code === 'EACCES') return;
+      throw e;
+    }
+    // target 의 HEAD 는 SHA_A 인데 lock 은 SHA_B 요구
+    const { git } = makeFakeGit({ headByDir: new Map([[linkPath, SHA_A]]) });
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'gstack',
+          repo: 'org/gstack',
+          commit: SHA_B,
+          vendorsRoot: w.vendorsRoot,
+          git,
+          followSymlink: true,
+        }),
+      (e: unknown) =>
+        e instanceof VendorError &&
+        e.code === 'SHA_MISMATCH' &&
+        /drift 확정/.test(e.message),
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('isEmptyDir (간접): existsSync 와 readdirSync 사이 race → ENOENT 는 empty 로 수용', () => {
   // existsSync 가 true 였다가 readdirSync 직전에 사라지는 race 는 현실적으로
   // 드물지만, 그 때 ENOENT 가 throw 되면 H4 fix 가 대상 외로 처리 — empty 간주.
