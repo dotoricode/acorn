@@ -65,9 +65,33 @@ export type GstackSetupFn = (opts: {
 }) => void;
 
 /**
+ * Post-spawn artifact 검증 (§15 C5).
+ * `defaultGstackSetup` 이 exit=0 만 보고 성공 보고하던 기존 동작에서
+ * shell 파싱 에러·중도 실패 등이 silent-pass 로 흘러가던 문제 방지.
+ * clone 시점에 존재해야 할 fingerprint 파일들이 post-setup 에도 살아있는지 확인한다.
+ * (gstack 이 새로 만드는 artifact 는 프로젝트별로 다르므로,
+ *  여기선 "setup 이 저장소를 쓸어버리지 않았는가" 수준의 기본 방어만 한다.)
+ */
+export function verifyGstackSetupArtifacts(gstackSource: string): void {
+  const required = [
+    join(gstackSource, 'setup'),
+    join(gstackSource, 'SKILL.md'),
+  ];
+  const missing = required.filter((p) => !existsSync(p));
+  if (missing.length > 0) {
+    throw new Error(
+      `gstack setup 이 exit=0 을 반환했으나 기대 파일 누락: ${missing.join(', ')}. ` +
+        `shell 파싱 에러 또는 setup 이 저장소를 손상시켰을 가능성. ` +
+        `cd ${gstackSource} && ./setup --host auto 를 bash 로 직접 실행해 stderr 확인 권장.`,
+    );
+  }
+}
+
+/**
  * CLI 사용자용 기본 gstack setup 구현.
  * `<gstackSource>/setup --host auto` 를 spawn 하고 exit code 0 을 기대한다.
  * (DOGFOOD Round 1 §v0.1.1 #4: 기존에는 콜백 없이는 수동 `cd vendors/gstack && ./setup` 필요)
+ * post-spawn 에 verifyGstackSetupArtifacts 를 호출해 silent-pass 를 차단한다 (§15 C5).
  */
 export const defaultGstackSetup: GstackSetupFn = ({ gstackSource }) => {
   const script = join(gstackSource, 'setup');
@@ -87,6 +111,7 @@ export const defaultGstackSetup: GstackSetupFn = ({ gstackSource }) => {
   if (res.status === null) {
     throw new Error(`gstack setup 시그널 종료 (signal=${String(res.signal)})`);
   }
+  verifyGstackSetupArtifacts(gstackSource);
 };
 
 export interface InstallOptions {

@@ -10,7 +10,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runInstall, InstallError, defaultGstackSetup } from '../src/commands/install.ts';
+import {
+  runInstall,
+  InstallError,
+  defaultGstackSetup,
+  verifyGstackSetupArtifacts,
+} from '../src/commands/install.ts';
 import type { GitRunner } from '../src/core/vendors.ts';
 import { beginTx, lastInProgress, txLogPath } from '../src/core/tx.ts';
 
@@ -391,6 +396,51 @@ test('runInstall: 설치 중 실패 → tx.abort 기록 + lastInProgress=null', 
     assert.equal(lastInProgress(w.harnessRoot), null);
   } finally {
     w.cleanup();
+  }
+});
+
+test('verifyGstackSetupArtifacts: fingerprint 파일 모두 있으면 통과 (§15 C5)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-c5-ok-'));
+  try {
+    writeFileSync(join(dir, 'setup'), '#!/bin/sh\nexit 0\n', 'utf8');
+    writeFileSync(join(dir, 'SKILL.md'), '# gstack\n', 'utf8');
+    // 에러 없이 리턴해야 함
+    verifyGstackSetupArtifacts(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verifyGstackSetupArtifacts: SKILL.md 누락 → 에러 + hint (§15 C5)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-c5-missing-'));
+  try {
+    writeFileSync(join(dir, 'setup'), '#!/bin/sh\nexit 0\n', 'utf8');
+    // SKILL.md 누락 — setup 이 exit=0 이지만 artifact 없는 상황 시뮬레이션
+    assert.throws(
+      () => verifyGstackSetupArtifacts(dir),
+      (e: unknown) =>
+        e instanceof Error &&
+        /SKILL\.md/.test(e.message) &&
+        /shell 파싱|수동 실행/.test(e.message),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verifyGstackSetupArtifacts: setup 스크립트 누락 시 함께 보고', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'acorn-c5-both-'));
+  try {
+    // 둘 다 누락 — 에러 메시지에 둘 다 포함되어야 함
+    assert.throws(
+      () => verifyGstackSetupArtifacts(dir),
+      (e: unknown) =>
+        e instanceof Error &&
+        /setup/.test(e.message) &&
+        /SKILL\.md/.test(e.message),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
