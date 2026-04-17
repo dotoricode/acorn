@@ -13,7 +13,22 @@ export type VendorErrorCode =
   | 'SHA_MISMATCH'
   | 'LOCAL_CHANGES'
   | 'TIMEOUT'
+  | 'INVALID_TOOL_NAME'
   | 'IO';
+
+/**
+ * §15 v0.5.0 / codex review #1: `installVendor` 의 `tool` 인자가 vendorsRoot
+ * 에 그대로 join 되므로, 외부 호출자가 `../..` / `/abs` / 내부 NUL 등을 넣으면
+ * vendorsRoot 밖으로 파일/디렉토리 쓰기·삭제를 유발할 수 있는 표면이 있었다.
+ * CLI 는 `TOOL_NAMES` 로 고정이라 exploit 경로가 없으나 exported API 는 열려
+ * 있었다. 이제 진입부에서 strict 검증 — `[a-zA-Z0-9][a-zA-Z0-9_-]*` 만 허용.
+ * 기존 테스트 픽스처 (`omc` / `gstack` / `ecc`) 는 모두 통과.
+ */
+const TOOL_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+
+export function isValidToolName(tool: string): boolean {
+  return typeof tool === 'string' && TOOL_NAME_RE.test(tool);
+}
 
 export class VendorError extends Error {
   readonly code: VendorErrorCode;
@@ -184,31 +199,35 @@ export interface InstallVendorResult {
 }
 
 /**
- * 디렉토리가 비었는지 판정.
- * §15 H4: 이전엔 readdirSync 예외를 catch 로 삼켜 false 반환했다.
- * 그 결과 EACCES(권한)·ENOTDIR 같은 실 장애가 "not empty" 로 둔갑,
- * 다음 분기인 isGitRepo 가 NOT_A_REPO 로 잘못 결론을 내고
- * 사용자는 "rm -rf" 힌트를 받아 엉뚱한 조치를 취할 위험이 있었다.
- *
- * 현재: ENOENT (existsSync 와 readdirSync 사이 race) 만 "비었다" 로 받고,
- * 그 외 에러는 호출자에게 propagate.
- *
- * §15 v0.4.2 (Round 3 dogfood): 심링크는 "empty dir" 이 아니다.
- * 이전엔 `readdirSync` 가 심링크를 follow 해 target 의 empty 여부를 반환,
- * target 이 빈 디렉토리인 심링크가 `treatAsClone=true` 로 판정돼
- * `--follow-symlink` handling 경로가 차단되고 심링크가 clone 대상으로
- * rm 된 뒤 clone 이 시도되는 회귀. v0.3.4 부터 CI Linux 에서 H-3 회귀
- * 테스트 실패 (Windows 는 EPERM 으로 skip 되어 로컬엔 안 보였음).
- * 이제 lstat 기준 심링크면 즉시 false — 심링크 handling 은 상위에서 담당.
+ * §15 v0.5.0 (Round 3 F3): `installVendor` 진입부는 `lstat` 1회로 "존재 여부"
+ * 와 "심링크 여부" 를 동시에 판정한다. 이전엔 `existsSync` → `isEmptyDir` →
+ * symlink 순이었으나:
+ *   - Node 24 Windows 에서 `existsSync(junction) === false` 버그 (Node issue
+ *     참조, 커뮤니티 보고) 로 junction 은 "부재" 로 잘못 인식되고 symlink 분기
+ *     자체가 도달 불가.
+ *   - `existsSync` 는 에러를 삼키므로 EACCES 같은 실 장애가 "부재" 로 둔갑.
+ * 이제 `lstatSync` 결과를 단일 소스로 삼고, 에러는 `ENOENT` 만 "부재" 로
+ * 해석하고 나머지는 `VendorError/IO` 로 propagate.
  */
-function isEmptyDir(dir: string): boolean {
-  if (!existsSync(dir)) return true;
+interface PathProbe {
+  readonly exists: boolean;
+  readonly isSymlink: boolean;
+  readonly isDirectory: boolean;
+}
+
+function probePath(dir: string): PathProbe {
   try {
-    if (lstatSync(dir).isSymbolicLink()) return false;
-    return readdirSync(dir).length === 0;
+    const stat = lstatSync(dir);
+    return {
+      exists: true,
+      isSymlink: stat.isSymbolicLink(),
+      isDirectory: stat.isDirectory(),
+    };
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return true;
+    if (code === 'ENOENT') {
+      return { exists: false, isSymlink: false, isDirectory: false };
+    }
     throw e;
   }
 }
@@ -227,84 +246,41 @@ function cleanupPartial(path: string, tool: string): void {
 
 export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
   const git = opts.git ?? defaultGitRunner;
+
+  // §15 v0.5.0 / codex review #1: tool name path traversal guard.
+  if (!isValidToolName(opts.tool)) {
+    throw new VendorError(
+      `invalid tool name: ${JSON.stringify(opts.tool)}. ` +
+        `허용 패턴: ${TOOL_NAME_RE.source} ` +
+        `(path separator, 상위참조, 특수문자 금지 — vendorsRoot traversal 방지).`,
+      'INVALID_TOOL_NAME',
+      typeof opts.tool === 'string' ? opts.tool : '<invalid>',
+    );
+  }
+
   const path = join(opts.vendorsRoot, opts.tool);
   mkdirSync(opts.vendorsRoot, { recursive: true });
 
-  // §15 H4: isEmptyDir 가 EACCES 같은 실 장애를 NOT_A_REPO 로 둔갑시키지 않도록
-  // propagate 하고, 여기서 정확한 VendorError(IO) 로 번역한다.
-  let treatAsClone: boolean;
+  // §15 v0.5.0 / Round 3 F3: lstat-first — existsSync 가 Node 24 Windows 에서
+  // junction 을 false 로 보고하던 회귀 차단. probePath 가 ENOENT 만 "부재" 로
+  // 변환하고 다른 에러는 VendorError/IO 로 propagate.
+  let probe: PathProbe;
   try {
-    treatAsClone = !existsSync(path) || isEmptyDir(path);
+    probe = probePath(path);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code ?? 'unknown';
     throw new VendorError(
       `vendor 경로 접근 실패 (${code}): ${path} ` +
         `(${e instanceof Error ? e.message : String(e)}). ` +
-        `NOT_A_REPO 로 둔갑되지 않도록 propagate. ` +
         `디렉토리 권한/소유자 확인 후 재실행.`,
       'IO',
       opts.tool,
     );
   }
 
-  if (treatAsClone) {
-    if (existsSync(path)) {
-      try {
-        rmSync(path, { recursive: true, force: true });
-      } catch (e) {
-        throw new VendorError(
-          `빈 디렉토리 제거 실패: ${path} (${e instanceof Error ? e.message : String(e)})`,
-          'IO',
-          opts.tool,
-        );
-      }
-    }
-    try {
-      git.clone(toRepoUrl(opts.repo), path);
-    } catch (e) {
-      cleanupPartial(path, opts.tool);
-      throw new VendorError(
-        `clone 실패: ${opts.repo} → ${path} (${e instanceof Error ? e.message : String(e)})`,
-        'CLONE',
-        opts.tool,
-      );
-    }
-    try {
-      git.checkout(path, opts.commit);
-    } catch (e) {
-      cleanupPartial(path, opts.tool);
-      throw new VendorError(
-        `checkout 실패: ${opts.commit} (${e instanceof Error ? e.message : String(e)})`,
-        'CHECKOUT',
-        opts.tool,
-      );
-    }
-    try {
-      verifyCommit(git, path, opts.commit, opts.tool);
-    } catch (e) {
-      cleanupPartial(path, opts.tool);
-      throw e;
-    }
-    return {
-      tool: opts.tool,
-      action: 'cloned',
-      path,
-      previousCommit: null,
-      commit: opts.commit,
-    };
-  }
-
-  // §15 S4 / ADR-019: 심링크 vendor 는 "사용자 dev 레포" 로 간주.
-  // v0.3.1 B1 hotfix: 명시적 `--follow-symlink` opt-in 없이 심링크를 만나면
-  // silent preserve 대신 NOT_A_REPO 로 fail-close. v0.3.0 은 검증 없이 success
-  // 를 반환해 v0.2.0 의 "자동 교체 거부" 계약을 회귀시켰다.
-  let isSymlink = false;
-  try {
-    isSymlink = lstatSync(path).isSymbolicLink();
-  } catch {
-    // ignore — 상위 처리
-  }
-  if (isSymlink) {
+  // §15 v0.5.0 / Round 3 F3: 심링크는 treatAsClone 판정 전에 먼저 분기.
+  // 이전엔 treatAsClone → clone 경로가 심링크 handling 을 덮어쓸 수 있었다.
+  if (probe.isSymlink) {
     if (!opts.followSymlink) {
       throw new VendorError(
         `vendor 경로가 심링크 — lock SHA 검증을 위해 --follow-symlink 필요, ` +
@@ -354,6 +330,78 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
       action: 'adopted',
       path,
       previousCommit: head,
+      commit: opts.commit,
+    };
+  }
+
+  // §15 v0.5.0: 심링크 아님. probe.exists 로 "부재" / "빈 디렉토리" / "기존 dir"
+  // 를 판정. treatAsClone 은 probe 기반이라 Node 24 Windows 의 existsSync
+  // junction 버그 영향 없음.
+  let treatAsClone: boolean;
+  if (!probe.exists) {
+    treatAsClone = true;
+  } else {
+    // §15 H4: readdirSync 에러를 삼키지 않고 propagate. EACCES/ENOTDIR 같은
+    // 실 장애가 "not empty" 로 둔갑해 NOT_A_REPO 힌트로 잘못 유도되던 회귀 차단.
+    let entries: string[];
+    try {
+      entries = readdirSync(path);
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code ?? 'unknown';
+      throw new VendorError(
+        `vendor 경로 목록 실패 (${code}): ${path} ` +
+          `(${e instanceof Error ? e.message : String(e)}). ` +
+          `디렉토리 권한/소유자 확인 후 재실행.`,
+        'IO',
+        opts.tool,
+      );
+    }
+    treatAsClone = entries.length === 0;
+  }
+
+  if (treatAsClone) {
+    if (probe.exists) {
+      try {
+        rmSync(path, { recursive: true, force: true });
+      } catch (e) {
+        throw new VendorError(
+          `빈 디렉토리 제거 실패: ${path} (${e instanceof Error ? e.message : String(e)})`,
+          'IO',
+          opts.tool,
+        );
+      }
+    }
+    try {
+      git.clone(toRepoUrl(opts.repo), path);
+    } catch (e) {
+      cleanupPartial(path, opts.tool);
+      throw new VendorError(
+        `clone 실패: ${opts.repo} → ${path} (${e instanceof Error ? e.message : String(e)})`,
+        'CLONE',
+        opts.tool,
+      );
+    }
+    try {
+      git.checkout(path, opts.commit);
+    } catch (e) {
+      cleanupPartial(path, opts.tool);
+      throw new VendorError(
+        `checkout 실패: ${opts.commit} (${e instanceof Error ? e.message : String(e)})`,
+        'CHECKOUT',
+        opts.tool,
+      );
+    }
+    try {
+      verifyCommit(git, path, opts.commit, opts.tool);
+    } catch (e) {
+      cleanupPartial(path, opts.tool);
+      throw e;
+    }
+    return {
+      tool: opts.tool,
+      action: 'cloned',
+      path,
+      previousCommit: null,
       commit: opts.commit,
     };
   }

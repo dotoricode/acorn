@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   installVendor,
+  isValidToolName,
   toRepoUrl,
   VendorError,
   unexpectedDirtyPaths,
@@ -107,6 +108,116 @@ function makeWorkspace(): {
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
   };
 }
+
+// §15 v0.5.0 / codex review #1 — tool name path traversal guard 단위 검증.
+test('isValidToolName: 정상 이름 허용', () => {
+  for (const name of ['omc', 'gstack', 'ecc', 'test-tool', 'abc_123', 'A1']) {
+    assert.ok(isValidToolName(name), `허용되어야: ${name}`);
+  }
+});
+
+test('isValidToolName: 경로 분리자 / 상위참조 / 빈 문자열 거부', () => {
+  for (const bad of [
+    '',
+    '.',
+    '..',
+    '../etc',
+    '..\\etc',
+    '/abs',
+    'C:\\abs',
+    'a/b',
+    'a\\b',
+    'a b',
+    'a.b',
+    '.hidden',
+    '-leading-dash',
+    '_leading_underscore',
+    'with\0nul',
+    'with$var',
+  ]) {
+    assert.ok(!isValidToolName(bad), `거부되어야: ${JSON.stringify(bad)}`);
+  }
+});
+
+test('installVendor: tool 이름이 ".." 면 INVALID_TOOL_NAME (vendorsRoot traversal 차단)', () => {
+  const w = makeWorkspace();
+  try {
+    assert.throws(
+      () =>
+        installVendor({
+          tool: '..',
+          repo: 'org/x',
+          commit: SHA_A,
+          vendorsRoot: w.vendorsRoot,
+          git: makeFakeGit({ headByDir: new Map() }).git,
+        }),
+      (e: unknown) =>
+        e instanceof VendorError && e.code === 'INVALID_TOOL_NAME',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('installVendor: tool 이름이 "../../../etc" 면 INVALID_TOOL_NAME', () => {
+  const w = makeWorkspace();
+  try {
+    assert.throws(
+      () =>
+        installVendor({
+          tool: '../../../etc',
+          repo: 'org/x',
+          commit: SHA_A,
+          vendorsRoot: w.vendorsRoot,
+          git: makeFakeGit({ headByDir: new Map() }).git,
+        }),
+      (e: unknown) =>
+        e instanceof VendorError && e.code === 'INVALID_TOOL_NAME',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('installVendor: tool 이름이 "a/b" 면 INVALID_TOOL_NAME (경로 분리자)', () => {
+  const w = makeWorkspace();
+  try {
+    assert.throws(
+      () =>
+        installVendor({
+          tool: 'a/b',
+          repo: 'org/x',
+          commit: SHA_A,
+          vendorsRoot: w.vendorsRoot,
+          git: makeFakeGit({ headByDir: new Map() }).git,
+        }),
+      (e: unknown) =>
+        e instanceof VendorError && e.code === 'INVALID_TOOL_NAME',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('installVendor: 빈 tool 이름 → INVALID_TOOL_NAME', () => {
+  const w = makeWorkspace();
+  try {
+    assert.throws(
+      () =>
+        installVendor({
+          tool: '',
+          repo: 'org/x',
+          commit: SHA_A,
+          vendorsRoot: w.vendorsRoot,
+          git: makeFakeGit({ headByDir: new Map() }).git,
+        }),
+      (e: unknown) =>
+        e instanceof VendorError && e.code === 'INVALID_TOOL_NAME',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
 
 test('toRepoUrl: owner/name → https GitHub URL', () => {
   assert.equal(toRepoUrl('dotoricode/acorn'), 'https://github.com/dotoricode/acorn.git');
