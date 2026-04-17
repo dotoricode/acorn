@@ -236,6 +236,55 @@ test('runInstall: gstackSetup 미제공 → gstackSetupRan=false', () => {
       git,
     });
     assert.equal(result.gstackSetupRan, false);
+    // §15 H-1 (v0.3.4): 콜백 미제공 + marker 불일치 = silent no-op 경고 대상
+    assert.equal(result.gstackSetupReason, 'no-callback');
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('§15 H-1 (v0.3.4): gstackSetupReason 4 상태 구분', () => {
+  // ran / skip-flag / marker-noop / no-callback — cmdInstall 이 no-callback 만
+  // ⚠️ 경고 대상으로 처리하므로 네 상태가 정확히 분류돼야 한다.
+  const w = makeWorkspace();
+  try {
+    const git = makeFakeGit({ heads: new Map() });
+
+    // A. 콜백 제공 + marker 없음 → ran
+    const a = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      gstackSetup: () => undefined,
+    });
+    assert.equal(a.gstackSetupReason, 'ran');
+    assert.equal(a.gstackSetupRan, true);
+
+    // B. 재실행 (marker 기록됨) → marker-noop
+    const b = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      gstackSetup: () => undefined,
+    });
+    assert.equal(b.gstackSetupReason, 'marker-noop');
+    assert.equal(b.gstackSetupRan, false);
+
+    // C. skipGstackSetup 명시 → skip-flag
+    const c = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+    });
+    assert.equal(c.gstackSetupReason, 'skip-flag');
+    assert.equal(c.gstackSetupRan, false);
   } finally {
     w.cleanup();
   }

@@ -215,6 +215,19 @@ function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
     io.stdout('');
     io.stdout(`✅ 설치 완료`);
     io.stdout(`   settings: ${r.settings.action}  hooks: ${r.hooks.action}  vendors: ${Object.values(r.vendors).map((v) => `${v.tool}=${v.action}`).join(' ')}`);
+    // §15 H-1 (v0.3.4): silent no-op 방지 — setup 이 필요했지만 콜백 미제공으로
+    // 안 돌았을 때만 경고. marker-noop / skip-flag / ran 은 모두 의도된 상태.
+    if (r.gstackSetupReason === 'no-callback') {
+      io.stderr('');
+      io.stderr(
+        `⚠️  gstack setup 이 실행되지 않았습니다 (콜백 미제공 + marker 불일치).`,
+      );
+      io.stderr(
+        `   조치: --run-gstack-setup 으로 재실행 하거나, ` +
+          `--skip-gstack-setup 으로 의도 명시, ` +
+          `또는 수동 실행 후 다음 install 에서 marker 기록.`,
+      );
+    }
     return EXIT.OK;
   } catch (e) {
     io.stderr(formatError(e));
