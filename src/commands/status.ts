@@ -23,6 +23,7 @@ import {
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { lastInProgress, type TxEvent } from '../core/tx.ts';
+import { shortSha, distinguishingPair } from '../core/sha-display.ts';
 
 export type VendorState = 'locked' | 'drift' | 'missing' | 'error';
 
@@ -116,10 +117,6 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
   };
 }
 
-function shortSha(sha: string): string {
-  return sha.slice(0, 7);
-}
-
 function stateIcon(state: VendorState): string {
   switch (state) {
     case 'locked':
@@ -137,8 +134,12 @@ function stateLabel(s: ToolStatus): string {
   switch (s.state) {
     case 'locked':
       return 'locked';
-    case 'drift':
-      return `drift (실제 ${shortSha(s.actualCommit ?? '')})`;
+    case 'drift': {
+      // §15 v0.2.0 S2: 7-char short SHA 로는 "끝만 다른" drift 가 같아 보여 혼란.
+      // 차이 나는 위치까지 확장해서 두 SHA 를 나란히 보여준다.
+      const [lockDisp, actualDisp] = distinguishingPair(s.lockCommit, s.actualCommit);
+      return `drift (lock=${lockDisp} 실제=${actualDisp})`;
+    }
     case 'missing':
       return 'missing';
     case 'error':

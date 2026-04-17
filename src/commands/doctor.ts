@@ -12,6 +12,7 @@ import {
   unexpectedDirtyPaths,
   type GitRunner,
 } from '../core/vendors.ts';
+import { distinguishingPair } from '../core/sha-display.ts';
 
 export type DoctorSeverity = 'critical' | 'warning' | 'info';
 export type DoctorArea =
@@ -140,19 +141,23 @@ function toolIssues(
         hint: 'acorn install 을 실행하면 자동 clone',
       });
       break;
-    case 'drift':
+    case 'drift': {
+      // §15 v0.2.0 S2: 차이 나는 위치까지 확장해 "같아 보이는" 착시 방지.
+      const [lockDisp, actualDisp] = distinguishingPair(
+        tool.lockCommit,
+        tool.actualCommit,
+      );
       issues.push({
         area: 'vendor',
         severity: 'warning',
         subject: tool.tool,
-        message:
-          `${tool.tool} SHA 불일치 (lock=${tool.lockCommit.slice(0, 7)}, ` +
-          `실제=${tool.actualCommit?.slice(0, 7) ?? 'unknown'})`,
+        message: `${tool.tool} SHA 불일치 (lock=${lockDisp}, 실제=${actualDisp})`,
         hint:
           '의도적 변경이면 harness.lock 갱신. ' +
           '아니면 dirty 없음을 확인한 뒤 acorn install 로 재checkout',
       });
       break;
+    }
     case 'error':
       issues.push({
         area: 'vendor',

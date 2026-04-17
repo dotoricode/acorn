@@ -165,6 +165,14 @@ function vendorHint(name: ToolName, cause: unknown, vendorsRootPath: string): st
     case 'CLONE':
       return `네트워크/권한 확인. 재시도: acorn install`;
     case 'CHECKOUT':
+      // §15 v0.2.0 S2 / Round 2 S4 실증: "git fsck" 만 안내하면 실 원인
+      // (fetch 누락 / lock SHA 오타) 앞에서 엉뚱한 조치 유도. 3단계 원인 분기.
+      return (
+        `요청 SHA 를 checkout 할 수 없음. 주요 원인: ` +
+        `① SHA 가 upstream 에 없음 → git -C ${vPath} fetch origin 후 재시도. ` +
+        `② harness.lock 의 SHA 오타 → lock 확인/정정 후 재실행. ` +
+        `③ 저장소 손상 의심 시에만 git -C ${vPath} fsck.`
+      );
     case 'REV_PARSE':
       return `git -C ${vPath} fsck 로 저장소 무결성 확인.`;
     case 'IO':
