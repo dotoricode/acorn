@@ -43,6 +43,7 @@ acorn install --run-gstack-setup  # + gstack setup --host auto 자동 실행
 acorn status                      # 3툴 + guard + env 요약
 acorn doctor                      # 이슈 + 수동 복구 힌트
 acorn status --json               # 기계 판독
+acorn lock validate               # harness.lock schema 검증 (v0.2.0+)
 ```
 
 **첫 설치 (harness.lock 이 없는 상태, v0.1.2+)**

@@ -13,7 +13,7 @@ import {
   renderDoctor,
   renderDoctorJson,
 } from './commands/doctor.ts';
-import { LockError } from './core/lock.ts';
+import { LockError, readLock } from './core/lock.ts';
 import { VendorError } from './core/vendors.ts';
 import { SettingsError } from './core/settings.ts';
 import { SymlinkError } from './core/symlink.ts';
@@ -45,9 +45,10 @@ export function usage(): string {
   acorn <command> [flags]
 
 Commands:
-  install   harness.lock 기준으로 OMC/gstack/ECC 설치 + env 주입
-  status    현재 설치 상태 요약 (read-only)
-  doctor    진단 + 권장 조치
+  install        harness.lock 기준으로 OMC/gstack/ECC 설치 + env 주입
+  status         현재 설치 상태 요약 (read-only)
+  doctor         진단 + 권장 조치
+  lock validate  harness.lock schema 검증 (read-only, CI 친화)
 
 Global flags:
   -h, --help      도움말
@@ -204,11 +205,53 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
       return cmdStatus(parsed, io);
     case 'doctor':
       return cmdDoctor(parsed, io);
+    case 'lock':
+      return cmdLock(rest, io);
     default:
       io.stderr(`알 수 없는 커맨드: ${head}`);
       io.stderr('');
       io.stderr(usage());
       return EXIT.USAGE;
+  }
+}
+
+/**
+ * §15 v0.2.0 S5 — `acorn lock <sub>` subcommand router.
+ * 현재 subcommand: validate
+ */
+function cmdLock(rest: readonly string[], io: CliIO): number {
+  const [sub, ...subRest] = rest;
+  if (!sub || sub === '-h' || sub === '--help') {
+    io.stdout('사용법: acorn lock <validate> [lockPath]');
+    io.stdout('');
+    io.stdout('서브커맨드:');
+    io.stdout('  validate [path]   harness.lock schema 검증. 기본 경로는 defaultLockPath().');
+    return sub ? EXIT.OK : EXIT.USAGE;
+  }
+  switch (sub) {
+    case 'validate':
+      return cmdLockValidate(subRest, io);
+    default:
+      io.stderr(`알 수 없는 lock 서브커맨드: ${sub}`);
+      return EXIT.USAGE;
+  }
+}
+
+function cmdLockValidate(args: readonly string[], io: CliIO): number {
+  const lockPath = args[0];
+  try {
+    const lock = readLock(lockPath);
+    io.stdout(
+      `✅ harness.lock OK  ` +
+        `(schema_version=${lock.schema_version}, ` +
+        `acorn_version=${lock.acorn_version}, ` +
+        `tools=${Object.keys(lock.tools).length}, ` +
+        `guard=${lock.guard.mode}/${lock.guard.patterns})`,
+    );
+    return EXIT.OK;
+  } catch (e) {
+    io.stderr(formatError(e));
+    return exitFor(e);
   }
 }
 
