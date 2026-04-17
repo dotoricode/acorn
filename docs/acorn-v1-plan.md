@@ -559,6 +559,61 @@ v0.5+ 에서 재평가 — integration test (ARCH-R1) 가 먼저 와야 pinning 
 
 **기타**: `npm pack files 화이트리스트 (v0.3.1 CRIT-1)` 는 이미 v0.3.x 에서 완료. ADR 수준의 명문화는 필요 없음 (CLAUDE.md "npm pack 화이트리스트" 섹션 + CHANGELOG [0.3.1] 에 기록).
 
+### ADR-021 (예정): tx.log transaction ID (v0.5+)
+
+**배경**: v0.4.1 codex review (2026-04-18) §6 지적. 현재 `lastInProgress` 는
+`readEvents` 가 **모든** 라인을 순회하며 corrupt 를 OR-accumulate → 한 라인이
+JSON 파싱 실패하면 영구히 IN_PROGRESS 로 굳어버린다 (`--force` 로만 우회).
+v0.1.3 §15 H3 의 명시적 trade-off 였으나, (a) tx 당 고유 id 가 없어 interleaved
+install (에지 케이스) 를 구분 불가, (b) orphan corrupt 가 운영 중 누적되면
+UX 퇴화가 심각해진다는 피드백.
+
+**잠정 방향 (v0.5+ 확정 예정)**:
+- `TxEvent.id: string` (uuid/ulid) 필드 추가 — `begin` 이벤트가 생성,
+  `phase`/`commit`/`abort` 가 동일 id 로 associate.
+- `lastInProgress` 는 **id 기준** 으로 open(begin 있음 + commit/abort 없음) 인
+  id 만 in_progress 로 보고. orphan corrupt 는 warning 레벨로 강등, 기본 차단
+  하지 않고 doctor 가 사용자 정리 유도.
+- Strict 모드 (`ACORN_TX_STRICT=1`) 로 기존 v0.1.3 H3 동작 (fail-close) 보존.
+- 회귀 테스트: 동시 `runInstall` 두 번 + corrupt injection + `--force` 효과 확인.
+
+v0.5.0 에서 integration test (ARCH-R1) 와 같은 window 에 묶어 release.
+
+### ADR (v0.4.1 — codex review P0 5건 hotfix)
+
+**배경**: v0.4.0 직후 외부 검토 10건 중 즉시 가치 있는 P0 5건을 patch 단일
+릴리스로 묶음. 테마 "fail-close 복원 + silent-lie 제거" 가 v0.3.x 와 동일.
+분할하지 않은 이유: 5건 모두 격리된 작은 diff, 다음 작업 (Round 3 도그푸딩)
+신뢰도의 전제조건이라 먼저 처리.
+
+**반영 항목**:
+
+- **#3 env.ts empty-string guard**: `??` → `envOrDefault` (nullish + empty-
+  string 둘 다 처리). `CLAUDE_CONFIG_DIR=''` / `ACORN_HARNESS_ROOT=''` 가
+  CWD 상대 경로로 새는 silent 오염 차단.
+- **#2 settings / config malformed env fail-close**: `getEnvSection` 이
+  non-object 를 빈 섹션으로 코어스하던 silent overwrite 를 `SettingsError
+  (PARSE)` / `ConfigError(SCHEMA)` throw 로 교정. absent (undefined) 만
+  기존대로 빈 섹션.
+- **#4 settings.ts BOM strip**: `parseLock` 에만 있던 BOM 처리를
+  `readSettings` 에도 적용. `src/core/bom.ts` 신규 헬퍼로 lock/config/
+  settings 3곳 single source.
+- **#5 status.ts diffEnv self-compare 제거**: `runtimeEnv` 미지정 시
+  `diffEnv(desired, desired)` fake-match → 빈 배열 반환. 라이브러리
+  호출자 계약 정직화. CLI 경로는 이미 `process.env` 명시 주입이라 영향 없음.
+- **#9 config.ts TOCTOU SyntaxError 번역**: 두 번째 `readFileSync + JSON.
+  parse` 를 `try/catch` 로 감싸 `ConfigError(SCHEMA)` 로 변환. exit-code
+  매핑 (`CONFIG=2`) 우회 차단. `parseLock` 재검증 경로의 `LockError` 도 동일.
+
+**연기 (v0.4.2)**: #1 `installVendor` path traversal guard, #7 Windows
+`shell: true` 제거. 단독 Sprint — 둘 다 인터페이스/의존성 변경 포함.
+
+**연기 (v0.5+)**: #6 tx ID (ADR-021 위), #10 junction test helper.
+
+**부채 기록만 (조치 없음)**: #8 `verifyGstackSetupArtifacts` 의 `SKILL.md`
+하드코드 — SHA 락 전제상 silent false-negative 경로가 구조적으로 존재하지
+않음 (upstream rename 은 lock bump 단계에서 감지).
+
 ---
 
 ## 12. 검증 현황
