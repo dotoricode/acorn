@@ -3,6 +3,53 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.3.5] — 2026-04-18
+
+🟠 v0.4.x 큐 중 HIGH-3 (`ACORN_GUARD_BYPASS` 재설계) 를 "lite" 형태로
+v0.3.x 내 patch 로 정리. 코드 재설계 (nonce / PID / TTL) 없이
+**문서 truth + doctor 감지** 만으로 critic 의 실 요구 (사용자가
+세션 bypass 상태를 쉽게 알아챌 수 있어야 함) 를 충족.
+
+재설계 대신 lite 를 택한 이유: guard 의 adversary 는 AI (Claude Code)
+이지 user 가 아니다. user authority 모델에선 cryptographic nonce 는
+과설계이고, shell semantics 상 `VAR=val cmd` (inline) 와 `export VAR=val`
+(session) 은 hook 이 구분할 수 없다. 따라서 honest docs + visible
+diagnostic 이 올바른 교정.
+
+### Docs
+
+- **§15 HIGH-3 lite / `README.md` ACORN_GUARD_BYPASS 의미 명확화**:
+  README 가 "1회 우회" (환경변수 섹션) 와 "세션 내 전체 우회" (guard
+  환경변수 표) 를 동시에 주장하던 내부 모순 해소. inline vs export
+  두 시나리오를 3곳 (환경변수 섹션, guard 표, 트러블슈팅) 일관 명시.
+  트러블슈팅의 "1회 우회" → "inline 만 쓰고 export 하지 말 것" 으로
+  강화.
+
+### Added
+
+- **§15 HIGH-3 lite / `acorn doctor` 의 BYPASS 세션 감지**: `DoctorArea`
+  에 `'guard'` 추가. `runDoctor` 가 `opts.runtimeEnv.ACORN_GUARD_BYPASS
+  === '1'` 감지 시 critical-severity 이슈로 노출. `issues` 배열 맨
+  앞에 삽입해 `renderDoctor` 출력 상단에 표시 — "guard 비활성" 상태가
+  다른 이슈에 묻히지 않도록. hint 는 두 복구 경로 (session unset /
+  inline 으로 전환) 모두 안내. `runtimeEnv` 미제공 시 (기존 테스트
+  caller) skip — backward compat 유지.
+
+### Testing
+
+- 215 단위 테스트 (v0.3.4 의 212 + HIGH-3 lite doctor 3). Mac 기준 전부
+  pass 예상. Windows 18 실패는 기존 `symlinkSync` EPERM 그대로.
+
+### Deferred to v0.4.0
+
+🟠 HIGH-2 (공급망 sha256 pinning + `lock.repo` allowlist + npm
+`--provenance`) 가 남은 유일한 🟠 항목. 설계 결정 3건 선행 필요 (ADR-020
+예정): pinning 대상 파일 선정, allowlist schema 범위, CI 파이프라인
+(GitHub Actions OIDC). v0.4.0 은 `acorn uninstall` 같은 새 user 기능과
+결합한 정식 minor bump 로 진행 권장.
+
+🟡 v1.0 전 부채 6건 + 🟢 Round 3 도그푸딩 유지.
+
 ## [0.3.4] — 2026-04-17
 
 🟠 v0.4.x 큐 중 코드 하드닝 2건 (H-3 / H-1) 을 v0.3.x 내 patch 로
