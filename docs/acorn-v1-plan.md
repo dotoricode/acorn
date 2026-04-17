@@ -517,6 +517,48 @@ acorn 완성 후: acorn 자체로 환경 구축하여 차기 개발 진행
 - `preserved` + follow-symlink → 로그에 "symlink target HEAD 확인됨" 표기
 - drift 감지되면 사용자가 `acorn config ... lock` 으로 직접 갱신 (v0.3 범위 밖, v0.4+ `acorn lock bump`)
 
+**v0.3.4 H-3 개정**: `--follow-symlink` 성공 경로를 엄격화. revParse throw 흡수 제거.
+`target 이 git 저장소 아님 → NOT_A_REPO` / `revParse 실행 실패 → REV_PARSE` /
+`HEAD ≠ lock SHA → SHA_MISMATCH` (drift 확정, 조치 안내) / `HEAD == lock SHA → adopted`.
+`'preserved'` action 은 현재 어느 경로도 emit 하지 않으며 VendorAction union 에만 남아 있다.
+
+### ADR-020: 공급망 무결성 (v0.4.0)
+
+**결정**: 공격 표면을 3조각으로 분해하고, 각각에 대해 구현 vs 연기 판정.
+
+**(1) `harness.lock.tools.*.repo` allowlist — 구현**
+
+현재 `parseLock` 은 `/^[\w.-]+\/[\w.-]+$/` 형식만 확인해 어떤 GitHub 저장소든 허용. 악성 lock 파일 (dotfiles 리포 탈취 등) 이 `omc.repo` 를 공격자 리포로 교체하면 다음 `acorn install` 이 그대로 clone. v0.4.0 은 `ALLOWED_REPOS` 를 hardcode 하고 lock 파싱 단계에서 검증:
+
+- `omc: Yeachan-Heo/oh-my-claudecode`
+- `gstack: garrytan/gstack`
+- `ecc: affaan-m/everything-claude-code`
+
+Escape hatch: `ACORN_ALLOW_ANY_REPO=1` 환경변수 — fork 시험, 내부 미러, 로컬 dev 용.
+Doctor 가 lock 의 repo 가 allowlist 에서 벗어났는데 override 도 없으면 critical.
+
+Breaking 가능성이 있으므로 v0.3.x patch 가 아닌 v0.4.0 minor bump 로 ship.
+
+**(2) npm `--provenance` CI workflow — 구현**
+
+GitHub Actions 에서 tag `v*.*.*` push 시 OIDC 로 `npm publish --provenance` 수행. sigstore 가 "이 tarball 은 이 repo 의 이 commit 에서 빌드됨" 을 서명한 attestation 을 npm 에 함께 업로드. 사용자는 `npm audit signatures` 또는 `npm view @dotoricode/acorn --provenance` 로 확인 가능.
+
+방어 대상: npm 계정 탈취 → 무작위 tarball 업로드. 탈취자가 GitHub Actions workflow 도 통과시키려면 repo commit 권한까지 필요 (2-hop), 훨씬 비싼 공격으로 격상.
+
+수동 `npm publish` 는 실수 방지를 위해 README/CONTRIBUTING 에 금지 명기.
+
+**(3) shipped 파일 sha256 pinning — v0.5+ 연기**
+
+Critic 제안: `<harnessRoot>/hooks/guard-check.sh` 를 bundled 원본과 sha256 비교해 tampering 감지. 분석 후 연기:
+
+- 공격 모델이 narrow: bundled 원본(`node_modules/`) 은 trusted 로 가정하고 deployed 만 의심 — global npm 설치 + user-owned harness root 인 경우에만 유효. `npm link` / dev 환경에선 둘 다 user-writable 이라 의미 없음.
+- 구현 비용이 moderate: build 타임 sha256 계산 + install-time 비교 + doctor advisory 로직 + 사용자 custom 수정 허용할지 정책 결정 (strict vs advisory).
+- (1)+(2) 가 이미 유의미한 방어. (3) 은 "정교한 FS-only 공격자" 대비 한 층 더.
+
+v0.5+ 에서 재평가 — integration test (ARCH-R1) 가 먼저 와야 pinning 회귀 잡을 수 있다.
+
+**기타**: `npm pack files 화이트리스트 (v0.3.1 CRIT-1)` 는 이미 v0.3.x 에서 완료. ADR 수준의 명문화는 필요 없음 (CLAUDE.md "npm pack 화이트리스트" 섹션 + CHANGELOG [0.3.1] 에 기록).
+
 ---
 
 ## 12. 검증 현황
