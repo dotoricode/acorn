@@ -25,6 +25,7 @@ import {
   defaultBackupRoot,
 } from '../core/settings.ts';
 import { defaultHarnessRoot } from '../core/env.ts';
+import { stripBom } from '../core/bom.ts';
 import { beginTx } from '../core/tx.ts';
 
 /**
@@ -113,10 +114,6 @@ function writeLockAtomic(
   }
 }
 
-function stripBom(raw: string): string {
-  return raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-}
-
 function requireConfirm(
   prompt: string,
   opts: ConfigOptions,
@@ -161,9 +158,21 @@ function setGuardField(
   }
 
   // Read / mutate / re-validate / atomic write
-  const raw = readFileSync(lockPath, 'utf8');
-  const stripped = stripBom(raw);
-  const data = JSON.parse(stripped) as Record<string, unknown>;
+  // §15 v0.4.1 #9: 첫 readLock 이후 파일이 외부에서 손상된 경우 (TOCTOU),
+  // bare JSON.parse 가 SyntaxError 를 던져 ConfigError 외피를 우회해
+  // exitFor 의 CONFIG exit code 매핑을 깨뜨렸다. 이제 ConfigError/SCHEMA 로 번역.
+  let data: Record<string, unknown>;
+  try {
+    const raw = readFileSync(lockPath, 'utf8');
+    const stripped = stripBom(raw);
+    data = JSON.parse(stripped) as Record<string, unknown>;
+  } catch (e) {
+    throw new ConfigError(
+      `lock 재읽기 실패 (첫 검증 이후 외부에서 변경되었을 수 있음): ${lockPath} ` +
+        `(${e instanceof Error ? e.message : String(e)})`,
+      'SCHEMA',
+    );
+  }
   if (typeof data['guard'] !== 'object' || data['guard'] === null) {
     throw new ConfigError(
       `lock 에 guard 객체가 없거나 형식이 잘못됨: ${lockPath}`,
@@ -174,8 +183,15 @@ function setGuardField(
   const newData = { ...data, guard };
   const newJson = `${JSON.stringify(newData, null, 2)}\n`;
 
-  // parseLock 로 재검증 (schema 보장)
-  parseLock(newJson);
+  // parseLock 로 재검증 (schema 보장). LockError 도 ConfigError/SCHEMA 로 번역.
+  try {
+    parseLock(newJson);
+  } catch (e) {
+    throw new ConfigError(
+      `lock 재검증 실패 (변경 후 스키마 위반): ${e instanceof Error ? e.message : String(e)}`,
+      'SCHEMA',
+    );
+  }
 
   const backup = backupLock(lockPath, harnessRoot);
   writeLockAtomic(lockPath, newJson);
@@ -213,13 +229,22 @@ function resetEnv(opts: ConfigOptions): ConfigAction {
 
   const current = readSettings(settingsPath);
   const env = current['env'];
-  if (typeof env !== 'object' || env === null || Array.isArray(env)) {
+  // §15 v0.4.1 #2: absent 는 no-op, malformed 는 fail-close.
+  if (env === undefined) {
     return {
       kind: 'reset',
       key: 'env.reset',
       removedKeys: [],
       backup: null,
     };
+  }
+  if (typeof env !== 'object' || env === null || Array.isArray(env)) {
+    throw new ConfigError(
+      `settings.json 의 env 형식 오류 — object 여야 합니다 (${settingsPath}). ` +
+        `현재 타입: ${Array.isArray(env) ? 'array' : env === null ? 'null' : typeof env}. ` +
+        `수동 수정 후 재실행.`,
+      'SCHEMA',
+    );
   }
 
   const envRecord = env as Record<string, unknown>;

@@ -277,6 +277,53 @@ test('runConfig: env.reset — env 키 없으면 removedKeys 빈 배열', () => 
   }
 });
 
+// §15 v0.4.1 #9 — setGuardField 의 두 번째 readFile + JSON.parse 가 TOCTOU 로
+// 깨진 파일을 만나면 bare SyntaxError 가 ConfigError 외피를 우회했다.
+// 이제 ConfigError/SCHEMA 로 번역되어 exitFor 가 EXIT.CONFIG 로 올바르게 매핑.
+test('runConfig: set guard.mode 중간에 lock 이 malformed → ConfigError(SCHEMA)', () => {
+  const w = makeWS();
+  try {
+    // 첫 readLock 은 통과하도록 정상 lock 씀. confirm 콜백이 "true" 돌려주기
+    // 직전에 파일을 깨뜨려 TOCTOU 를 재현한다.
+    const confirm = () => {
+      writeFileSync(w.lockPath, '{ this is not json', 'utf8');
+      return true;
+    };
+    assert.throws(
+      () =>
+        runConfig('guard.mode', 'warn', {
+          lockPath: w.lockPath,
+          harnessRoot: w.harnessRoot,
+          confirm,
+        }),
+      (e: unknown) => e instanceof ConfigError && e.code === 'SCHEMA',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+// §15 v0.4.1 #2 — env 가 malformed (array/null/scalar) 면 fake no-op 대신 ConfigError.
+// 이전 v0.4.0 까지: silent "removedKeys: []" 반환 → 사용자는 잘못된 설정이 정상인 줄 앎.
+test('runConfig: env.reset — env 가 배열 → ConfigError(SCHEMA)', () => {
+  const w = makeWS();
+  try {
+    writeFileSync(w.settingsPath, JSON.stringify({ env: ['oops'] }));
+    assert.throws(
+      () =>
+        runConfig('env.reset', undefined, {
+          lockPath: w.lockPath,
+          settingsPath: w.settingsPath,
+          harnessRoot: w.harnessRoot,
+          yes: true,
+        }),
+      (e: unknown) => e instanceof ConfigError && e.code === 'SCHEMA',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
 test('runConfig: 알 수 없는 key → UNKNOWN_KEY 에러', () => {
   const w = makeWS();
   try {
