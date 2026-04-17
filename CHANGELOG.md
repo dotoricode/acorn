@@ -3,6 +3,67 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.4.1] — 2026-04-18
+
+🟠 **Codex review (2026-04-18) 5건 fail-close 복원**. v0.4.0 직후 외부
+검토가 식별한 10건 중 즉시 대응 가치가 있는 P0 5건 (empty-string env,
+malformed env silent overwrite, BOM 비대칭, diffEnv self-compare,
+TOCTOU `SyntaxError` leak) 을 v0.4.1 patch 로 해소. 나머지 5건은
+v0.4.2 (path traversal, shell:win32) / v0.5+ (tx ID, junction test) /
+부채 기록 (SKILL.md 하드코드) 로 분류. 테스트 218 → 233 (+15).
+
+### Fixed
+
+- **§15 v0.4.1 #3 / `src/core/env.ts`**: `defaultClaudeRoot` /
+  `defaultHarnessRoot` 의 `??` 를 빈 문자열도 fallback 하도록 교정.
+  `CLAUDE_CONFIG_DIR=''` / `ACORN_HARNESS_ROOT=''` 로 실행 시 `join('',
+  'skills', 'harness')` 가 상대경로가 되어 CWD 아래에 settings/lock/
+  tx.log/vendor 를 쓰던 silent 오염 차단. `envOrDefault` 헬퍼 한 곳에서
+  nullish + empty-string 둘 다 처리.
+- **§15 v0.4.1 #2 / `src/core/settings.ts` + `src/commands/config.ts`**:
+  `env` 섹션이 `object` 가 아닌 경우 (null / array / scalar) 조용히
+  빈 섹션으로 코어스하던 `getEnvSection` 을 **fail-close** 로 교정.
+  이전에는 `planMerge` 가 모든 키를 missing 으로 보고 `mergeEnv` 가
+  사용자 설정을 덮어써 유실됐다. 이제 `SettingsError(PARSE)` throw.
+  `config env.reset` 도 동일 증상을 `ConfigError(SCHEMA)` 로 교정 —
+  이전엔 "removedKeys: []" fake no-op 반환.
+- **§15 v0.4.1 #4 / `src/core/settings.ts`**: `readSettings` 가 UTF-8
+  BOM 을 선두에서 제거하도록 추가. 이전엔 `parseLock` 에만 있어 Windows
+  에디터가 `settings.json` 을 BOM 포함 저장하면 PARSE 에러로 탈락.
+  중복 로직을 `src/core/bom.ts` 공용 헬퍼로 통합 (lock.ts / config.ts /
+  settings.ts 3곳 single source).
+- **§15 v0.4.1 #5 / `src/commands/status.ts`**: `collectStatus` 의
+  `runtimeEnv` 미지정 시 `diffEnv(desired, desired)` self-compare 로
+  "모두 match" fake 반환하던 거짓 계약 제거. 이제 빈 배열 (`envRuntime =
+  []`) 반환 — "runtime 체크 요청 안 함" 의미. 라이브러리 호출자가
+  자기도 모르게 green 을 받던 경로 차단. CLI 경로 (`index.ts`) 는
+  이미 `runtimeEnv: process.env` 명시 전달 중이라 사용자 체감 변화 없음.
+- **§15 v0.4.1 #9 / `src/commands/config.ts`**: `setGuardField` 의 두
+  번째 `readFileSync + JSON.parse` 를 `try/catch` 로 감싸 파일 손상
+  시 `ConfigError(SCHEMA)` 로 번역. 이전엔 bare `SyntaxError` 가
+  `exitFor` 의 exit-code 매핑 (`CONFIG=2`) 을 우회해 `FAILURE=1` 로
+  새어나감. `parseLock` 재검증 경로의 `LockError` 도 동일하게 번역.
+  첫 `readLock` 과 두 번째 read 사이 TOCTOU 손상 방어.
+
+### Added
+
+- **`src/core/bom.ts`** (신규): UTF-8 BOM 제거 헬퍼 단일 소스. lock /
+  config / settings 3 곳 재사용.
+- 회귀 테스트 +15: bom 4, env 2 (empty-string), settings 5 (malformed
+  + BOM), config 2 (malformed env.reset + TOCTOU), status 2
+  (runtimeEnv contract).
+
+### Deferred (부채 기록)
+
+- **P1 / v0.4.2 예정**: `installVendor` 의 `tool` 경로 traversal guard
+  (codex #1), `defaultGstackSetup` Windows `shell:true` 제거 (codex #7).
+- **P2 / v0.5+**: `tx.ts` transaction ID 도입 — 한 corrupt 라인이
+  영구 IN_PROGRESS 유발하는 §15 H3 트레이드오프 재설계 (codex #6,
+  ADR-021 예정). Windows 테스트 `symlinkSync(..., 'dir')` → junction
+  전환으로 EPERM 18건 해소 (codex #10, checkpoint 🟡#6 와 합본).
+- **부채 기록만**: `verifyGstackSetupArtifacts` 의 `SKILL.md` 하드
+  코드 (codex #8) — SHA 락 전제상 silent false-negative 경로 없음.
+
 ## [0.4.0] — 2026-04-18
 
 🟠 v0.4.x queue 의 마지막 항목 **HIGH-2 공급망 무결성** 을 "lite" 스코프
