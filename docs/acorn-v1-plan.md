@@ -572,14 +572,14 @@ direnv 설정 완료
 
 ### 🔴 CRITICAL — 매 fresh install 또는 silent success-lie
 
-| ID | 증상 | 증거 |
-|---|---|---|
-| C1 | `acorn install` 가 빈 harness root 에서 즉시 `LOCK_NOT_FOUND` 로 실패. install 이 `harness.lock` 을 부트스트랩하지 않음 | `src/commands/install.ts:186-188` → `src/core/lock.ts:153` |
-| C2 | `settings.json` 이 참조하는 `hooks/guard-check.sh` 가 install 로 배포되지 않음 (ADR-017 로 수습) | 본 문서 §11 ADR-017 |
-| C3 | 두 번째 `runInstall()` 호출 시 `gstack ./setup --host auto` 가 무조건 재실행. "두 번째 호출은 모든 단계 noop" 불변식 위반 | `src/commands/install.ts:259-283` |
-| C4 | gstack 심링크 `wrong_target` 분기에서 `unlinkSync` 전 백업 없음. "비파괴" 원칙 위반 | `src/core/symlink.ts:111-131` |
-| C5 | `defaultGstackSetup` 가 spawn exit=0 만 보고 성공 보고. gstack artifact (`.claude/skills/gstack/SKILL.md` 등) 실존 검증 없음 — 셸 파싱 에러 흡수 시 install 이 ✅ 로 끝남 | `src/commands/install.ts:78` |
-| C6 | `runDoctor` 가 `isDirty` 실패를 try-catch 로 흡수 → dirty vendor 를 ✅ 로 보고. install 은 거부, doctor 는 통과: 검증 표면이 거짓말 | `src/commands/doctor.ts:101-103` |
+| ID | 증상 | 증거 | 도그푸딩 포착 (Round 2, `DOGFOOD.md`) |
+|---|---|---|---|
+| C1 | `acorn install` 가 빈 harness root 에서 즉시 `LOCK_NOT_FOUND` 로 실패. install 이 `harness.lock` 을 부트스트랩하지 않음 | `src/commands/install.ts:186-188` → `src/core/lock.ts:153` | ❌ — 이미 lock 있는 상태에서만 테스트 |
+| C2 | `settings.json` 이 참조하는 `hooks/guard-check.sh` 가 install 로 배포되지 않음 (ADR-017 로 수습) | 본 문서 §11 ADR-017 | ⚠️ — 본 라운드 S7 을 별도 세션으로 deferred. Session-A 의 PreToolUse 훅 설정 시도에서 확인됨 |
+| C3 | 두 번째 `runInstall()` 호출 시 `gstack ./setup --host auto` 가 무조건 재실행. "두 번째 호출은 모든 단계 noop" 불변식 위반 | `src/commands/install.ts:259-283` | ❌ — D-1 에서 vendor noop 만 확인, gstack setup 재실행 여부는 관찰 안 함 |
+| C4 | gstack 심링크 `wrong_target` 분기에서 `unlinkSync` 전 백업 없음. "비파괴" 원칙 위반 | `src/core/symlink.ts:111-131` | ❌ — D-2 는 `absent` 분기만 탐. `wrong_target` 분기 미경험 |
+| C5 | `defaultGstackSetup` 가 spawn exit=0 만 보고 성공 보고. gstack artifact (`.claude/skills/gstack/SKILL.md` 등) 실존 검증 없음 — 셸 파싱 에러 흡수 시 install 이 ✅ 로 끝남 | `src/commands/install.ts:78` | ❌ — spawn exit 만 보면 늘 통과. artifact 검증 자체가 기능 부재 |
+| C6 | `runDoctor` 가 `isDirty` 실패를 try-catch 로 흡수 → dirty vendor 를 ✅ 로 보고. install 은 거부, doctor 는 통과: 검증 표면이 거짓말 | `src/commands/doctor.ts:101-103` | ⚠️ — D-0/S3 에서 gstack dirty 가 정상 감지된 건 catch 안 들어간 운 좋은 케이스. isDirty 실패 경로 (권한·손상) 를 타야 silent-lie 발화 |
 
 ### 🟠 HIGH — 신뢰 체인 / fail-close 위반
 

@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-17 (Windows / 도그푸딩 Round 2 **종료**, v0.2.0 S1 착수 지점)
+> 마지막 갱신: 2026-04-17 (Windows / 도그푸딩 Round 2 **종료**, 3-critic audit §15 반영, **v0.1.2 C1~C6 착수 지점**)
 
 ---
 
@@ -10,13 +10,14 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main`, 태그 `v0.1.1` push 완료 (+ `v0.1.0` 기존) |
-| 진행 중 작업 | **v0.2.0 S1 착수 — `doctor --json` severity summary 필드** (`.summary: {critical, warning, info}` + `.okCritical` 편의 필드). S9 실증에서 도출. schema 확장 1-2h 단위, warm-up 커밋. Round 2 는 2026-04-17 종료 (메모 11건 → 10+ 기준 충족). |
-| 다음 작업 | (a) S1 구현 + 테스트 + 커밋 → (b) S2 (drift/SHA 표시 개선) → (c) S3/S4/S5 본 feature (`acorn config`, `--adopt`, `acorn lock`) — `--adopt` 전에 `docs/acorn-v2-plan.md` 설계 노트 1장 |
-| 테스트 | Windows: 107/120 (13 실패 모두 기존 EPERM 심링크·경로구분자). Mac 기준 120/120 예상. |
+| 진행 중 작업 | **v0.2.0 S1 완료 (`e38b29d`, local)** — `doctor --json` summary/okCritical 필드. 같은 날 3-critic audit (`6c0c125`) 에서 CRITICAL 6 / HIGH 4 / MEDIUM 5 / LOW 3 발견 → **우선순위 피벗: 다음은 v0.1.2 C1~C6** |
+| 다음 작업 | (a) C6 doctor `isDirty` 흡수 노출 (방금 `doctor.ts` 편집 컨텍스트 재활용) → (b) C1 install lock 부트스트랩 + `S5 acorn lock` 일부 포함 → (c) C2 hooks 배포 phase (ADR-017) → (d) C5 gstack artifact 검증 → (e) v0.1.2 release → (f) v0.1.3 C3/C4/H3/H4 → (g) v0.2.0 S2~S8 + §15 H1/M1~M5 |
+| 테스트 | Windows: 106/124 (18 실패 — 3 이 S1 신규 setupHealthy 의존, 나머지 15 기존 EPERM·경로구분자). Mac 기준 124/124 예상 |
 | v0.1.1 구성 | 커밋 6개 (hotfix 5 + release 1): `aea3fdc` lock BOM → `730368f` schema_version 누락 → `e6dcdc2` install hint → `849fdad` --run-gstack-setup → `ddbc8a6` EXPECTED_DIRTY_PATHS → `b3c7668` release bump |
-| v0.2.0 큐 (Round 2 종료 시점 8건) | S1 `doctor summary` (소) · S2 drift/SHA 표시 개선 (소) · S3 `acorn config` (중) · S4 `--adopt` (대, 설계 문서 필요) · S5 `acorn lock` (중) · S6 Windows shim helper (소, 타 머신 재확인 후) · S7 `[6/7]` 라인 축약 (극소) · S8 jq 설치 안내 1줄 (극소) |
+| 처리 계획 (정본) | **`acorn-v1-plan.md §15`** — v0.1.2 (C1/C2/C5/C6) / v0.1.3 (C3/C4/H3/H4) / v0.2.0 (H1/M1~M5 + 도그푸딩 feature S2~S8) / 백로그 (L1~L3) |
+| 로컬 unpushed | `789ff8c` docs(dogfood) Round 2 종료 + `e38b29d` feat(doctor) S1 + (작성 중) docs(reconcile) audit §15 크로스참조 |
 | 실사용 환경 | Mac personal, CLAUDE_CONFIG_DIR=~/.claude-personal, ECC 는 로컬 개발 레포 `~/01_private/everything-claude-code` 별도 관리. Windows: `D:\.claude\skills\harness\`, acorn 은 `C:\Users\SMILE\AppData\Roaming\npm\acorn.{cmd,}` 수동 shim (Node 24 가 Junction traverse 못 함) |
-| 별도 처리 | S7 Guard 훅 실전 시나리오는 Claude Code UI 조작이 필요해 bash tool 밖. DOGFOOD.md § S7 recipe 섹션에 절차 정리, 자연 사용 중 1회 돌리고 `dn` 메모 남기기 |
+| 별도 처리 | S7 Guard 훅 실전 (Claude Code UI) — bash tool 밖, DOGFOOD.md § S7 recipe 참조. 단 C2 가 v0.1.2 에서 해결되면 이 recipe 의 전제 ("hooks/guard-check.sh 경로") 도 install 이 보장하게 바뀜 |
 
 ---
 

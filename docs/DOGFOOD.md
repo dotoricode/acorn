@@ -42,20 +42,28 @@
 
 ### v0.1.2-hotfix 큐
 
-- **없음** — Round 2 전 시나리오 blocker 없이 통과. hotfix 감이면 즉시 고쳤을 건데 아무것도 안 걸림. 이 자체가 v0.1.0/0.1.1 설계·구현 검증됐다는 긍정 신호.
+- **도그푸딩 실증만으로는 blocker 0** — Round 2 38회 실행 전 시나리오 통과.
+- **단, 같은 날 (2026-04-17) 3-critic 병렬 코드 audit (`6c0c125`) 에서 CRITICAL 4건 발견** → **정본: `acorn-v1-plan.md §15`**. 도그푸딩이 놓친 이유도 §15 표에 기록.
+  - **C1** 빈 harness root `install` 즉시 LOCK_NOT_FOUND (lock 부트스트랩 누락) — 도그푸딩은 lock 이미 있는 상태에서만 테스트
+  - **C2** `hooks/guard-check.sh` 가 settings.json 참조 대상이지만 install 이 배포 안 함 (ADR-017) — 본 라운드 S7 을 별도 세션 deferred 로 미룬 탓
+  - **C5** `defaultGstackSetup` 가 spawn `exit=0` 만 보고 ✅ — gstack artifact 실존 검증 없음, 도그푸딩에서 spawn 결과만 관찰
+  - **C6** `runDoctor` 가 `isDirty` 실패를 try-catch 흡수 → dirty vendor 를 ✅ 보고. D-0/S3 에서 gstack dirty 가 정상 감지된 건 catch 에 안 들어간 운 좋은 케이스일 뿐
+- **결론**: 도그푸딩은 사용자-경험 lens, §15 는 코드-구조 lens. 두 lens 가 다른 결론을 내는 건 정상이며, v0.1.2 는 §15 우선순위대로 진행.
 
-### v0.2.0 큐 최종 우선순위 (Round 2 종료 시점)
+### v0.2.0 큐 (도그푸딩 실증 — 기능 추가 레이어)
 
-| # | 항목 | 크기 | 근거 |
-|---|---|---|---|
-| **S1** | `doctor --json` severity summary 필드 (`.summary: {critical, warning, info}` + `.okCritical`) | 소 | S9 실증에서 즉각 CI 가치. schema 확장만, 1-2h. **v0.2.0 warm-up.** |
-| S2 | drift/SHA 표시 개선 (short SHA 충돌 시 차이 나는 위치까지 확장 + checkout 실패 hint cause 별 분기) | 소 | S4 실증. 단순 UX 개선이라 독립 commit 적합 |
-| S3 | `acorn config` (`env.reset`, `guard.mode` 조작 helper) | 중 | Round 1 "jq 저글링 대신" 실증, 일상 편의성 |
-| S4 | `acorn install --adopt` (기존 수동 설치 흡수) | 대 | Round 1 `NOT_A_REPO` 심링크 보호 맥락. **비파괴 원칙 설계 pressure 있음 — 별도 설계 문서 필요** |
-| S5 | `acorn lock` (init/validate/bump helper) | 중 | Round 1 "수동 편집 위험" (`acorn_version: "0.0.0-dev"` 사고 방지) |
-| S6 | Windows `npm link` 대체 shim helper (`scripts/windows-install-shim.bat` or npm postinstall hook) + README 안내 | 소 | Round 2 실증. **다른 Windows 머신에서 재현 확인 후 우선순위 재평가** |
-| S7 | `install` 출력의 `[6/7] setup 콜백 미제공` 라인 멱등 실행 시 축약 | 소 | Round 1~2 계속 거슬림, 사소함 |
-| S8 | README/HANDOVER 부트스트랩 섹션에 `jq` 설치 안내 1줄 | 극소 | Round 2 실증, docs-only |
+**구조·스펙 drift 계열 (H1, M1~M5) 은 §15 정본 참조.** 아래는 도그푸딩 실증에서 도출된 "없으면 불편한 기능" 만 추린 별개 트랙.
+
+| # | 항목 | 크기 | 근거 | 상태 |
+|---|---|---|---|---|
+| **S1** | `doctor --json` severity summary 필드 (`.summary: {critical, warning, info}` + `.okCritical`) | 소 | S9 실증 | **완료 (`e38b29d`)** |
+| S2 | drift/SHA 표시 개선 (short SHA 충돌 시 차이 나는 위치까지 확장 + checkout 실패 hint cause 별 분기) | 소 | S4 실증 | 대기 |
+| S3 | `acorn config` (`env.reset`, `guard.mode` 조작 helper) | 중 | Round 1 "jq 저글링 대신" 실증 | 대기 |
+| S4 | `acorn install --adopt` (기존 수동 설치 흡수) | 대 | Round 1 `NOT_A_REPO` 심링크 보호 — **설계 문서 필요** | 대기 |
+| S5 | `acorn lock` (init/validate/bump helper) | 중 | Round 1 "수동 편집 위험" | 대기 — **§15 C1 (lock 부트스트랩) 과 연계해 v0.1.2 에 일부 포함 가능** |
+| S6 | Windows `npm link` 대체 shim helper (`scripts/windows-install-shim.bat` or npm postinstall hook) + README 안내 | 소 | Round 2 실증 | 대기 — 타 머신 재확인 후 |
+| S7 | `install` 출력의 `[6/7] setup 콜백 미제공` 라인 멱등 실행 시 축약 | 소 | Round 1~2 거슬림 | 대기 |
+| S8 | README/HANDOVER 부트스트랩 섹션에 `jq` 설치 안내 1줄 | 극소 | Round 2 실증, docs-only | 대기 |
 
 ### § S7 recipe (별도 세션 — 자연 사용 중 1회)
 
