@@ -456,8 +456,9 @@ test('runInstall: logger 호출 (진행 추적)', () => {
       skipGstackSetup: true,
       logger: (line) => lines.push(line),
     });
-    assert.ok(lines.some((l) => l.includes('[1/7]')));
-    assert.ok(lines.some((l) => l.includes('[7/7]')));
+    assert.ok(lines.some((l) => l.includes('[1/8]')));
+    assert.ok(lines.some((l) => l.includes('[7/8]')));
+    assert.ok(lines.some((l) => l.includes('[8/8]')));
   } finally {
     w.cleanup();
   }
@@ -492,6 +493,56 @@ test('runInstall: 빈 harness root → lock 템플릿 시드 + LOCK_SEEDED 에�
     assert.ok(existsSync(lockPath), `lock 이 생성되어야 함: ${lockPath}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runInstall: hooks 배포 phase 추가 (§15 C2 / ADR-017)', () => {
+  const w = makeWorkspace();
+  try {
+    const git = makeFakeGit({ heads: new Map() });
+    const result = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+    });
+    // result 에 hooks 필드 포함
+    assert.equal(result.hooks.action, 'created');
+    // 실제 파일이 harnessRoot/hooks/guard-check.sh 로 배달됨
+    assert.ok(
+      existsSync(join(w.harnessRoot, 'hooks', 'guard-check.sh')),
+      'install 이 guard-check.sh 를 디스크에 배달해야 함',
+    );
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runInstall: 멱등 2회차에선 hooks noop', () => {
+  const w = makeWorkspace();
+  try {
+    const git = makeFakeGit({ heads: new Map() });
+    runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+    });
+    const second = runInstall({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git,
+      skipGstackSetup: true,
+    });
+    assert.equal(second.hooks.action, 'noop');
+  } finally {
+    w.cleanup();
   }
 });
 

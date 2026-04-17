@@ -92,7 +92,7 @@ acorn status --json               # 기계 판독
 | 계층 | 모듈 | 역할 |
 |---|---|---|
 | CLI | `src/index.ts` | argv 라우팅 + exit code 매핑 |
-| commands | `install.ts` | 7단계 preflight-우선 설치 파이프라인 |
+| commands | `install.ts` | 8단계 preflight-우선 설치 파이프라인 |
 | commands | `status.ts` | 읽기 전용 상태 요약 + JSON |
 | commands | `doctor.ts` | 진단 + 이슈별 복구 힌트 |
 | core | `lock.ts` | harness.lock 스키마 검증 |
@@ -248,17 +248,20 @@ try {
 #### 실행 순서 (preflight 우선)
 
 ```
-[1/7] harness.lock 파싱
-[2/7] env 3키 계산
-[3/7] settings.json 충돌 체크   ← 읽기 전용, 조기 실패
-[4/7] vendors clone/checkout   (OMC, gstack, ECC)
-[5/7] gstack 심링크
-[6/7] gstack setup (콜백, 선택)
-[7/7] settings.json 원자 쓰기  ← 마지막, 백업 후
+[1/8] harness.lock 파싱
+[2/8] env 3키 계산
+[3/8] settings.json 충돌 체크   ← 읽기 전용, 조기 실패
+[4/8] vendors clone/checkout   (OMC, gstack, ECC)
+[5/8] gstack 심링크
+[6/8] gstack setup (콜백, 선택)
+[7/8] hooks 배포                ← v0.1.2 신설 (ADR-017): guard-check.sh
+[8/8] settings.json 원자 쓰기  ← 마지막, 백업 후
 ```
 
 **핵심 불변식**: 충돌이 감지되면 디스크를 건드리기 전에 중단된다.
-vendors clone은 [3/7] 통과 이후에만 시작한다.
+vendors clone은 [3/8] 통과 이후에만 시작한다. hooks 배포가 settings-write
+직전에 있어서, settings.json 이 참조하는 `<harnessRoot>/hooks/guard-check.sh`
+는 settings 가 활성화되는 순간 이미 디스크에 존재한다.
 
 #### 멱등성
 

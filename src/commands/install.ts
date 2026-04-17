@@ -34,6 +34,7 @@ import {
   type InstallVendorResult,
 } from '../core/vendors.ts';
 import { beginTx, lastInProgress } from '../core/tx.ts';
+import { installGuardHook, HooksError, type HooksResult } from '../core/hooks.ts';
 
 export type InstallErrorCode =
   | 'IN_PROGRESS'
@@ -41,6 +42,7 @@ export type InstallErrorCode =
   | 'VENDOR'
   | 'SYMLINK'
   | 'GSTACK_SETUP'
+  | 'HOOKS_WRITE'
   | 'SETTINGS_WRITE'
   | 'LOCK_SEEDED';
 
@@ -105,6 +107,7 @@ export interface InstallResult {
   readonly vendors: Readonly<Record<ToolName, InstallVendorResult>>;
   readonly gstackSymlink: EnsureResult;
   readonly gstackSetupRan: boolean;
+  readonly hooks: HooksResult;
   readonly settings: InstallEnvResult;
 }
 
@@ -205,18 +208,18 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   const { opts, log, harnessRoot, claudeRoot, settingsPath, git, tx } = ctx;
 
   // 1. lock 파싱
-  log(`[1/7] harness.lock 파싱`);
+  log(`[1/8] harness.lock 파싱`);
   tx.phase('lock');
   const lock = readLock(opts.lockPath);
 
   // 2. env 계산
-  log(`[2/7] env 계산`);
+  log(`[2/8] env 계산`);
   tx.phase('env');
   const desired = computeEnv(harnessRoot);
   const vRoot = vendorsRoot(harnessRoot);
 
   // 3. settings 충돌 체크 (읽기 전용, 조기 실패)
-  log(`[3/7] settings.json preflight`);
+  log(`[3/8] settings.json preflight`);
   tx.phase('settings-preflight');
   const current = readSettings(settingsPath);
   const plan = planMerge(current, desired);
@@ -234,7 +237,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   }
 
   // 4. vendors clone
-  log(`[4/7] vendors clone/checkout`);
+  log(`[4/8] vendors clone/checkout`);
   tx.phase('vendors');
   const vendors: Record<ToolName, InstallVendorResult> = {} as Record<
     ToolName,
@@ -263,7 +266,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   }
 
   // 5. gstack 심링크
-  log(`[5/7] gstack 심링크`);
+  log(`[5/8] gstack 심링크`);
   tx.phase('symlink');
   let gstackSymlink: EnsureResult;
   try {
@@ -281,9 +284,9 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   let gstackSetupRan = false;
   tx.phase('gstack-setup');
   if (opts.skipGstackSetup) {
-    log(`[6/7] gstack setup (스킵)`);
+    log(`[6/8] gstack setup (스킵)`);
   } else {
-    log(`[6/7] gstack setup 실행`);
+    log(`[6/8] gstack setup 실행`);
     try {
       const setupFn = opts.gstackSetup;
       if (setupFn) {
@@ -304,8 +307,33 @@ function runInstallInner(ctx: InnerContext): InstallResult {
     }
   }
 
-  // 7. settings 원자 쓰기 (백업 포함, 마지막)
-  log(`[7/7] settings.json 쓰기`);
+  // 7. hooks 배포 (ADR-017 / §15 C2) — settings.json 이 참조하는 artifact 를
+  //    install 이 실제로 디스크에 만든다. gstack-setup 직후, settings-write 직전.
+  log(`[7/8] hooks 배포`);
+  tx.phase('hooks');
+  let hooks: HooksResult;
+  try {
+    hooks = installGuardHook(harnessRoot);
+    if (hooks.action === 'noop') {
+      log(`      hooks: noop`);
+    } else if (hooks.action === 'updated') {
+      log(`      hooks: updated (backup: ${hooks.backup ?? '-'})`);
+    } else {
+      log(`      hooks: ${hooks.action} ${hooks.target}`);
+    }
+  } catch (e) {
+    throw new InstallError(
+      `hooks 배포 실패: ${e instanceof Error ? e.message : String(e)}`,
+      'HOOKS_WRITE',
+      e,
+      e instanceof HooksError && e.code === 'SOURCE_MISSING'
+        ? `패키지 무결성 문제로 보임. npm install 재실행 또는 배포본 재점검.`
+        : `<harnessRoot>/hooks/ 디렉토리 권한 확인 후 재실행.`,
+    );
+  }
+
+  // 8. settings 원자 쓰기 (백업 포함, 마지막)
+  log(`[8/8] settings.json 쓰기`);
   tx.phase('settings-write');
   let settings: InstallEnvResult;
   try {
@@ -339,6 +367,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
     vendors,
     gstackSymlink,
     gstackSetupRan,
+    hooks,
     settings,
   };
 }

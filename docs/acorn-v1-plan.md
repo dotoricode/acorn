@@ -551,7 +551,7 @@ direnv 설정 완료
 - [x] `rm -rf /tmp/foo` → 차단 *(Sprint 1)*
 - [x] `ACORN_GUARD_BYPASS=1` → 허용 + stderr 경고 *(Sprint 1)*
 - [x] 파싱 실패 → fail-close *(Sprint 1)*
-- [ ] `acorn install` 이 `<harnessRoot>/hooks/guard-check.sh` 자동 배포 *(v0.1.2 — ADR-017, §15 C2)*
+- [x] `acorn install` 이 `<harnessRoot>/hooks/guard-check.sh` 자동 배포 *(v0.1.2 — ADR-017 / §15 C2 구현 완료)*
 - [ ] `harness.lock.guard.patterns` 가 실제 차단 패턴에 영향 *(v0.2.0 — §15 H1)*
 
 ### 개발 품질

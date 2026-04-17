@@ -142,7 +142,7 @@ function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
     });
     io.stdout('');
     io.stdout(`✅ 설치 완료`);
-    io.stdout(`   settings: ${r.settings.action}  vendors: ${Object.values(r.vendors).map((v) => `${v.tool}=${v.action}`).join(' ')}`);
+    io.stdout(`   settings: ${r.settings.action}  hooks: ${r.hooks.action}  vendors: ${Object.values(r.vendors).map((v) => `${v.tool}=${v.action}`).join(' ')}`);
     return EXIT.OK;
   } catch (e) {
     io.stderr(formatError(e));
