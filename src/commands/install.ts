@@ -163,6 +163,13 @@ function vendorHint(name: ToolName, cause: unknown, vendorsRootPath: string): st
     case 'CHECKOUT':
     case 'REV_PARSE':
       return `git -C ${vPath} fsck 로 저장소 무결성 확인.`;
+    case 'IO':
+      // §15 H4: EACCES/ENOTDIR 같은 경로 접근 실패. "rm -rf" 류 파괴적 힌트 금지.
+      return (
+        `${vPath} 접근 권한 또는 파일시스템 상태 문제로 의심. ` +
+        `디렉토리 소유자/권한/마운트 상태 확인 후 재실행. ` +
+        `권한 변경 없이 디렉토리 자체를 이동하려면 mv ${vPath} ${vPath}.bak 후 acorn install.`
+      );
     default:
       return undefined;
   }

@@ -171,12 +171,24 @@ export interface InstallVendorResult {
   readonly commit: string;
 }
 
+/**
+ * 디렉토리가 비었는지 판정.
+ * §15 H4: 이전엔 readdirSync 예외를 catch 로 삼켜 false 반환했다.
+ * 그 결과 EACCES(권한)·ENOTDIR 같은 실 장애가 "not empty" 로 둔갑,
+ * 다음 분기인 isGitRepo 가 NOT_A_REPO 로 잘못 결론을 내고
+ * 사용자는 "rm -rf" 힌트를 받아 엉뚱한 조치를 취할 위험이 있었다.
+ *
+ * 현재: ENOENT (existsSync 와 readdirSync 사이 race) 만 "비었다" 로 받고,
+ * 그 외 에러는 호출자에게 propagate.
+ */
 function isEmptyDir(dir: string): boolean {
   if (!existsSync(dir)) return true;
   try {
     return readdirSync(dir).length === 0;
-  } catch {
-    return false;
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return true;
+    throw e;
   }
 }
 
@@ -197,7 +209,24 @@ export function installVendor(opts: InstallVendorOptions): InstallVendorResult {
   const path = join(opts.vendorsRoot, opts.tool);
   mkdirSync(opts.vendorsRoot, { recursive: true });
 
-  if (!existsSync(path) || isEmptyDir(path)) {
+  // §15 H4: isEmptyDir 가 EACCES 같은 실 장애를 NOT_A_REPO 로 둔갑시키지 않도록
+  // propagate 하고, 여기서 정확한 VendorError(IO) 로 번역한다.
+  let treatAsClone: boolean;
+  try {
+    treatAsClone = !existsSync(path) || isEmptyDir(path);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? 'unknown';
+    throw new VendorError(
+      `vendor 경로 접근 실패 (${code}): ${path} ` +
+        `(${e instanceof Error ? e.message : String(e)}). ` +
+        `NOT_A_REPO 로 둔갑되지 않도록 propagate. ` +
+        `디렉토리 권한/소유자 확인 후 재실행.`,
+      'IO',
+      opts.tool,
+    );
+  }
+
+  if (treatAsClone) {
     if (existsSync(path)) {
       try {
         rmSync(path, { recursive: true, force: true });
