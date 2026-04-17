@@ -176,10 +176,13 @@ test('getTool: tool entry 조회', () => {
 });
 
 test('defaultLockPath: ACORN_HARNESS_ROOT 우선', () => {
+  // §15 S3: node:path.join 은 플랫폼 분리자를 사용 (Windows `\`, POSIX `/`).
+  // 이전에 `/custom/root/harness.lock` 을 하드코딩해 Windows 에서 assertion fail
+  // 했던 회귀 제거 — 기대값도 join() 으로 계산해 플랫폼 중립.
   const original = process.env['ACORN_HARNESS_ROOT'];
   process.env['ACORN_HARNESS_ROOT'] = '/custom/root';
   try {
-    assert.equal(defaultLockPath(), '/custom/root/harness.lock');
+    assert.equal(defaultLockPath(), join('/custom/root', 'harness.lock'));
   } finally {
     if (original === undefined) {
       delete process.env['ACORN_HARNESS_ROOT'];
@@ -192,7 +195,7 @@ test('defaultLockPath: ACORN_HARNESS_ROOT 우선', () => {
 test('defaultLockPath: 인자가 env보다 우선', () => {
   process.env['ACORN_HARNESS_ROOT'] = '/should-not-use';
   try {
-    assert.equal(defaultLockPath('/explicit'), '/explicit/harness.lock');
+    assert.equal(defaultLockPath('/explicit'), join('/explicit', 'harness.lock'));
   } finally {
     delete process.env['ACORN_HARNESS_ROOT'];
   }
