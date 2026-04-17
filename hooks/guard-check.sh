@@ -14,33 +14,36 @@ if [ "${ACORN_GUARD_BYPASS:-0}" = "1" ]; then
   exit 0
 fi
 
-# 2. Mode 결정 (env > harness.lock > default:block)
-parse_mode() {
-  if [ -n "${ACORN_GUARD_MODE:-}" ]; then
-    printf '%s' "$ACORN_GUARD_MODE"
-    return 0
-  fi
-  [ ! -f "$LOCK_FILE" ] && return 1
+# 2. Mode / Patterns 결정 (env > harness.lock > default)
+parse_lock_field() {
+  local field="$1"
+  local default_val="$2"
+  [ ! -f "$LOCK_FILE" ] && { printf '%s' "$default_val"; return 0; }
   if command -v jq >/dev/null 2>&1; then
-    jq -r '.guard.mode // "block"' "$LOCK_FILE" 2>/dev/null
+    jq -r ".guard.${field} // \"${default_val}\"" "$LOCK_FILE" 2>/dev/null
   elif command -v node >/dev/null 2>&1; then
     node -e "
       try {
         const d = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-        process.stdout.write((d.guard && d.guard.mode) || 'block');
-      } catch (e) { process.exit(1); }
-    " "$LOCK_FILE" 2>/dev/null
+        process.stdout.write((d.guard && d.guard[process.argv[2]]) || process.argv[3]);
+      } catch (e) { process.stdout.write(process.argv[3]); }
+    " "$LOCK_FILE" "$field" "$default_val" 2>/dev/null
   else
-    return 1
+    printf '%s' "$default_val"
   fi
 }
 
-GUARD_MODE=$(parse_mode 2>/dev/null)
-[ -z "$GUARD_MODE" ] && GUARD_MODE="block"
+GUARD_MODE="${ACORN_GUARD_MODE:-$(parse_lock_field mode block)}"
+GUARD_PATTERNS="${ACORN_GUARD_PATTERNS:-$(parse_lock_field patterns strict)}"
 
 case "$GUARD_MODE" in
   block|warn|log) ;;
   *) GUARD_MODE="block" ;;
+esac
+
+case "$GUARD_PATTERNS" in
+  strict|moderate|minimal) ;;
+  *) GUARD_PATTERNS="strict" ;;
 esac
 
 # 3. stdin JSON 파싱 (fd 0, fail-close)
@@ -79,14 +82,17 @@ fi
 
 [ -z "$COMMAND" ] && exit 0
 
-# 4. 패턴 매칭 + mode 분기
-is_dangerous() {
+# 4. 패턴 매칭 — §15 H1 (v0.2.0): patterns 를 실제로 동작시키는 3단계 분기.
+#    strict   = 기존 전체 패턴 (일상 실수까지 차단)
+#    moderate = 대규모 파괴 + DB 관련만 (git push --force / reset --hard 는 통과)
+#    minimal  = 되돌릴 수 없는 catastrophic 만 (mkfs, dd /dev/, fork bomb, DROP DATABASE)
+#    push --force-with-lease 는 모든 레벨에서 항상 통과 (원격 상태 확인 후 강제 푸시)
+
+is_dangerous_strict() {
   local cmd="$1"
-  # Allowlist: --force-with-lease 는 원격 상태 체크 후에만 강제 푸시하는 안전 관용구
-  # push --force 패턴을 검사하기 전에 이 경우를 먼저 걸러낸다.
   case "$cmd" in
     *"push --force-with-lease"*)
-      # force-with-lease 만 쓰는 경우는 위험 아님. 다른 패턴 계속 검사.
+      # force-with-lease allowlist — 나머지 파괴적 패턴만 검사
       case "$cmd" in
         *"rm -rf"*|*"rm -fr"*|*"rm -Rf"*) return 0 ;;
         *"DROP TABLE"*|*"DROP DATABASE"*|*"TRUNCATE TABLE"*) return 0 ;;
@@ -114,19 +120,57 @@ is_dangerous() {
   return 1
 }
 
+is_dangerous_moderate() {
+  # strict 에서 git 일상 (push --force, reset --hard) 허용.
+  # rm -rf, chmod -R 777, DROP/TRUNCATE, catastrophic 은 여전히 차단.
+  local cmd="$1"
+  case "$cmd" in
+    *"rm -rf"*|*"rm -fr"*|*"rm -Rf"*) return 0 ;;
+    *"DROP TABLE"*|*"DROP DATABASE"*|*"TRUNCATE TABLE"*) return 0 ;;
+    *"chmod 777"*|*"chmod -R 777"*) return 0 ;;
+    *":(){ :|:& };:"*) return 0 ;;
+    *"mkfs"*) return 0 ;;
+    *"> /dev/sda"*|*"> /dev/nvme"*) return 0 ;;
+    *"dd if="*"of=/dev/"*) return 0 ;;
+  esac
+  return 1
+}
+
+is_dangerous_minimal() {
+  # 되돌릴 수 없는 hardware/catastrophic 만 차단.
+  # rm -rf, DROP TABLE 같은 일반 실수는 허용 (사용자가 의식적으로 선택).
+  local cmd="$1"
+  case "$cmd" in
+    *":(){ :|:& };:"*) return 0 ;;
+    *"mkfs"*) return 0 ;;
+    *"> /dev/sda"*|*"> /dev/nvme"*|*"> /dev/xvd"*) return 0 ;;
+    *"dd if="*"of=/dev/"*) return 0 ;;
+    *"DROP DATABASE"*) return 0 ;;
+  esac
+  return 1
+}
+
+is_dangerous() {
+  case "$GUARD_PATTERNS" in
+    moderate) is_dangerous_moderate "$1" ;;
+    minimal)  is_dangerous_minimal "$1" ;;
+    strict|*) is_dangerous_strict "$1" ;;
+  esac
+}
+
 if is_dangerous "$COMMAND"; then
   case "$GUARD_MODE" in
     block)
-      echo "[acorn-guard] 차단: $COMMAND" >&2
+      echo "[acorn-guard] 차단 (mode=$GUARD_MODE patterns=$GUARD_PATTERNS): $COMMAND" >&2
       echo "[acorn-guard] bypass: ACORN_GUARD_BYPASS=1 <command>" >&2
       exit 1
       ;;
     warn)
-      echo "[acorn-guard] ⚠️  경고: $COMMAND" >&2
+      echo "[acorn-guard] ⚠️  경고 (patterns=$GUARD_PATTERNS): $COMMAND" >&2
       exit 0
       ;;
     log)
-      echo "[acorn-guard] log: $COMMAND" >&2
+      echo "[acorn-guard] log (patterns=$GUARD_PATTERNS): $COMMAND" >&2
       exit 0
       ;;
   esac

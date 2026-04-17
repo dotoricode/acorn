@@ -433,17 +433,15 @@ Claude Code `~/.claude/settings.json`에 훅을 등록:
 }
 ```
 
-#### 차단 패턴
+#### 차단 패턴 — `guard.patterns` 3단계 (v0.2.0+)
 
-기본(block) 모드에서 다음 패턴이 포함된 커맨드는 exit 1로 차단된다.
+`harness.lock.guard.patterns` 에 따라 차단 범위가 결정된다 (§15 H1). `push --force-with-lease` 는 모든 레벨에서 항상 통과 (원격 상태 확인 후 강제 푸시하는 안전 관용구).
 
-| 카테고리 | 패턴 |
-|---|---|
-| 재귀 삭제 | `rm -rf`, `rm -fr`, `rm -Rf` |
-| DB 파괴 | `DROP TABLE`, `DROP DATABASE`, `TRUNCATE TABLE` |
-| git 강제 | `push --force`, `push -f`, `push --force-with-lease`, `reset --hard` |
-| 권한 개방 | `chmod 777`, `chmod -R 777` |
-| 시스템 파괴 | fork bomb, `mkfs`, `dd of=/dev/*`, `> /dev/sda\|nvme` |
+| patterns | 차단 대상 | 언제 쓰나 |
+|---|---|---|
+| **`strict`** (기본) | rm -rf, DROP/TRUNCATE, push --force/-f, reset --hard, chmod 777, fork bomb, mkfs, dd of=/dev/*, `> /dev/sda\|nvme` | AI 실수 최대 방어. 일상 실수까지 차단 |
+| **`moderate`** | strict 에서 `push --force` 와 `reset --hard` 제외 (git 일상 허용). rm -rf, DROP TABLE, chmod -R 777, catastrophic 은 여전히 차단 | git 워크플로우 중심 개발 |
+| **`minimal`** | fork bomb, mkfs, dd of=/dev/*, `> /dev/<drive>`, DROP DATABASE 만 (되돌릴 수 없는 hardware/catastrophic) | 개인 책임 하에 최소 안전망만 |
 
 #### 환경변수
 
@@ -451,9 +449,10 @@ Claude Code `~/.claude/settings.json`에 훅을 등록:
 |---|---|
 | `ACORN_GUARD_BYPASS=1` | 세션 내 전체 우회. 매 실행마다 stderr에 경고 출력. |
 | `ACORN_GUARD_MODE=block\|warn\|log` | 모드 강제 지정 (lock 파일보다 우선) |
+| `ACORN_GUARD_PATTERNS=strict\|moderate\|minimal` | 패턴 레벨 강제 지정 (lock 파일보다 우선, v0.2.0+) |
 | `ACORN_HARNESS_ROOT=<path>` | harness 루트 경로 (기본: `~/.claude/skills/harness`) |
 
-모드 우선순위: **env > `harness.lock.guard.mode` > default `block`**
+우선순위: **env > `harness.lock.guard.*` > default (`mode=block`, `patterns=strict`)**
 
 | 모드 | 동작 |
 |---|---|

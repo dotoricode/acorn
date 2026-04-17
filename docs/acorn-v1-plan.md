@@ -378,9 +378,9 @@ dotoricode/dotfiles/
 └── claude/
     └── harness/
         ├── harness.lock
-        ├── registry.json
+        ├── registry.json           ← §15 M1: v1.1+ 연기. 현재 acorn 은 read/write 안 함
         └── hooks/
-            └── guard-check.sh  ← Sprint 1 결과물로 커밋
+            └── guard-check.sh      ← install 이 자동 배포 (§15 C2 / ADR-017, v0.1.2+)
 ```
 
 ### setup-mac.sh (bootstrap-only)
@@ -552,7 +552,7 @@ direnv 설정 완료
 - [x] `ACORN_GUARD_BYPASS=1` → 허용 + stderr 경고 *(Sprint 1)*
 - [x] 파싱 실패 → fail-close *(Sprint 1)*
 - [x] `acorn install` 이 `<harnessRoot>/hooks/guard-check.sh` 자동 배포 *(v0.1.2 — ADR-017 / §15 C2 구현 완료)*
-- [ ] `harness.lock.guard.patterns` 가 실제 차단 패턴에 영향 *(v0.2.0 — §15 H1)*
+- [x] `harness.lock.guard.patterns` 가 실제 차단 패턴에 영향 *(v0.2.0 — §15 H1 구현 완료: strict/moderate/minimal 3단계 dispatch)*
 
 ### 개발 품질
 - [x] `npm run build` 성공 *(Sprint 0)*
