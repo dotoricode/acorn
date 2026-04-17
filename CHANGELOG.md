@@ -3,6 +3,76 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.4.0] — 2026-04-18
+
+🟠 v0.4.x queue 의 마지막 항목 **HIGH-2 공급망 무결성** 을 "lite" 스코프
+(allowlist + provenance CI, sha256 pinning 은 v0.5+ 연기) 로 완주.
+설계 결정은 ADR-020 에 명시. allowlist 가 fork 사용자에게 breaking
+가능성이 있어 patch 가 아닌 **minor bump**.
+
+v0.3.0 (§15 §S3/S4) → v0.3.1 (4-agent blocker) → v0.3.2 (quick sweep) →
+v0.3.3 (docs 전역 현행화) → v0.3.4 (H-3/H-1 silent-lie 제거) →
+v0.3.5 (HIGH-3 lite) → **v0.4.0 (HIGH-2 lite) — 4-agent 검토 🔴🟠 전체
+해소 완료**.
+
+### Added
+
+- **§15 HIGH-2 / ADR-020 (1) / `harness.lock.tools.*.repo` allowlist**:
+  `src/core/lock.ts` 에 `ALLOWED_REPOS` hardcoded map 추가. `parseLock`
+  이 각 tool 의 repo 를 allowlist 와 대조해 미승인 저장소는 SCHEMA
+  에러로 차단. 방어 대상: dotfiles 리포 탈취 후 악성 lock 교체로 공격자
+  저장소 clone 유도. 허용 목록: `omc: Yeachan-Heo/oh-my-claudecode`,
+  `gstack: garrytan/gstack`, `ecc: affaan-m/everything-claude-code`.
+- **`ACORN_ALLOW_ANY_REPO=1` escape hatch**: 환경변수로 allowlist 우회.
+  fork, 내부 미러, 로컬 dev 용. SCHEMA 에러 메시지가 직접 이 변수
+  사용법을 안내.
+- **§15 HIGH-2 / ADR-020 (2) / `.github/workflows/publish.yml`**: tag
+  `v*.*.*` push 시 GitHub Actions 가 `npm publish --provenance` 로
+  sigstore OIDC 서명 attestation 과 함께 배포. 계정 탈취 공격 표면을
+  repo commit 권한까지 (2-hop) 로 격상. 사용자는 `npm audit signatures`
+  또는 `npm view @dotoricode/acorn --provenance` 로 빌드 출처 확인
+  가능. 수동 `npm publish` 는 금지 (tag → GH Actions 만).
+
+### Docs
+
+- **`ADR-020` (acorn-v1-plan.md §11)**: 공급망 무결성 결정 3조각 분해
+  (allowlist 구현 / provenance CI 구현 / sha256 pinning v0.5+ 연기) +
+  각각의 trade-off 및 선택 이유 명문화.
+- **`ADR-019` 말미 H-3 개정 노트**: v0.3.4 이후 `'preserved'` action 이
+  unreachable 임을 명기.
+- **`README.md` 공급망 무결성 섹션 신설**: allowlist 3-tool 노출,
+  `ACORN_ALLOW_ANY_REPO` 사용법, `npm audit signatures` / `npm view
+  --provenance` 검증 예시, 수동 publish 금지 명기.
+
+### Changed
+
+- `harness.lock.tools.*.repo` 형식 검증이 strict 해짐: regex 패턴 통과 +
+  allowlist 통과 필요. **Breaking 가능성**: fork 사용자는
+  `ACORN_ALLOW_ANY_REPO=1` 을 설정하거나 lock 의 repo 를 upstream 으로
+  복구해야 함. minor bump 로 반영.
+
+### Testing
+
+- 218 단위 테스트 (v0.3.5 의 215 + allowlist pass/reject/escape 3건).
+  기존 fixture 가 가짜 repo ("org/omc", "a/b") 를 쓰는 6 test file
+  (install / status / cli / guard-hook / doctor / config) 에는 파일
+  상단 `process.env['ACORN_ALLOW_ANY_REPO'] = '1'` 설정 — 실전 escape
+  용도와 같은 패턴이라 production code path 는 건드리지 않음. Windows
+  18 실패는 기존 `symlinkSync` EPERM 그대로. Mac 기준 218/218 예상.
+
+### Deferred to v0.5+
+
+- **sha256 pinning of shipped files** (hooks/guard-check.sh 등): narrow
+  threat model (bundled trusted, deployed only 의심 — global npm +
+  user-owned harness 에서만 유효) 과 moderate 구현 비용 대비 cost/benefit
+  부족. v0.5+ 에서 integration test (ARCH-R1) 와 함께 재평가.
+- 🟡 v1.0 전 부채 6건 (core/adopt+sha-display 흡수, InstallErrorCode
+  naming 통일, integration test, isoTs 중복, 백업 ts 단일화, Windows
+  junction 이슈 재검증).
+- 🟢 Round 3 도그푸딩 — v0.3.x+v0.4.0 신기능 실증.
+- 🆕 `acorn uninstall` / `acorn list` / `acorn lock bump` 같은 미구현
+  user 커맨드.
+
 ## [0.3.5] — 2026-04-18
 
 🟠 v0.4.x 큐 중 HIGH-3 (`ACORN_GUARD_BYPASS` 재설계) 를 "lite" 형태로
