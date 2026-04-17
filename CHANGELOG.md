@@ -3,6 +3,31 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.6.0] — 2026-04-18
+
+🟢 **`acorn list` 신규 커맨드 — CLAUDE.md 에 v0.4+ 예정 명시돼 있던
+누락 커맨드 구현**. 추가로 `VERSION` 을 `package.json` 에서 런타임
+로드하도록 교정 (이전 hardcode 가 v0.4.0 에 멈춰 있던 bug 해소).
+
+### Added
+
+- **§15 v0.6.0 / `src/commands/list.ts` (신규)**: `acorn list` —
+  `harness.lock` 에 기록된 tool 의 repo / SHA / 설치 상태를 간결하게
+  나열. `status` 보다 단순 (설정/심링크/guard/tx 전부 보지 않음).
+  CI 에서 "tool SHA 만 빠르게 확인" 용도.
+  - 기본: 표 형식 (TOOL / SHA / STATE / REPO)
+  - `--json`: 기계 판독용 JSON. `jq` 친화.
+  - Exit code: 모든 tool 이 `locked` 이면 0, 하나라도 `drift` /
+    `missing` / `error` 면 1 (CI 게이트 활용).
+- **회귀 테스트 +6** (`tests/list.test.ts`): locked / missing / drift /
+  renderList / renderListJson / summarizeList.
+
+### Fixed
+
+- **§15 v0.6.0 / `src/index.ts`**: `VERSION` 을 `package.json` 에서
+  런타임 로드. 이전엔 hardcode 문자열이라 v0.4.0 에 고정돼 `acorn -V`
+  가 실제 배포 버전과 불일치했다. 이제 single source = `package.json`.
+
 ## [0.5.1] — 2026-04-18
 
 🟡 **v1.0 전 부채 소화 #4 + #5 — 타임스탬프 단일화 + backup 디렉토리

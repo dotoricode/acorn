@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-18 (Windows / **v0.5.1 — v1.0 전 부채 #4 #5 해소 (isoTs 단일화 + backup 디렉토리 조각화)**)
+> 마지막 갱신: 2026-04-18 (Windows / **v0.6.0 — acorn list 신규 커맨드 + VERSION 런타임 로드**)
 
 ---
 
@@ -9,11 +9,11 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 과 동기), 태그 **`v0.5.1`** 최신 (+ v0.5.0, v0.4.4, v0.4.3, v0.4.2, v0.4.1, v0.4.0, v0.3.5, v0.3.4, v0.3.3, v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
-| 진행 중 작업 | **v0.5.1 — v1.0 전 부채 #4 + #5 해소 완료**. `isoTs` / `isoTimestamp` / `timestampDirName` 5곳 중복을 `src/core/time.ts` 단일 소스로 통합 (#4). `runInstall` 1회 실행의 gstackSymlink/hooks/settings 백업이 ms 단위로 조각나던 것을 진입부 1회 `backupTs` 계산 후 주입하는 방식으로 해소 (#5, code-reviewer M-1). 테스트 245/245 Mac 예상, Windows 227/245 (기존 EPERM 18, 신규 회귀 0). 남은 v1.0 전 부채: #1 (adopt + sha-display 흡수), #2 (InstallErrorCode naming), #3 (integration test — large). |
+| 브랜치 | `main` (origin 과 동기), 태그 **`v0.6.0`** 최신 (+ v0.5.1, v0.5.0, v0.4.4, v0.4.3, v0.4.2, v0.4.1, v0.4.0, v0.3.5, v0.3.4, v0.3.3, v0.3.2, v0.3.1, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0) |
+| 진행 중 작업 | **v0.6.0 — `acorn list` 신규 커맨드 + VERSION 런타임 로드 완료**. CLAUDE.md 에 v0.4+ 예정으로 명시돼 있던 `acorn list` (읽기 전용, --json 지원) 구현. status 보다 단순해 CI 에서 "tool SHA 빠르게 확인" 용. VERSION 이 hardcode 로 v0.4.0 에 멈춰 있던 bug 도 함께 해소 (package.json 에서 런타임 로드). 테스트 251/251 Mac 예상, Windows 233/251 (기존 EPERM 18, 신규 회귀 0). 남은 v1.0 전 부채: #2 (InstallErrorCode naming — 미미한 stylistic, 스킵 검토), #3 (integration test — large). 남은 미구현 커맨드: `acorn uninstall` (Grade 3 destructive), `acorn lock bump` (upstream HEAD fetch 필요). |
 | 다음 작업 | **🟠 v0.4.2 (P1 2건)**: `installVendor` 의 `tool` 경로 traversal guard + `defaultGstackSetup` Windows `shell:true` 제거. **🟢 Round 3 도그푸딩 필수** — v0.3.x~v0.4.1 신기능 실증. **🟡 v1.0 전 부채 6건**: core/adopt+sha-display 흡수, InstallErrorCode naming 통일, integration test (ARCH-R1), isoTs 중복 제거, 백업 ts 조각화, Windows junction 이슈. **🆕 미구현 user 커맨드**: `acorn uninstall` / `acorn list` / `acorn lock bump`. **🔒 v0.5+**: sha256 pinning (ADR-020-3), tx ID (ADR-021). 상세 큐: `~/.gstack/projects/acorn/checkpoints/20260418-013310-v0-4-0-high2-lite-완주.md` + CHANGELOG v0.4.1. |
-| 테스트 | Windows: **227/245** (18 실패 — 기존 symlinkSync EPERM, 신규 회귀 0). Mac 기준 245/245 예상. 세션 누적 신규 +27: bom 4 + env 2 + settings 5 + config 2 + status 2 + cli lock PARSE 1 + install shell regression guard 1 + vendors isValidToolName 2 + vendors INVALID_TOOL_NAME guard 4 + core/time 4. |
-| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 → v0.3.1 → v0.3.2 → v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → v0.4.2 → v0.4.3 → v0.4.4 → v0.5.0 → **v0.5.1** |
+| 테스트 | Windows: **233/251** (18 실패 — 기존 symlinkSync EPERM, 신규 회귀 0). Mac 기준 251/251 예상. 세션 누적 신규 +33: bom 4 + env 2 + settings 5 + config 2 + status 2 + cli lock PARSE 1 + install shell regression guard 1 + vendors isValidToolName 2 + vendors INVALID_TOOL_NAME guard 4 + core/time 4 + list 6. |
+| 릴리스 커밋 체인 | v0.1.0 → v0.1.1 → v0.1.2 → v0.1.3 → v0.2.0 → v0.3.0 → v0.3.1 → v0.3.2 → v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → v0.4.2 → v0.4.3 → v0.4.4 → v0.5.0 → v0.5.1 → **v0.6.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |
 | v0.3.2 본문 | `16a2e40` S3 · `fbd3a60` S4 · `c81e2ef` S5 · `9cb7519` release |
 | v0.3.3 본문 | `209f325` docs(usage) · `6050cf7` docs(readme) · `388191c` docs(claude-md) · `90b7c03` release |
@@ -26,6 +26,7 @@
 | v0.4.4 본문 | fix(install) defaultGstackSetup cmd.exe injection 표면 제거 (codex P1 #7) + release |
 | v0.5.0 본문 | refactor(vendors) installVendor lstat-first + INVALID_TOOL_NAME (codex P1 #1 + Round 3 F3) + release |
 | v0.5.1 본문 | refactor(core/time) isoTs 단일화 + fix(install) backup ts 조각화 (부채 #4 + #5) + release |
+| v0.6.0 본문 | feat(list) acorn list 커맨드 + fix(cli) VERSION 런타임 로드 + release |
 | v0.1.2 본문 | `f502328` C6 / `b2b700f` C1 / `37b85b4` C2 / `f75ee46` C5 + 선행 `e38b29d` S1 · `8e517b0` audit 조정 |
 | v0.1.3 본문 | `cdeacff` C4 / `cf0518d` H3 / `4f59193` H4 / `1c797d2` C3 |
 | v0.2.0 본문 | `f660b4e` S2 · `a5738b6` M5 · `77a209e` H1 · `b574f05` M4 · `08022fc` M3 · `0165b46` S6 · `6b269ba` S5 |
