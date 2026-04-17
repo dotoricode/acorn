@@ -34,6 +34,9 @@ npm run build
 # 2. 전역 연결 (개발 중 권장)
 npm link       # 이후 어디서든 `acorn` 호출 가능
 
+# 2-Windows. npm link 가 실패하면 (Node 24 + Windows 10 Junction 이슈, §15 v0.2.0 S6)
+npm run shim:windows   # .cmd + bash shim 을 $APPDATA/npm/ 에 생성 (junction 없이)
+
 # 3. 일상 사용
 acorn install                     # harness.lock 기준 설치
 acorn install --run-gstack-setup  # + gstack setup --host auto 자동 실행
