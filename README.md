@@ -84,7 +84,7 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
 **환경변수**
 - `ACORN_HARNESS_ROOT` — harness 루트 (기본: `$CLAUDE_CONFIG_DIR/skills/harness` 또는 `~/.claude/skills/harness`)
 - `CLAUDE_CONFIG_DIR` — Claude Code 설정 루트 (direnv 사용 시)
-- `ACORN_GUARD_BYPASS=1` — guard 훅 1회 우회
+- `ACORN_GUARD_BYPASS=1` — guard 훅 우회. 셸 inline 형태 `ACORN_GUARD_BYPASS=1 <cmd>` 는 해당 `<cmd>` 1회에만 적용되고, `export ACORN_GUARD_BYPASS=1` 은 unset 할 때까지 **세션 전체**에서 guard 를 비활성화 (매 호출마다 stderr `⚠️ BYPASS ACTIVE` 반복, v0.3.5+ `acorn doctor` 가 critical 로 표시)
 - `ACORN_GUARD_MODE=block|warn|log` — guard 모드 오버라이드
 
 > 머신 간 인계(Mac ↔ Windows)는 [docs/HANDOVER.md](docs/HANDOVER.md) 참조.
@@ -473,7 +473,7 @@ Claude Code `~/.claude/settings.json`에 훅을 등록:
 
 | 변수 | 동작 |
 |---|---|
-| `ACORN_GUARD_BYPASS=1` | 세션 내 전체 우회. 매 실행마다 stderr에 경고 출력. |
+| `ACORN_GUARD_BYPASS=1` | guard 우회. 의미는 설정 방식에 따라 다름: **inline** `ACORN_GUARD_BYPASS=1 <cmd>` → `<cmd>` 1회만. **`export ACORN_GUARD_BYPASS=1`** → unset 할 때까지 세션 전체 (매 호출마다 stderr `⚠️ BYPASS ACTIVE` 반복, v0.3.5+ `acorn doctor` 가 critical 로 지적). |
 | `ACORN_GUARD_MODE=block\|warn\|log` | 모드 강제 지정 (lock 파일보다 우선) |
 | `ACORN_GUARD_PATTERNS=strict\|moderate\|minimal` | 패턴 레벨 강제 지정 (lock 파일보다 우선, v0.2.0+) |
 | `ACORN_HARNESS_ROOT=<path>` | harness 루트 경로 (기본: `~/.claude/skills/harness`) |
@@ -523,9 +523,9 @@ sudo rm -rf /usr/local/lib/node_modules/npm && brew link --overwrite node@24
 문제 발생 시 node 또는 jq가 PATH에 있는지 확인.
 
 ### guard가 의도치 않게 커맨드를 막을 때
-1. 안전한 커맨드라면 `ACORN_GUARD_BYPASS=1 <cmd>`로 1회 우회
-2. 패턴이 너무 공격적이라면 `ACORN_GUARD_MODE=warn`으로 강등
-3. 근본 해결은 패턴 조정 — `hooks/guard-check.sh`의 `is_dangerous()` 함수 수정
+1. 안전한 커맨드라면 **inline** `ACORN_GUARD_BYPASS=1 <cmd>` 로 그 호출만 우회 (셸 export 금지 — `export` 하면 세션 전체 비활성이라 `acorn doctor` critical)
+2. 패턴이 너무 공격적이라면 `ACORN_GUARD_MODE=warn` 으로 강등 (또는 v0.3.0+ `acorn config guard.mode warn`)
+3. 근본 해결은 패턴 조정 — `hooks/guard-check.sh` 의 `is_dangerous()` 함수 수정
 
 ---
 
