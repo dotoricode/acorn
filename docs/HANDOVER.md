@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-17 (Windows / 도그푸딩 Round 2 **종료**, 3-critic audit §15 반영, **v0.1.2 C1~C6 착수 지점**)
+> 마지막 갱신: 2026-04-17 (Windows / **v0.1.2 CRITICAL 4/4 완료**, 릴리스 준비 지점)
 
 ---
 
@@ -9,15 +9,15 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main`, 태그 `v0.1.1` push 완료 (+ `v0.1.0` 기존) |
-| 진행 중 작업 | **v0.2.0 S1 완료 (`e38b29d`, local)** — `doctor --json` summary/okCritical 필드. 같은 날 3-critic audit (`6c0c125`) 에서 CRITICAL 6 / HIGH 4 / MEDIUM 5 / LOW 3 발견 → **우선순위 피벗: 다음은 v0.1.2 C1~C6** |
-| 다음 작업 | (a) C6 doctor `isDirty` 흡수 노출 (방금 `doctor.ts` 편집 컨텍스트 재활용) → (b) C1 install lock 부트스트랩 + `S5 acorn lock` 일부 포함 → (c) C2 hooks 배포 phase (ADR-017) → (d) C5 gstack artifact 검증 → (e) v0.1.2 release → (f) v0.1.3 C3/C4/H3/H4 → (g) v0.2.0 S2~S8 + §15 H1/M1~M5 |
-| 테스트 | Windows: 106/124 (18 실패 — 3 이 S1 신규 setupHealthy 의존, 나머지 15 기존 EPERM·경로구분자). Mac 기준 124/124 예상 |
+| 브랜치 | `main` (origin 과 동기), 태그 `v0.1.1` push 완료 (+ `v0.1.0` 기존) |
+| 진행 중 작업 | **v0.1.2 CRITICAL 전 항목 완료** — C1 (lock 부트스트랩 + 템플릿 시드), C2 (hooks 배포 phase [7/8]), C5 (gstack setup artifact 검증), C6 (doctor isDirty 흡수 노출). 더불어 v0.2.0 S1 (doctor summary/okCritical) 선행 완료, 도그푸딩 Round 2 종료 |
+| 다음 작업 | (a) **v0.1.2 릴리스** — CHANGELOG 업데이트 + package.json 0.1.1→0.1.2 + tag v0.1.2 push + README 개선 내역 반영 → (b) v0.1.3 C3 (gstack setup 멱등) / C4 (symlink backup) / H3 (tx.log fail-close) / H4 (isEmptyDir propagate) → (c) v0.2.0 S2~S8 + §15 H1·M1~M5 |
+| 테스트 | Windows: 123/142 (19 실패 — 전부 기존 Windows EPERM symlinkSync / 경로구분자, 내 변경 무관). Mac 기준 142/142 예상 |
 | v0.1.1 구성 | 커밋 6개 (hotfix 5 + release 1): `aea3fdc` lock BOM → `730368f` schema_version 누락 → `e6dcdc2` install hint → `849fdad` --run-gstack-setup → `ddbc8a6` EXPECTED_DIRTY_PATHS → `b3c7668` release bump |
-| 처리 계획 (정본) | **`acorn-v1-plan.md §15`** — v0.1.2 (C1/C2/C5/C6) / v0.1.3 (C3/C4/H3/H4) / v0.2.0 (H1/M1~M5 + 도그푸딩 feature S2~S8) / 백로그 (L1~L3) |
-| 로컬 unpushed | `789ff8c` docs(dogfood) Round 2 종료 + `e38b29d` feat(doctor) S1 + (작성 중) docs(reconcile) audit §15 크로스참조 |
+| v0.1.2 구성 (이 세션) | `f502328` C6 doctor isDirty 노출 · `b2b700f` C1 lock 부트스트랩 · `37b85b4` C2 hooks phase [7/8] · `f75ee46` C5 gstack artifact verify. (동일 세션에서 v0.2.0 선행: `789ff8c` Round 2 종료 · `e38b29d` S1 doctor summary · `8e517b0` audit 크로스참조) |
+| 처리 계획 (정본) | **`acorn-v1-plan.md §15`** — ✅ v0.1.2 (C1/C2/C5/C6 완료) / ⏳ v0.1.3 (C3/C4/H3/H4) / ⏳ v0.2.0 (H1/M1~M5 + 도그푸딩 feature S2~S8) / 백로그 (L1~L3). §14 Done Definition 의 hooks 배포 체크박스는 C2 완료와 함께 [x] 로 전환 |
 | 실사용 환경 | Mac personal, CLAUDE_CONFIG_DIR=~/.claude-personal, ECC 는 로컬 개발 레포 `~/01_private/everything-claude-code` 별도 관리. Windows: `D:\.claude\skills\harness\`, acorn 은 `C:\Users\SMILE\AppData\Roaming\npm\acorn.{cmd,}` 수동 shim (Node 24 가 Junction traverse 못 함) |
-| 별도 처리 | S7 Guard 훅 실전 (Claude Code UI) — bash tool 밖, DOGFOOD.md § S7 recipe 참조. 단 C2 가 v0.1.2 에서 해결되면 이 recipe 의 전제 ("hooks/guard-check.sh 경로") 도 install 이 보장하게 바뀜 |
+| 별도 처리 | S7 Guard 훅 실전 (Claude Code UI) — bash tool 밖, DOGFOOD.md § S7 recipe 참조. **C2 완료로 `hooks/guard-check.sh` 는 이제 install 이 자동 배포하므로 recipe 의 수동 복사 전제 불필요** |
 
 ---
 
