@@ -34,6 +34,7 @@ import {
   type InstallVendorResult,
 } from '../core/vendors.ts';
 import { beginTx, lastInProgress } from '../core/tx.ts';
+import { backupDirTs } from '../core/time.ts';
 import { installGuardHook, HooksError, type HooksResult } from '../core/hooks.ts';
 import {
   readGstackSetupMarker,
@@ -286,6 +287,11 @@ interface InnerContext {
 function runInstallInner(ctx: InnerContext): InstallResult {
   const { opts, log, harnessRoot, claudeRoot, settingsPath, git, tx } = ctx;
 
+  // §15 v0.5.1 (부채 #5): 1회 실행의 모든 백업 (symlink / hooks / settings)
+  // 이 공유할 ts 를 진입부에서 1회 계산. 이전엔 각 호출이 각자 찍어
+  // ms 단위로 조각난 3 디렉토리가 생겼다 (추적/롤백 곤란).
+  const backupTs = backupDirTs();
+
   // 1. lock 파싱
   log(`[1/8] harness.lock 파싱`);
   tx.phase('lock');
@@ -373,7 +379,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   tx.phase('symlink');
   let gstackSymlink: EnsureResult;
   try {
-    gstackSymlink = installGstackSymlink({ harnessRoot, claudeRoot });
+    gstackSymlink = installGstackSymlink({ harnessRoot, claudeRoot, backupTs });
     log(`      ${gstackSymlink.action}: ${gstackSymlink.target}`);
   } catch (e) {
     throw new InstallError(
@@ -435,7 +441,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   tx.phase('hooks');
   let hooks: HooksResult;
   try {
-    hooks = installGuardHook(harnessRoot);
+    hooks = installGuardHook(harnessRoot, backupTs);
     if (hooks.action === 'noop') {
       log(`      hooks: noop`);
     } else if (hooks.action === 'updated') {
@@ -464,6 +470,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
       harnessRoot,
       desired,
       adopt: opts.adopt ?? false,
+      backupTs,
     });
     if (settings.action === 'adopted' && settings.movedKeys?.length) {
       log(`      action=adopted added=[${settings.added.join(', ')}]`);
