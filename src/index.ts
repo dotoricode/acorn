@@ -18,7 +18,7 @@ import { VendorError } from './core/vendors.ts';
 import { SettingsError } from './core/settings.ts';
 import { SymlinkError } from './core/symlink.ts';
 
-export const VERSION = '0.1.1';
+export const VERSION = '0.1.2';
 
 export interface CliIO {
   readonly stdout: (line: string) => void;
