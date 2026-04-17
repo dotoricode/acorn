@@ -44,6 +44,10 @@ acorn status                      # 3툴 + guard + env 요약
 acorn doctor                      # 이슈 + 수동 복구 힌트
 acorn status --json               # 기계 판독
 acorn lock validate               # harness.lock schema 검증 (v0.2.0+)
+acorn config                      # 현재 설정 요약 (v0.3.0+)
+acorn config guard.mode warn --yes       # guard 모드 변경 (v0.3.0+)
+acorn config guard.patterns minimal --yes # 패턴 레벨 변경
+acorn config env.reset --yes             # settings.json 에서 env 3키 제거 (수동 재설치 전 정리)
 ```
 
 **첫 설치 (harness.lock 이 없는 상태, v0.1.2+)**

@@ -13,7 +13,14 @@ import {
   renderDoctor,
   renderDoctorJson,
 } from './commands/doctor.ts';
+import { readSync } from 'node:fs';
 import { LockError, readLock } from './core/lock.ts';
+import {
+  runConfig,
+  renderConfigAction,
+  ConfigError,
+  type ConfirmFn,
+} from './commands/config.ts';
 import { VendorError } from './core/vendors.ts';
 import { SettingsError } from './core/settings.ts';
 import { SymlinkError } from './core/symlink.ts';
@@ -49,6 +56,7 @@ Commands:
   status         현재 설치 상태 요약 (read-only)
   doctor         진단 + 권장 조치
   lock validate  harness.lock schema 검증 (read-only, CI 친화)
+  config         guard.mode / guard.patterns / env.reset 조작 (v0.3.0+)
 
 Global flags:
   -h, --help      도움말
@@ -108,6 +116,10 @@ function formatError(e: unknown): string {
     const head = `[install/${e.code}] ${e.message}`;
     return e.hint ? `${head}\n   → ${e.hint}` : head;
   }
+  if (e instanceof ConfigError) {
+    const head = `[config/${e.code}] ${e.message}`;
+    return e.hint ? `${head}\n   → ${e.hint}` : head;
+  }
   if (e instanceof LockError) return `[lock/${e.code}] ${e.message}`;
   if (e instanceof VendorError) return `[vendor/${e.code}/${e.tool}] ${e.message}`;
   if (e instanceof SettingsError) return `[settings/${e.code}] ${e.message}`;
@@ -122,6 +134,10 @@ function exitFor(e: unknown): number {
     if (e.code === 'SETTINGS_CONFLICT') return EXIT.CONFIG;
   }
   if (e instanceof LockError && e.code === 'SCHEMA') return EXIT.CONFIG;
+  if (e instanceof ConfigError) {
+    if (e.code === 'SCHEMA' || e.code === 'UNKNOWN_KEY') return EXIT.CONFIG;
+    if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
+  }
   return EXIT.FAILURE;
 }
 
@@ -207,6 +223,8 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
       return cmdDoctor(parsed, io);
     case 'lock':
       return cmdLock(rest, io);
+    case 'config':
+      return cmdConfig(rest, io);
     default:
       io.stderr(`알 수 없는 커맨드: ${head}`);
       io.stderr('');
@@ -248,6 +266,42 @@ function cmdLockValidate(args: readonly string[], io: CliIO): number {
         `tools=${Object.keys(lock.tools).length}, ` +
         `guard=${lock.guard.mode}/${lock.guard.patterns})`,
     );
+    return EXIT.OK;
+  } catch (e) {
+    io.stderr(formatError(e));
+    return exitFor(e);
+  }
+}
+
+/**
+ * §15 v0.3.0 S3 — `acorn config [key] [value]`.
+ * key 미지정 → 현재 설정 요약.
+ * value 미지정 → key 의 현재 값 반환 (get).
+ * key+value 지정 → 쓰기 (set). 기본은 Y/n 프롬프트, --yes 로 스킵.
+ */
+function cmdConfig(rest: readonly string[], io: CliIO): number {
+  const parsed = parseArgs(rest);
+  const [key, value] = parsed.positional;
+  try {
+    const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+    const confirmFn: ConfirmFn = (prompt) => {
+      io.stdout(`${prompt} [Y/n]`);
+      const buf = Buffer.alloc(8);
+      try {
+        const n = readSync(0, buf, 0, buf.length, null);
+        const input = buf.slice(0, n).toString('utf8').trim().toLowerCase();
+        return input === '' || input.startsWith('y');
+      } catch {
+        // TTY 이지만 read 실패 — 안전하게 거절
+        return false;
+      }
+    };
+
+    const runOpts = isTty
+      ? { yes: parsed.flags.has('yes'), confirm: confirmFn }
+      : { yes: parsed.flags.has('yes') };
+    const action = runConfig(key, value, runOpts);
+    io.stdout(renderConfigAction(action));
     return EXIT.OK;
   } catch (e) {
     io.stderr(formatError(e));
