@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-17 (Windows / 도그푸딩 Round 2 진행 중 — 시나리오 D-0~D-3 통과, D-4 미완)
+> 마지막 갱신: 2026-04-17 (Windows / 도그푸딩 Round 2 **종료**, v0.2.0 S1 착수 지점)
 
 ---
 
@@ -10,12 +10,13 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main`, 태그 `v0.1.1` push 완료 (+ `v0.1.0` 기존) |
-| 진행 중 작업 | **도그푸딩 Round 2 (Windows) 진행 중** — D-0 status, D-1 멱등성, D-2 심링크 복구(junction), D-3 SETTINGS_CONFLICT 통과. D-4 SIGINT 재현 실패 (프로세스 완료가 SIGINT 보다 빠름). dn 메모 2건, dreport 실행 14회. |
-| 다음 작업 | (a) jq 설치 후 JSON 시나리오 재실행 → (b) D-4 재시도 (sleep<0.1) → (c) 2~3일 자연스럽게 써서 로그 30+ 누적 → (d) Round 2 종료 & v0.1.2/v0.2.0 큐 분류 → (e) v0.2.0 S1 착수 |
+| 진행 중 작업 | **v0.2.0 S1 착수 — `doctor --json` severity summary 필드** (`.summary: {critical, warning, info}` + `.okCritical` 편의 필드). S9 실증에서 도출. schema 확장 1-2h 단위, warm-up 커밋. Round 2 는 2026-04-17 종료 (메모 11건 → 10+ 기준 충족). |
+| 다음 작업 | (a) S1 구현 + 테스트 + 커밋 → (b) S2 (drift/SHA 표시 개선) → (c) S3/S4/S5 본 feature (`acorn config`, `--adopt`, `acorn lock`) — `--adopt` 전에 `docs/acorn-v2-plan.md` 설계 노트 1장 |
 | 테스트 | Windows: 107/120 (13 실패 모두 기존 EPERM 심링크·경로구분자). Mac 기준 120/120 예상. |
 | v0.1.1 구성 | 커밋 6개 (hotfix 5 + release 1): `aea3fdc` lock BOM → `730368f` schema_version 누락 → `e6dcdc2` install hint → `849fdad` --run-gstack-setup → `ddbc8a6` EXPECTED_DIRTY_PATHS → `b3c7668` release bump |
-| 후속 미니 수정 | src/index.ts VERSION 0.1.0→0.1.1 동기화 + Windows npm link 환경에서 ESM `isMain` 감지(realpath+pathToFileURL) — Round 2 도중 발견 |
-| 실사용 환경 | Mac personal, CLAUDE_CONFIG_DIR=~/.claude-personal, ECC 는 로컬 개발 레포 `~/01_private/everything-claude-code` 별도 관리. Windows: `D:\.claude\skills\harness\`, acorn 전역 `npm link` |
+| v0.2.0 큐 (Round 2 종료 시점 8건) | S1 `doctor summary` (소) · S2 drift/SHA 표시 개선 (소) · S3 `acorn config` (중) · S4 `--adopt` (대, 설계 문서 필요) · S5 `acorn lock` (중) · S6 Windows shim helper (소, 타 머신 재확인 후) · S7 `[6/7]` 라인 축약 (극소) · S8 jq 설치 안내 1줄 (극소) |
+| 실사용 환경 | Mac personal, CLAUDE_CONFIG_DIR=~/.claude-personal, ECC 는 로컬 개발 레포 `~/01_private/everything-claude-code` 별도 관리. Windows: `D:\.claude\skills\harness\`, acorn 은 `C:\Users\SMILE\AppData\Roaming\npm\acorn.{cmd,}` 수동 shim (Node 24 가 Junction traverse 못 함) |
+| 별도 처리 | S7 Guard 훅 실전 시나리오는 Claude Code UI 조작이 필요해 bash tool 밖. DOGFOOD.md § S7 recipe 섹션에 절차 정리, 자연 사용 중 1회 돌리고 `dn` 메모 남기기 |
 
 ---
 

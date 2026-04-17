@@ -5,11 +5,12 @@
 
 ---
 
-## Round 2 기록 (진행 중) — 2026-04-17 시작 (Windows 집 머신)
+## Round 2 기록 (종료 2026-04-17, Windows 집 머신)
 
-**환경**: Windows 10, `D:\.claude\skills\harness\`, Git Bash, acorn v0.1.1 (전역 `npm link`), jq 미설치
-**현황**: D-0 ~ D-3 통과, D-4 (SIGINT) 재현 실패, 자연 누적 단계 대기
-**dreport 스냅샷 (2026-04-17 02:48)**: 실행 14회 · exit=0 10 / exit=1 3 / exit=78 1 · 메모 2건
+**환경**: Windows 10, `D:\.claude\skills\harness\`, Git Bash, acorn v0.1.1, jq 설치됨
+**결과**: v0.1.0 설계가 Windows 실환경에서 **blocker 없이 전면 작동**. v0.1.2 hotfix 감 없음. v0.2.0 큐는 5건으로 확정 (이 라운드 신규 발견 2건 포함).
+**종료 기준 충족**: 메모 11건 (10건+ 기준선 통과)
+**dreport 최종 (2026-04-17 13:38)**: 실행 38회 · exit=0 19 / exit=1 18 / exit=78 1 · 메모 11건 (bug 3, ux 5, idea 3)
 
 ### 시나리오 결과
 
@@ -19,40 +20,75 @@
 | D-1 install 멱등성 | ✅ | vendors noop × 3, 심링크 noop, settings noop |
 | D-2 심링크 수동 파괴 → 재install | ✅ | `rm /d/.claude/skills/gstack` 후 status 에 `gstack link ⚠️ absent`, install 로 `created:` 재생성. **Windows junction 재생성 실증** |
 | D-3 settings 충돌 | ✅ | `CLAUDE_PLUGIN_ROOT` 값을 `...\vendors\omc` 로 변조 → exit=78 CONFLICT, 파일 무변경, 메시지에 `현재=/기대=` 양값 정확 표기 |
-| D-4 tx.log IN_PROGRESS (SIGINT) | ❌ 재현 실패 | 네트워크 없는 멱등 install 은 <300ms 에 완료되어 `sleep 0.3 && kill -INT`가 닿기 전에 프로세스 종료. 재시도 필요 (sleep 대폭 단축 or 실패 주입) |
-| jq 파이프 시나리오 | ⏸ 보류 | jq 미설치 (Git Bash 기본에 없음). 설치 후 재실행 예정 |
+| D-4 tx.log IN_PROGRESS (SIGINT) | ❌ 재현 실패 | 네트워크 없는 멱등 install 은 <300ms 에 완료되어 `sleep 0.3 && kill -INT`가 닿기 전에 프로세스 종료. 통합 테스트(`tx.test.ts`)로 동작 검증됨 — 실사용 환경에서 재현 불가 = 사실상 안전 |
+| S3 심링크 파괴 → `doctor --json` | ✅ | `issues[0]: {area:"symlink", severity:"critical", message:"심링크 부재", hint:"acorn install 재실행"}` 완벽 구조화. `gstackSymlink.status="absent"` + `currentLink:null`. install 1회로 복구 |
+| S4 vendor drift | ✅ (기능) / 🟡 (UX) | lock SHA 한 글자 변조 → `state="drift"`, `ok=false` 정확 감지. dirty 없는 omc 에서 checkout 실패 시 git 에러 메시지 펼쳐줌 양호. **but**: ① short SHA 7자만 보여줘 `lock=<sha>/실제=<sha>` 가 같아 보이는 착시 ② checkout 실패 hint 가 `git fsck` 제안하는데 실 원인은 보통 fetch 누락/SHA 오타 (v0.2.0 큐로) |
+| S9 CI 게이트 (`jq -e '.ok'`) | ✅ | `doctor --json \| jq -e '.ok'` 로 exit gate OK. severity-aware 필터도 `jq '[.issues[] \| select(.severity=="critical")] \| length'` 한 줄. 실 CI 패턴 바로 붙여쓰기 가능 |
+| S7 Guard 훅 실전 (Claude Code UI) | ⏸ 별도 세션 | PreToolUse 훅을 Claude Code UI 에서 관찰하는 시나리오라 bash tool 범위 밖. 아래 "§ S7 recipe" 로 이관, 자연 사용 중 한 번 돌리고 `dn` 메모 1줄 남기면 됨 |
 
 ### 긍정 관찰 (Windows 실증)
 
 - ✅ **Windows junction 수동 삭제 후 자동 복구** — `symlink.ts` 의 junction 분기가 실전에서도 동작. Round 1 (Mac symlink) 과 동등한 UX
-- ✅ **SETTINGS_CONFLICT 메시지 품질** — 현재값/기대값을 양쪽 다 찍어줘서 사용자가 diff 바로 판단 가능. "어느 키가 뭘 바꿔야 하는지"를 찾기 위해 다른 파일 열 필요 없음
-- ✅ **비파괴 preflight** — D-3에서 acorn 중단 후 settings.json timestamp 유지 확인
+- ✅ **SETTINGS_CONFLICT 메시지 품질** — 현재값/기대값을 양쪽 다 찍어줘서 사용자가 diff 바로 판단 가능
+- ✅ **비파괴 preflight** — D-3, S4 모두 acorn 중단 후 대상 파일 timestamp/내용 보존
+- ✅ **`doctor --json` 스키마가 CI 바로 붙여쓰기 가능** — `.ok` / `.issues[].severity` / `.issues[].hint` / `.gstackSymlink.status` / `.tools.<name>.state` 모두 jq 필터 한 줄로 소비됨 (S3/S9/S4)
+- ✅ **dirty tree 보호가 drift checkout 앞에 선다** — S4 에서 gstack (dirty) drift 시 checkout 거부. 데이터 손실 방지 설계가 실제로 블록
 - ✅ **adog/dn/dreport 파이프라인** — Windows Git Bash 에서 Mac 과 동일하게 작동, 로그 위치 `/c/Users/SMILE/acorn-dogfood.log`
 
-### 후속 미니 수정 (Round 2 도중 발견 · 본 문서와 같은 세션에서 조치)
+### 후속 미니 수정 (Round 2 도중 발견 · 같은 세션에서 조치)
 
-1. **`src/index.ts` VERSION 동기화 누락** — `package.json` 은 `b3c7668` 에서 0.1.1 로 올렸는데 `src/index.ts` 의 `VERSION` 상수와 `package-lock.json` 이 0.1.0 으로 남아있었음. v0.1.1 패치에서 누락. *(본 세션 커밋)*
-2. **ESM `isMain` 감지가 Windows npm link 환경에서 실패 가능** — 기존 코드는 `import.meta.url === \`file://${process.argv[1]}\`` 문자열 비교. npm link 로 생성되는 shim 이나 심링크 경로가 realpath 와 달라 엔트리 감지 실패 위험. `realpathSync` + `pathToFileURL` 정규화로 교체. *(본 세션 커밋)*
+1. **`src/index.ts` VERSION 동기화 누락** — `package.json` 은 `b3c7668` 에서 0.1.1 로 올렸는데 `src/index.ts` 의 `VERSION` 상수와 `package-lock.json` 이 0.1.0 으로 남아있었음. *(본 세션 커밋 `625fefd`)*
+2. **ESM `isMain` 감지가 Windows npm link 환경에서 실패 가능** — 기존 문자열 비교 → `realpathSync` + `pathToFileURL` 정규화로 교체. *(본 세션 커밋 `625fefd`)*
 
-### v0.1.2-hotfix 후보 (Round 2 시점)
+### v0.1.2-hotfix 큐
 
-- (아직 hotfix 감 블로커 없음 — D-4 재시도 결과 보고 판단)
+- **없음** — Round 2 전 시나리오 blocker 없이 통과. hotfix 감이면 즉시 고쳤을 건데 아무것도 안 걸림. 이 자체가 v0.1.0/0.1.1 설계·구현 검증됐다는 긍정 신호.
 
-### v0.2.0 후보 (Round 2 에서 재확인·추가)
+### v0.2.0 큐 최종 우선순위 (Round 2 종료 시점)
 
-1. **부트스트랩 `jq` 의존 명시** — Windows Git Bash 기본에 없음. README / HANDOVER 부트스트랩 섹션에 설치 안내 1줄
-2. **`install` 출력의 `[6/7] setup 콜백 미제공` 라인 축약** — 이미 정상 상태에서도 매번 노출 → 멱등 실행 시 조용해지거나 더 짧은 문구로
-3. **`--adopt`, `acorn config`, `acorn lock` (Round 1에서 계속 유지)**
+| # | 항목 | 크기 | 근거 |
+|---|---|---|---|
+| **S1** | `doctor --json` severity summary 필드 (`.summary: {critical, warning, info}` + `.okCritical`) | 소 | S9 실증에서 즉각 CI 가치. schema 확장만, 1-2h. **v0.2.0 warm-up.** |
+| S2 | drift/SHA 표시 개선 (short SHA 충돌 시 차이 나는 위치까지 확장 + checkout 실패 hint cause 별 분기) | 소 | S4 실증. 단순 UX 개선이라 독립 commit 적합 |
+| S3 | `acorn config` (`env.reset`, `guard.mode` 조작 helper) | 중 | Round 1 "jq 저글링 대신" 실증, 일상 편의성 |
+| S4 | `acorn install --adopt` (기존 수동 설치 흡수) | 대 | Round 1 `NOT_A_REPO` 심링크 보호 맥락. **비파괴 원칙 설계 pressure 있음 — 별도 설계 문서 필요** |
+| S5 | `acorn lock` (init/validate/bump helper) | 중 | Round 1 "수동 편집 위험" (`acorn_version: "0.0.0-dev"` 사고 방지) |
+| S6 | Windows `npm link` 대체 shim helper (`scripts/windows-install-shim.bat` or npm postinstall hook) + README 안내 | 소 | Round 2 실증. **다른 Windows 머신에서 재현 확인 후 우선순위 재평가** |
+| S7 | `install` 출력의 `[6/7] setup 콜백 미제공` 라인 멱등 실행 시 축약 | 소 | Round 1~2 계속 거슬림, 사소함 |
+| S8 | README/HANDOVER 부트스트랩 섹션에 `jq` 설치 안내 1줄 | 극소 | Round 2 실증, docs-only |
 
-### 미해결 파편 (2026-04-17 시점)
+### § S7 recipe (별도 세션 — 자연 사용 중 1회)
 
-- gstack vendors dirty (`SKILL.md`, `autoplan/SKILL.md` 등) — Round 1부터 이어진 상태. `EXPECTED_DIRTY_PATHS` 가 `.agents/` 만 허용. 실 편집 여부 확인 후 원복 or 허용 경로 확장 결정 필요
-- D-4 SIGINT 재현 방법 — 네트워크 없는 install 이 너무 빠르므로 (a) sleep <0.1 로 재시도 or (b) 인위적 지연 훅 주입 중 택1
+Claude Code UI 에서 **실제로** PreToolUse 훅이 발화하는지 확인. bash tool 로는 관찰 불가.
 
-### 다음 라운드(또는 종료) 준비
+```jsonc
+// ~/.claude-personal/settings.json 또는 $CLAUDE_CONFIG_DIR/settings.json 의 hooks 섹션
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "D:/.claude/skills/harness/hooks/guard-check.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
 
-- 종료 조건 (DOGFOOD.md § 종료 기준 중 하나): 메모 10건+ / 2주 경과 (→ 2026-05-01) / 블로커 1건 / 3일 안 씀
-- 종료 시 산출물: `dreport` 전문 + 본 섹션 finalize + `HANDOVER.md §1` 갱신 + v0.1.2/v0.2.0 큐 확정
+관찰 포인트 (각 1줄 `dn` 메모):
+- `rm -rf /tmp/foo` 시도 → Claude Code UI 에 block 메시지 표시되는가
+- `git push --force-with-lease origin main` → 통과하는가 (strict 패턴에서 `--force-with-lease` 는 허용되어야 함)
+- `DROP TABLE foo;` 같은 SQL → 차단되는가
+- 차단 메시지에 bypass 방법이 보이는가
+- **false positive**: 평소 치는 무해한 커맨드 중 차단되는 게 있는가
+
+### 미해결 파편 (2026-04-17 종료 시점)
+
+- **gstack vendors dirty** (`SKILL.md`, `autoplan/SKILL.md` 등) — Round 1부터 이어진 상태. `EXPECTED_DIRTY_PATHS` 가 `.agents/` 만 허용. 실 편집 여부 확인 후 원복 or 허용 경로 확장 결정 필요. **현재는 doctor warning 으로만 노출 (블록 아님)** 이라 감내 가능
+- **D-4 SIGINT 재현 방법** — 네트워크 없는 install 이 너무 빠르므로 재현 불가. `tx.test.ts` 통합 테스트로 검증된 상태 → v0.2.0 이후 실패 주입 훅 도입 시 재테스트
+- **Windows Junction traversal 불가** (v0.1.x 범위 밖) — Node 24.14.0 이 동일 드라이브 Junction 까지 lstat `UNKNOWN`. 원인 미확인 (libuv 버그? Windows 설정?). **현 머신 한정 이슈일 가능성** → Round 3 시 다른 Windows 머신에서 재검증
 
 ---
 
