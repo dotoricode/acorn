@@ -29,6 +29,7 @@ import {
   ConfigError,
   type ConfirmFn,
 } from './commands/config.ts';
+import { runPhase, renderPhaseAction, PhaseError } from './commands/phase.ts';
 import { VendorError } from './core/vendors.ts';
 import { SettingsError } from './core/settings.ts';
 import { SymlinkError } from './core/symlink.ts';
@@ -84,6 +85,7 @@ Commands:
   doctor         진단 + 권장 조치
   lock validate  harness.lock schema 검증 (read-only, CI 친화)
   config         guard.mode / guard.patterns / env.reset 조작 (v0.3.0+)
+  phase          현재 phase 조회 / 변경 (prototype|dev|production) (v0.7.0+)
 
 Global flags:
   -h, --help      도움말
@@ -115,6 +117,11 @@ config 서브커맨드:
   config flags:
     --yes              Y/n 확인 프롬프트 스킵 (non-TTY/CI 에서 필수)
 
+phase 서브커맨드:
+  acorn phase                         현재 phase 조회
+  acorn phase <prototype|dev|production>  phase 변경 (Y/n 확인)
+  acorn phase <value> --yes           확인 프롬프트 스킵
+
 예시:
   acorn install
   acorn install --run-gstack-setup
@@ -125,6 +132,8 @@ config 서브커맨드:
   acorn doctor
   acorn config guard.mode warn --yes
   acorn config env.reset --yes
+  acorn phase
+  acorn phase production --yes
 `;
 }
 
@@ -170,6 +179,10 @@ function formatError(e: unknown): string {
     const head = `[config/${e.code}] ${e.message}`;
     return e.hint ? `${head}\n   → ${e.hint}` : head;
   }
+  if (e instanceof PhaseError) {
+    const head = `[phase/${e.code}] ${e.message}`;
+    return e.hint ? `${head}\n   → ${e.hint}` : head;
+  }
   if (e instanceof LockError) return `[lock/${e.code}] ${e.message}`;
   if (e instanceof VendorError) return `[vendor/${e.code}/${e.tool}] ${e.message}`;
   if (e instanceof SettingsError) return `[settings/${e.code}] ${e.message}`;
@@ -192,6 +205,10 @@ function exitFor(e: unknown): number {
   }
   if (e instanceof ConfigError) {
     if (e.code === 'SCHEMA' || e.code === 'UNKNOWN_KEY') return EXIT.CONFIG;
+    if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
+  }
+  if (e instanceof PhaseError) {
+    if (e.code === 'INVALID_VALUE') return EXIT.CONFIG;
     if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
   }
   return EXIT.FAILURE;
@@ -345,6 +362,8 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
       return cmdLock(rest, io);
     case 'config':
       return cmdConfig(rest, io);
+    case 'phase':
+      return cmdPhase(rest, io);
     default:
       io.stderr(`알 수 없는 커맨드: ${head}`);
       io.stderr('');
@@ -386,6 +405,32 @@ function cmdLockValidate(args: readonly string[], io: CliIO): number {
         `tools=${Object.keys(lock.tools).length}, ` +
         `guard=${lock.guard.mode}/${lock.guard.patterns})`,
     );
+    return EXIT.OK;
+  } catch (e) {
+    io.stderr(formatError(e));
+    return exitFor(e);
+  }
+}
+
+function cmdPhase(rest: readonly string[], io: CliIO): number {
+  const parsed = parseArgs(rest);
+  const value = parsed.positional[0];
+  const yes = parsed.flags.has('yes');
+  try {
+    const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+    const confirmFn: ConfirmFn = (prompt) => {
+      io.stdout(`${prompt} [Y/n]`);
+      const buf = Buffer.alloc(8);
+      try {
+        const n = readSync(0, buf, 0, buf.length, null);
+        const input = buf.slice(0, n).toString('utf8').trim().toLowerCase();
+        return input === '' || input.startsWith('y');
+      } catch {
+        return false;
+      }
+    };
+    const action = runPhase(value, isTty ? { yes, confirm: confirmFn } : { yes });
+    io.stdout(renderPhaseAction(action));
     return EXIT.OK;
   } catch (e) {
     io.stderr(formatError(e));

@@ -33,8 +33,47 @@ parse_lock_field() {
   fi
 }
 
+# Phase 로드 (ADR-022): ACORN_PHASE_OVERRIDE > phase.txt > (unset → lock fallback)
+PHASE_FILE="$HARNESS_ROOT/phase.txt"
+read_phase() {
+  if [ -n "${ACORN_PHASE_OVERRIDE:-}" ]; then
+    printf '%s' "$ACORN_PHASE_OVERRIDE"
+    return 0
+  fi
+  [ ! -f "$PHASE_FILE" ] && return 1
+  local v
+  v=$(head -n 1 "$PHASE_FILE" 2>/dev/null | tr -d '[:space:]')
+  case "$v" in
+    prototype|dev|production) printf '%s' "$v"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+phase_to_patterns() {
+  case "$1" in
+    prototype) printf 'minimal' ;;
+    dev)       printf 'moderate' ;;
+    production) printf 'strict' ;;
+    *) return 1 ;;
+  esac
+}
+
+ACORN_PHASE=""
+PHASE_DERIVED_PATTERNS=""
+if ACORN_PHASE=$(read_phase); then
+  PHASE_DERIVED_PATTERNS=$(phase_to_patterns "$ACORN_PHASE") || PHASE_DERIVED_PATTERNS=""
+fi
+
+# 우선순위: env ACORN_GUARD_PATTERNS > phase 유래 > lock.guard.patterns > 기본
+if [ -n "${ACORN_GUARD_PATTERNS:-}" ]; then
+  GUARD_PATTERNS="$ACORN_GUARD_PATTERNS"
+elif [ -n "$PHASE_DERIVED_PATTERNS" ]; then
+  GUARD_PATTERNS="$PHASE_DERIVED_PATTERNS"
+else
+  GUARD_PATTERNS="$(parse_lock_field patterns strict)"
+fi
+
 GUARD_MODE="${ACORN_GUARD_MODE:-$(parse_lock_field mode block)}"
-GUARD_PATTERNS="${ACORN_GUARD_PATTERNS:-$(parse_lock_field patterns strict)}"
 
 case "$GUARD_MODE" in
   block|warn|log) ;;

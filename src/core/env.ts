@@ -33,6 +33,10 @@ export function vendorsRoot(harnessRoot?: string): string {
   return join(harnessRoot ?? defaultHarnessRoot(), 'vendors');
 }
 
+export function phaseFilePath(harnessRoot?: string): string {
+  return join(harnessRoot ?? defaultHarnessRoot(), 'phase.txt');
+}
+
 export function computeEnv(harnessRoot?: string): EnvMap {
   const vendors = vendorsRoot(harnessRoot);
   return {

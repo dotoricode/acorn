@@ -40,6 +40,8 @@ import {
   readGstackSetupMarker,
   writeGstackSetupMarker,
 } from '../core/gstack-marker.ts';
+import { seedPhaseDefault, readPhase } from '../core/phase.ts';
+import { applyClaudeMdUpdate, defaultClaudeMdPath } from '../core/claude-md.ts';
 
 export type InstallErrorCode =
   | 'IN_PROGRESS'
@@ -48,6 +50,7 @@ export type InstallErrorCode =
   | 'SYMLINK'
   | 'GSTACK_SETUP'
   | 'HOOKS_WRITE'
+  | 'CLAUDE_MD_WRITE'
   | 'SETTINGS_WRITE'
   | 'LOCK_SEEDED';
 
@@ -136,9 +139,11 @@ export interface InstallOptions {
   readonly harnessRoot?: string;
   readonly claudeRoot?: string;
   readonly settingsPath?: string;
+  readonly claudeMdPath?: string;
   readonly git?: GitRunner;
   readonly gstackSetup?: GstackSetupFn;
   readonly skipGstackSetup?: boolean;
+  readonly skipClaudeMd?: boolean;
   readonly logger?: (line: string) => void;
   /** Bypass in_progress tx.log guard. Use only after manual cleanup. */
   readonly force?: boolean;
@@ -235,6 +240,11 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
   // 실패하는 대신 패키지 동봉 템플릿을 시드하고 안내 메시지로 중단한다.
   // tx 시작 전에 수행 (이 실패는 기록할 phase 가 없음).
   const seedResult = seedLockTemplate(lockPath);
+  // pre-0b. phase.txt 초기화 (ADR-022) — fail-stop 하지 않음. 부재 시 guard-check.sh 가 lock fallback.
+  const phaseSeed = seedPhaseDefault(harnessRoot);
+  if (phaseSeed.seeded) {
+    log(`[install] phase.txt 초기화됨 (기본값: dev)`);
+  }
   if (seedResult.seeded) {
     throw new InstallError(
       `harness.lock 템플릿을 생성했습니다: ${lockPath}`,
@@ -293,18 +303,18 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   const backupTs = backupDirTs();
 
   // 1. lock 파싱
-  log(`[1/8] harness.lock 파싱`);
+  log(`[1/9] harness.lock 파싱`);
   tx.phase('lock');
   const lock = readLock(opts.lockPath);
 
   // 2. env 계산
-  log(`[2/8] env 계산`);
+  log(`[2/9] env 계산`);
   tx.phase('env');
   const desired = computeEnv(harnessRoot);
   const vRoot = vendorsRoot(harnessRoot);
 
   // 3. settings 충돌 체크 (읽기 전용, 조기 실패)
-  log(`[3/8] settings.json preflight`);
+  log(`[3/9] settings.json preflight`);
   tx.phase('settings-preflight');
   const current = readSettings(settingsPath);
   const plan = planMerge(current, desired);
@@ -333,7 +343,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   }
 
   // 4. vendors clone
-  log(`[4/8] vendors clone/checkout`);
+  log(`[4/9] vendors clone/checkout`);
   tx.phase('vendors');
   const vendors: Record<ToolName, InstallVendorResult> = {} as Record<
     ToolName,
@@ -375,7 +385,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   }
 
   // 5. gstack 심링크
-  log(`[5/8] gstack 심링크`);
+  log(`[5/9] gstack 심링크`);
   tx.phase('symlink');
   let gstackSymlink: EnsureResult;
   try {
@@ -396,15 +406,15 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   const expectedGstackSha = lock.tools.gstack.commit;
   const markerSha = readGstackSetupMarker(harnessRoot);
   if (opts.skipGstackSetup) {
-    log(`[6/8] gstack setup (스킵)`);
+    log(`[6/9] gstack setup (스킵)`);
     gstackSetupReason = 'skip-flag';
   } else if (markerSha === expectedGstackSha) {
     log(
-      `[6/8] gstack setup (noop — SHA ${expectedGstackSha.slice(0, 7)} 에 대해 이미 실행됨)`,
+      `[6/9] gstack setup (noop — SHA ${expectedGstackSha.slice(0, 7)} 에 대해 이미 실행됨)`,
     );
     gstackSetupReason = 'marker-noop';
   } else {
-    log(`[6/8] gstack setup 실행`);
+    log(`[6/9] gstack setup 실행`);
     try {
       const setupFn = opts.gstackSetup;
       if (setupFn) {
@@ -437,7 +447,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
 
   // 7. hooks 배포 (ADR-017 / §15 C2) — settings.json 이 참조하는 artifact 를
   //    install 이 실제로 디스크에 만든다. gstack-setup 직후, settings-write 직전.
-  log(`[7/8] hooks 배포`);
+  log(`[7/9] hooks 배포`);
   tx.phase('hooks');
   let hooks: HooksResult;
   try {
@@ -460,8 +470,41 @@ function runInstallInner(ctx: InnerContext): InstallResult {
     );
   }
 
-  // 8. settings 원자 쓰기 (백업 포함, 마지막)
-  log(`[8/8] settings.json 쓰기`);
+  // 8. CLAUDE.md 마커 주입 (ADR-023) — 현재 phase.txt 값 읽어 주입.
+  log(`[8/9] CLAUDE.md phase 마커 주입`);
+  tx.phase('claude-md');
+  if (!opts.skipClaudeMd) {
+    const phaseRead = readPhase(harnessRoot);
+    const phaseForMd = phaseRead.value ?? 'dev';
+    const claudeMdPath = opts.claudeMdPath ?? defaultClaudeMdPath(claudeRoot);
+    try {
+      const claudeMdResult = applyClaudeMdUpdate({
+        claudeMdPath,
+        harnessRoot,
+        phase: phaseForMd,
+        backupTs,
+      });
+      if (claudeMdResult.kind === 'noop') {
+        log(`      CLAUDE.md: noop`);
+      } else if (claudeMdResult.kind === 'created') {
+        log(`      CLAUDE.md: created ${claudeMdResult.path}`);
+      } else {
+        log(`      CLAUDE.md: updated (backup: ${claudeMdResult.backup ?? '-'})`);
+      }
+    } catch (e) {
+      throw new InstallError(
+        `CLAUDE.md 마커 주입 실패: ${e instanceof Error ? e.message : String(e)}`,
+        'CLAUDE_MD_WRITE',
+        e,
+        `~/.claude/CLAUDE.md 의 마커 블록을 확인하거나 --skip-claude-md 로 우회 가능.`,
+      );
+    }
+  } else {
+    log(`      CLAUDE.md: 스킵 (--skip-claude-md)`);
+  }
+
+  // 9. settings 원자 쓰기 (백업 포함, 마지막)
+  log(`[9/9] settings.json 쓰기`);
   tx.phase('settings-write');
   let settings: InstallEnvResult;
   try {

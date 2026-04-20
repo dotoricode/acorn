@@ -614,6 +614,40 @@ v0.5.0 에서 integration test (ARCH-R1) 와 같은 window 에 묶어 release.
 하드코드 — SHA 락 전제상 silent false-negative 경로가 구조적으로 존재하지
 않음 (upstream rename 은 lock bump 단계에서 감지).
 
+### ADR-022: Phase 시스템 도입 (v0.7.0)
+
+**결정**: `<harnessRoot>/phase.txt` 단일 텍스트 파일을 단일 진실 소스로 하고,
+`acorn phase <value>` 커맨드로 전환. `hooks/guard-check.sh` 가 매 Bash 호출마다
+읽어 강제 수준을 결정. CLAUDE.md 에 마커 블록으로 phase 지침 주입.
+
+**매핑**: `prototype → minimal`, `dev → moderate`, `production → strict`.
+
+**대안 비교**:
+- (a) `harness.lock.phase` 필드 통합 → reject. lock 은 "SHA snapshot" 의미론. phase 는 "런타임 상태". 훅이 매 호출마다 lock 전체를 jq/node 로 파싱 — phase.txt single-line read 대비 10-100x 느림.
+- (b) 별도 `phase.txt` → accept. single-line read, atomic write, gstack-marker 선례 존재.
+
+**우선순위**: `ACORN_GUARD_BYPASS` > `ACORN_PHASE_OVERRIDE` > `ACORN_GUARD_PATTERNS` > `phase.txt` > `harness.lock.guard.patterns` > 기본 `strict`.
+
+### ADR-023: CLAUDE.md 관리 모듈 (v0.7.0)
+
+**결정**: 신규 모듈 `src/core/claude-md.ts` 로 `<!-- ACORN:PHASE:START -->` /
+`<!-- ACORN:PHASE:END -->` 마커 기반 비파괴 주입. settings.ts 의 plan/apply 패턴 미러.
+atomic write (tmp+rename) + `<harnessRoot>/backup/<ts>/claude-md/CLAUDE.md.bak`.
+
+**이유**: OMC 가 이미 `<!-- OMC:START -->` 마커로 CLAUDE.md 를 관리한다.
+네임스페이스를 `ACORN:PHASE:` 로 구분해 OMC 블록과 충돌 없이 병렬 주입.
+
+**corrupt 대응**: START 만 있고 END 없는 경우 → `ClaudeMdError('MARKER_CORRUPT')` fail-close. 자동 복구 없음.
+
+### ADR-024: harness.lock schema v1 유지 (v0.7.0)
+
+**결정**: phase 시스템 때문에 `schema_version` 을 2 로 bump **하지 않는다**.
+`TOOL_NAMES` 도 `['omc', 'gstack', 'ecc']` 3개 유지.
+
+**이유**: (1) phase 는 `phase.txt` 로 격리되므로 스키마 변경 불필요.
+(2) 한 릴리스에 한 이슈 원칙 (ADR-021) — phase 도입 + tool 확장 동시 진행 시 회귀 bisect 비용 ↑.
+(3) `TOOL_NAMES` 확장은 optional tool 지원 설계(ADR-025)와 묶어야 함.
+
 ---
 
 ## 12. 검증 현황

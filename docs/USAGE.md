@@ -216,9 +216,42 @@ acorn lock validate && echo ok                          # v0.2.0+ lock schema ga
 `status` / `doctor` / `lock validate` 모두 exit code 로 CI 분기 가능
 — 아래 Exit code 표 참조.
 
+### phase 전환 — 작업 단계에 맞게 guard 강도 동기화 (v0.7.0+)
+
+작업 성격이 바뀔 때 `acorn phase` 한 줄로 guard 강도 + CLAUDE.md 지침을 함께 변경.
+
+```bash
+acorn phase                       # 현재 phase 확인 (get)
+acorn phase prototype --yes       # 탐색 단계 — guard minimal, fail-fast 완화
+acorn phase dev --yes             # 기본 개발 (기본값)
+acorn phase production --yes      # 운영 안정 — guard strict, 파괴적 조치 명시 승인 필요
+```
+
+| phase | guard.patterns | 설명 |
+|---|---|---|
+| `prototype` | `minimal` | 빠른 탐색, 진행 우선 |
+| `dev` | `moderate` | 표준 개발 (기본값, install 시 seed) |
+| `production` | `strict` | 안정 운영, 파괴적 조치는 명시적 승인 |
+
+`acorn phase` 는 `<harnessRoot>/phase.txt` 를 업데이트하고, `CLAUDE.md` 의
+`<!-- ACORN:PHASE:START -->` … `<!-- ACORN:PHASE:END -->` 마커 블록도 자동 갱신.
+마커 밖 CLAUDE.md 내용은 byte-by-byte 보존된다.
+
+**환경변수 우선순위** (guard-check.sh 결정 체계):
+
+| 우선순위 | 환경변수 / 소스 | 설명 |
+|---|---|---|
+| 1 (최고) | `ACORN_GUARD_BYPASS=1` | 모든 guard 완전 비활성화 |
+| 2 | `ACORN_PHASE_OVERRIDE=<phase>` | phase.txt 무시, 지정 phase 강제 |
+| 3 | `ACORN_GUARD_PATTERNS=<level>` | patterns 직접 지정 (phase 보다 우선) |
+| 4 | `<harnessRoot>/phase.txt` | acorn phase 가 관리하는 파일 |
+| 5 | `harness.lock .guard.patterns` | v0.6.x 이하 fallback |
+| 6 (기본) | `strict` | phase.txt / lock 모두 없는 경우 |
+
 ### guard 모드 / 패턴 전환 (v0.3.0+)
 
 개발 중 위험 커맨드 차단을 잠시 완화하거나 다시 잠글 때.
+phase 와 별개로 patterns 만 일시 변경하고 싶을 때 사용.
 
 ```bash
 acorn config guard.mode warn --yes           # block → warn (차단 대신 경고만)
@@ -283,7 +316,9 @@ acorn install --adopt --yes        # non-TTY/CI
 | `acorn config guard.mode <v>` | `block\|warn\|log` 전환 | 개발 중 | v0.3.0 |
 | `acorn config guard.patterns <v>` | `strict\|moderate\|minimal` 전환 | 개발 중 | v0.3.0 |
 | `acorn config env.reset` | env 3키 제거 (다른 키 보존) | 드물게 | v0.3.0 |
-| `acorn --version` | `0.3.2` | 확인용 | v0.1.0 |
+| `acorn phase` | 현재 phase 확인 | 수시 | v0.7.0 |
+| `acorn phase <v> [--yes]` | `prototype\|dev\|production` 전환 | 작업 단계 변경 시 | v0.7.0 |
+| `acorn --version` | `0.7.0` | 확인용 | v0.1.0 |
 | `acorn --help` | usage | 까먹었을 때 | v0.1.0 |
 | `dn <메모>` | 1줄 관찰 기록 (도그푸딩) | — | dev-only |
 | `dn ux/bug/idea/blocker <메모>` | 라벨 + 메모 | — | dev-only |
@@ -376,6 +411,9 @@ dreport   # 이번 주 얼마나 썼나, 뭐 적었나
 | `[vendor/CLONE]` | 네트워크 / 레포 접근권한 확인 |
 | `[config/CONFIRM_REQUIRED]` (v0.3.0+) | non-TTY 에서 `acorn config ... --yes` 로 재실행 |
 | `[config/SCHEMA]` (v0.3.0+) | 값 enum 확인: `guard.mode=block\|warn\|log`, `guard.patterns=strict\|moderate\|minimal` |
+| `[phase/INVALID_VALUE]` (v0.7.0+) | `acorn phase prototype\|dev\|production` 중 하나여야 함 |
+| `[phase/CONFIRM_REQUIRED]` (v0.7.0+) | non-TTY 에서 `acorn phase <v> --yes` 로 재실행 |
+| `acorn status` 에서 `⚠️ CLAUDE.md` | `acorn install` 또는 `acorn phase <현재값> --yes` 로 마커 동기화 |
 | gstack dirty warning 계속 | `cd vendors/gstack && git status` 로 원인 파악 후 커밋·스태시·reset 중 선택. `.agents/` 같은 setup 부산물은 자동 허용 (v0.1.1+) |
 
 ---

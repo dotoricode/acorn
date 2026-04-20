@@ -2,16 +2,11 @@
 
 Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
-> **Status**: **v0.6.0** — CI 그린 유지, codex review 10건 중 7건 해소, Round 3
-> 도그푸딩 F1/F3 해소, 신규 커맨드 `acorn list` (read-only, CI 친화).
-> v0.3.2 이후 릴리스: v0.3.3 (docs 전역 현행화) → v0.3.4 (H-3/H-1 silent-lie
-> 제거) → v0.3.5 (HIGH-3 lite, ACORN_GUARD_BYPASS 감지) → v0.4.0 (HIGH-2 lite,
-> 공급망 무결성 — allowlist + provenance) → v0.4.1 (codex P0 5건 fail-close
-> 복원) → v0.4.2 (CI 회귀 isEmptyDir 심링크 오판) → v0.4.3 (F1, LockError/PARSE
-> exit=78) → v0.4.4 (codex #7, Windows cmd.exe injection 제거) → v0.5.0
-> (installVendor lstat-first + tool traversal guard) → v0.5.1 (부채 #4 #5,
-> isoTs 단일화 + backup 디렉토리 공유) → **v0.6.0** (acorn list + VERSION
-> 런타임 로드).
+> **Status**: **v0.7.0** — phase 시스템 도입. `acorn phase [value] [--yes]` 커맨드,
+> `phase.txt` 단일 진실 소스, CLAUDE.md 마커 자동 주입, guard-check.sh phase 우선순위 체계.
+> v0.3.2 이후 릴리스: v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → v0.4.2
+> → v0.4.3 → v0.4.4 → v0.5.0 → v0.5.1 → v0.6.0 (acorn list + VERSION 런타임 로드)
+> → v0.6.1 (docs) → **v0.7.0** (phase 시스템).
 >
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
@@ -56,6 +51,8 @@ acorn list --json                 # CI 용 JSON
 acorn doctor                      # 이슈 + 수동 복구 힌트
 acorn status --json               # 기계 판독
 acorn lock validate               # harness.lock schema 검증 (v0.2.0+)
+acorn phase                       # 현재 phase 조회 (v0.7.0+)
+acorn phase production --yes      # phase 변경 (v0.7.0+)
 acorn config                      # 현재 설정 요약 (v0.3.0+)
 acorn config guard.mode warn --yes       # guard 모드 변경 (v0.3.0+)
 acorn config guard.patterns minimal --yes # 패턴 레벨 변경
@@ -134,6 +131,30 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
   로 안전하게 실패. 테스트/빌드 단계는 통과 상태를 유지한다.
 
 > 머신 간 인계(Mac ↔ Windows)는 [docs/HANDOVER.md](docs/HANDOVER.md) 참조.
+
+---
+
+## Phase 시스템 (v0.7.0+)
+
+> acorn 의 목표는 최고의 툴 조합을 설치하는 것이 아니라,
+> 지금 어느 단계인지에 맞는 조합을 자동으로 구성하는 것이다.
+
+`<harnessRoot>/phase.txt` 에 `prototype | dev | production` 중 하나를 기록해
+guard 강제 수준과 CLAUDE.md 의 LLM 지침을 동기화한다.
+
+| phase | guard 수준 | 설명 |
+|---|---|---|
+| `prototype` | minimal | 빠른 탐색 우선, catastrophic 만 차단 |
+| `dev` | moderate | 표준 개발 (기본값) |
+| `production` | strict | 모든 파괴적 패턴 차단 |
+
+```bash
+acorn phase                        # 현재 phase 조회
+acorn phase production --yes       # production 으로 전환 (CLAUDE.md 자동 업데이트)
+acorn phase dev                    # dev 로 복귀 (Y/n 확인)
+```
+
+**환경변수 우선순위**: `ACORN_GUARD_BYPASS` > `ACORN_PHASE_OVERRIDE` > `ACORN_GUARD_PATTERNS` > `phase.txt` > `harness.lock.guard.patterns` > 기본 `strict`.
 
 ---
 

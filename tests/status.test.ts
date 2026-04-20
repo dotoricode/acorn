@@ -245,6 +245,8 @@ test('summarize: 모든 정상 → ok=true', () => {
     mkdirSync(gstackVendor, { recursive: true });
     mkdirSync(join(w.claudeRoot, 'skills'), { recursive: true });
     symlinkSync(gstackVendor, join(w.claudeRoot, 'skills', 'gstack'), 'dir');
+    // phase.txt 이 없으면 phase.status='missing' → summarize 에서 issue 추가됨
+    writeFileSync(join(w.harnessRoot, 'phase.txt'), 'dev\n');
     const heads = setupVendors(w, { omc: SHA_OMC, gstack: SHA_GSTACK, ecc: SHA_ECC });
     const r = collectStatus({
       lockPath: w.lockPath,

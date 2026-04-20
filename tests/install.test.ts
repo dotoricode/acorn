@@ -586,9 +586,9 @@ test('runInstall: logger 호출 (진행 추적)', () => {
       skipGstackSetup: true,
       logger: (line) => lines.push(line),
     });
-    assert.ok(lines.some((l) => l.includes('[1/8]')));
-    assert.ok(lines.some((l) => l.includes('[7/8]')));
-    assert.ok(lines.some((l) => l.includes('[8/8]')));
+    assert.ok(lines.some((l) => l.includes('[1/9]')));
+    assert.ok(lines.some((l) => l.includes('[8/9]')));
+    assert.ok(lines.some((l) => l.includes('[9/9]')));
   } finally {
     w.cleanup();
   }

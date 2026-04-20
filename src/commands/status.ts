@@ -7,6 +7,8 @@ import {
   vendorsRoot,
   type EnvDiffEntry,
 } from '../core/env.ts';
+import { readPhase, type Phase, type PhaseStatus } from '../core/phase.ts';
+import { defaultClaudeMdPath, claudeMdMarkerStatus, readPhaseFromClaudeMd } from '../core/claude-md.ts';
 import {
   defaultSettingsPath,
   readSettings,
@@ -27,6 +29,14 @@ import { shortSha, distinguishingPair } from '../core/sha-display.ts';
 
 export type VendorState = 'locked' | 'drift' | 'missing' | 'error';
 
+export interface PhaseStatusField {
+  readonly value: Phase | null;
+  readonly path: string;
+  readonly status: PhaseStatus;
+  readonly claudeMdValue: Phase | null;
+  readonly claudeMdStatus: 'ok' | 'missing' | 'mismatch' | 'corrupt';
+}
+
 export interface ToolStatus {
   readonly tool: ToolName;
   readonly repo: string;
@@ -40,6 +50,7 @@ export interface StatusReport {
   readonly acornVersion: string;
   readonly harnessRoot: string;
   readonly tools: Readonly<Record<ToolName, ToolStatus>>;
+  readonly phase: PhaseStatusField;
   readonly guard: GuardConfig;
   readonly env: readonly EnvDiffEntry[];
   /**
@@ -61,6 +72,7 @@ export interface CollectOptions {
   readonly harnessRoot?: string;
   readonly claudeRoot?: string;
   readonly settingsPath?: string;
+  readonly claudeMdPath?: string;
   readonly git?: GitRunner;
   /**
    * §15 M3: Claude Code 세션 runtime env. 미지정 시 runtime check 를 skip
@@ -74,6 +86,7 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
   const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
   const claudeRoot = opts.claudeRoot ?? defaultClaudeRoot();
   const settingsPath = opts.settingsPath ?? defaultSettingsPath();
+  const claudeMdPath = opts.claudeMdPath ?? defaultClaudeMdPath(claudeRoot);
   const git = opts.git ?? defaultGitRunner;
 
   const lock = readLock(opts.lockPath);
@@ -130,10 +143,22 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
     ? diffEnv(desired, opts.runtimeEnv)
     : [];
 
+  const phaseRead = readPhase(harnessRoot);
+  const claudeMdPhase = readPhaseFromClaudeMd(claudeMdPath);
+  const claudeMdSt = claudeMdMarkerStatus(claudeMdPath, phaseRead.value);
+  const phaseField: PhaseStatusField = {
+    value: phaseRead.value,
+    path: phaseRead.path,
+    status: phaseRead.status,
+    claudeMdValue: claudeMdPhase,
+    claudeMdStatus: claudeMdSt,
+  };
+
   return {
     acornVersion: lock.acorn_version,
     harnessRoot,
     tools,
+    phase: phaseField,
     guard: lock.guard,
     env: envDiff,
     envRuntime: envRuntimeDiff,
@@ -188,6 +213,25 @@ export function renderStatus(r: StatusReport): string {
     );
   }
   lines.push('─'.repeat(60));
+  {
+    const p = r.phase;
+    const phaseVal = p.value ?? (p.status === 'missing' ? '(미설정)' : '(잘못된값)');
+    const icon =
+      p.status === 'ok' && p.claudeMdStatus === 'ok'
+        ? '✅'
+        : p.status === 'missing'
+          ? '❌'
+          : '⚠️';
+    const note =
+      p.claudeMdStatus === 'mismatch'
+        ? '  ⚠️ CLAUDE.md 와 불일치 — acorn install 로 동기화'
+        : p.claudeMdStatus === 'corrupt'
+          ? '  ⚠️ CLAUDE.md 마커 손상'
+          : p.claudeMdStatus === 'missing'
+            ? '  (CLAUDE.md 마커 없음)'
+            : '';
+    lines.push(`  phase    ${phaseVal.padEnd(12)} ${icon}${note}`);
+  }
   lines.push(`  guard    ${r.guard.mode} / ${r.guard.patterns}`);
   lines.push('  env:');
   for (const e of r.env) {
@@ -224,6 +268,9 @@ export function summarize(r: StatusReport): StatusSummary {
   for (const e of r.env) {
     if (e.status !== 'match') issues.push(`env.${e.key}: ${e.status}`);
   }
+  if (r.phase.status !== 'ok') issues.push(`phase: ${r.phase.status}`);
+  if (r.phase.claudeMdStatus === 'mismatch') issues.push(`claude-md: mismatch`);
+  if (r.phase.claudeMdStatus === 'corrupt') issues.push(`claude-md: corrupt`);
   if (r.gstackSymlink.status !== 'correct') {
     issues.push(`gstack-symlink: ${r.gstackSymlink.status}`);
   }

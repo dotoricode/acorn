@@ -3,6 +3,56 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.7.0] — 2026-04-20
+
+🟢 **phase 시스템 도입** — "acorn 의 목표는 최고의 툴 조합 설치가 아니라
+지금 어느 단계인지에 맞는 조합을 자동 구성하는 것" 철학 선언에 대응하는
+첫 코드 구현. 기존 사용자는 `acorn install` 한 번으로 자동 migration.
+Breaking 아님 — 부재 시 lock fallback.
+
+### Added
+
+- **ADR-022 / `src/core/phase.ts` (신규)**: `<harnessRoot>/phase.txt` 단일
+  텍스트 파일. `prototype | dev | production` enum. atomic write (tmp+rename).
+  `readPhase` / `writePhase` / `seedPhaseDefault` / `isValidPhase` 공개 API.
+- **`src/commands/phase.ts` (신규)**: `acorn phase [value] [--yes]` 커맨드.
+  인수 없음 → 현재 phase 조회. 값 지정 → Y/n 확인 후 set.
+  `--yes` 로 프롬프트 스킵. non-TTY + no `--yes` → `CONFIRM_REQUIRED` 에러.
+- **ADR-023 / `src/core/claude-md.ts` (신규)**: `<!-- ACORN:PHASE:START -->` /
+  `<!-- ACORN:PHASE:END -->` 마커 기반 CLAUDE.md 비파괴 주입.
+  마커 밖 byte-by-byte 보존. backup + atomic write.
+  corrupt marker (START 만 있고 END 없음) → `ClaudeMdError('MARKER_CORRUPT')` fail-close.
+- **`hooks/guard-check.sh` phase 로드 블록**: phase.txt → patterns 매핑.
+  우선순위: `ACORN_GUARD_BYPASS` > `ACORN_PHASE_OVERRIDE` > `ACORN_GUARD_PATTERNS`
+  > `phase.txt` > `harness.lock.guard.patterns` > 기본 `strict`.
+- **`StatusReport.phase` 필드** (`src/commands/status.ts`): phase 값 + CLAUDE.md
+  마커 일치 여부 표시. `summarize` 에서 missing/invalid/mismatch/corrupt 를 issues 에 포함.
+- **install [8/9] claude-md 단계**: CLAUDE.md 에 phase 마커 주입 (tx phase `claude-md`).
+- **install pre-0b `seedPhaseDefault`**: phase.txt 부재 시 기본값 `dev` seed. fail-soft.
+- **신규 테스트**: `tests/phase.test.ts`, `tests/claude-md.test.ts`,
+  `tests/guard-phase.test.ts`.
+- **`templates/claude-md.phase.template.md` (신규)**: prototype/dev/production
+  블록 형식 레퍼런스 템플릿.
+
+### Changed
+
+- install pipeline: 8단계 → 9단계 (`claude-md` 삽입, 기존 단계 번호 재정렬).
+- `InstallErrorCode` += `CLAUDE_MD_WRITE`.
+- `exitFor` / `formatError`: `PhaseError` 분기 추가 (`INVALID_VALUE` → CONFIG, `CONFIRM_REQUIRED` → USAGE).
+- `usage()`: `phase` 커맨드 섹션 추가.
+
+### Migration notes
+
+- v0.6.x 사용자: `acorn install` 한 번으로 완료
+  (`phase.txt` seed `dev` + CLAUDE.md 마커 추가).
+- harness.lock schema 변경 없음 (`schema_version=1` 유지).
+- 다른 phase 로 시작: `acorn install` 후 `acorn phase production --yes`.
+
+### Not breaking
+
+- `phase.txt` 부재 시 `guard-check.sh` 는 `harness.lock.guard.patterns` fallback.
+- CLAUDE.md 가 있으면 마커 블록만 추가 (기존 내용 보존).
+
 ## [0.6.1] — 2026-04-18
 
 📖 **docs: README + USAGE 현행화**. v0.3.2 기준으로 멈춰 있던 문서를
