@@ -1,8 +1,10 @@
 import {
   readFileSync,
   writeFileSync,
+  unlinkSync,
   existsSync,
   mkdirSync,
+  renameSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -267,6 +269,31 @@ export function lockTemplatePath(): string {
  * - BOM 없이 utf8 로 기록
  * §15 C1: install 의 첫 실패 UX 를 "에러 + 에디터 열어라" 로 개선.
  */
+export function stampLockVersion(lockPath: string, version: string): void {
+  if (!existsSync(lockPath)) return;
+  let raw: string;
+  try {
+    raw = stripBom(readFileSync(lockPath, 'utf8'));
+  } catch {
+    return;
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return;
+  const next = { ...(data as Record<string, unknown>), acorn_version: version };
+  const tmp = `${lockPath}.acorn-${process.pid}-${Date.now()}.tmp`;
+  try {
+    writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { encoding: 'utf8', mode: 0o644 });
+    renameSync(tmp, lockPath);
+  } catch {
+    try { unlinkSync(tmp); } catch { /* best effort cleanup */ }
+  }
+}
+
 export function seedLockTemplate(lockPath: string): { seeded: boolean; templatePath: string } {
   const templatePath = lockTemplatePath();
   if (existsSync(lockPath)) return { seeded: false, templatePath };

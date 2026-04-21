@@ -1,9 +1,11 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
   readLock,
   seedLockTemplate,
+  stampLockVersion,
   TOOL_NAMES,
   type HarnessLock,
   type ToolName,
@@ -275,6 +277,7 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
       harnessRoot,
       claudeRoot,
       settingsPath,
+      lockPath,
       git,
       tx,
     });
@@ -290,12 +293,13 @@ interface InnerContext {
   readonly harnessRoot: string;
   readonly claudeRoot: string;
   readonly settingsPath: string;
+  readonly lockPath: string;
   readonly git: GitRunner;
   readonly tx: ReturnType<typeof beginTx>;
 }
 
 function runInstallInner(ctx: InnerContext): InstallResult {
-  const { opts, log, harnessRoot, claudeRoot, settingsPath, git, tx } = ctx;
+  const { opts, log, harnessRoot, claudeRoot, settingsPath, lockPath, git, tx } = ctx;
 
   // §15 v0.5.1 (부채 #5): 1회 실행의 모든 백업 (symlink / hooks / settings)
   // 이 공유할 ts 를 진입부에서 1회 계산. 이전엔 각 호출이 각자 찍어
@@ -305,7 +309,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   // 1. lock 파싱
   log(`[1/9] harness.lock 파싱`);
   tx.phase('lock');
-  const lock = readLock(opts.lockPath);
+  const lock = readLock(lockPath);
 
   // 2. env 계산
   log(`[2/9] env 계산`);
@@ -542,6 +546,17 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   }
 
   tx.commit();
+
+  // harness.lock 의 acorn_version 을 현재 실행 버전으로 갱신 (fail-soft).
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const pkg = JSON.parse(readFileSync(join(here, '..', '..', 'package.json'), 'utf8')) as { version?: string };
+    if (typeof pkg.version === 'string') {
+      stampLockVersion(lockPath, pkg.version);
+      log(`      harness.lock acorn_version → ${pkg.version}`);
+    }
+  } catch { /* best effort — 버전 스탬프 실패는 install 성공에 영향 없음 */ }
+
   return {
     lock,
     vendors,
