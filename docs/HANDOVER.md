@@ -10,8 +10,8 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` (push 대기), 태그 **`v0.9.0`** (push 대기) |
-| 진행 중 작업 | **v0.9.0 완료**. uninstall 7단계 + install 후 acorn_version 자동 스탬프(stampLockVersion). `acorn status` 에 v0.9.0 정상 노출 확인. 테스트 311/311 Mac (0 실패). |
-| 다음 작업 | **v1.0.0**: npm publish 활성화 (NPM_TOKEN GitHub Secret 설정 + tag push). 실환경 fresh macOS 검증. |
+| 진행 중 작업 | **v0.9.0 완료**. uninstall 7단계 + install 후 acorn_version 자동 스탬프. v2 설계 plan 완성 (docs/acorn-v2-plan.md). |
+| 다음 작업 | **v0.9.1**: Step 1 — lock.ts schema_version 3 타입 + 파싱. 설계: docs/acorn-v2-plan.md §9 Milestone 1 참조. |
 | 테스트 | Mac: **311/311** (0 실패). Windows: 기존 EPERM 유지 예상. |
 | 릴리스 커밋 체인 | v0.1.0 → … → v0.7.0 → v0.7.1 → v0.7.2 → v0.8.0 → **v0.9.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |
@@ -152,5 +152,6 @@ git push origin main
 
 - `CLAUDE.md` — 프로젝트 컨텍스트, 코딩 규칙, 문서 업데이트 지침
 - `README.md` — 사용자 관점 기능 / 사용법 / 트러블슈팅
-- `docs/acorn-v1-plan.md` — 설계 명세, ADR, Done Definition
+- `docs/acorn-v1-plan.md` — v0.1~0.9 설계 명세, ADR, Done Definition
+- `docs/acorn-v2-plan.md` — **v0.9.1+ 설계 기획안** (schema_version 3, 2-preset 시스템)
 - `docs/HANDOVER.md` — **본 문서** (머신 간 인계)
