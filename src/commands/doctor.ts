@@ -22,7 +22,8 @@ export type DoctorArea =
   | 'tx'
   | 'lock'
   | 'settings'
-  | 'guard'; // §15 HIGH-3 lite (v0.3.5): ACORN_GUARD_BYPASS 세션 감지
+  | 'guard' // §15 HIGH-3 lite (v0.3.5): ACORN_GUARD_BYPASS 세션 감지
+  | 'phase'; // v0.7.2: phase drift 검증
 
 export interface DoctorIssue {
   readonly area: DoctorArea;
@@ -283,6 +284,51 @@ function guardIssues(opts: DoctorOptions): DoctorIssue[] {
   ];
 }
 
+function phaseIssues(status: StatusReport): DoctorIssue[] {
+  const out: DoctorIssue[] = [];
+  const p = status.phase;
+
+  if (p.status === 'missing') {
+    out.push({
+      area: 'phase',
+      severity: 'warning',
+      subject: 'phase.txt',
+      message: `phase.txt 없음: ${p.path}`,
+      hint: '`acorn phase set <prototype|dev|production>` 으로 설정',
+    });
+  } else if (p.status === 'invalid') {
+    out.push({
+      area: 'phase',
+      severity: 'critical',
+      subject: 'phase.txt',
+      message: `phase.txt 에 잘못된 값: ${p.path}`,
+      hint: '`acorn phase set <prototype|dev|production>` 으로 재설정',
+    });
+  }
+
+  if (p.claudeMdStatus === 'corrupt') {
+    out.push({
+      area: 'phase',
+      severity: 'critical',
+      subject: 'CLAUDE.md',
+      message: `CLAUDE.md phase 마커 손상 (START/END 불균형 또는 순서 역전)`,
+      hint: '마커 블록을 수동 점검 후 제거하거나, `acorn phase set` 으로 재주입',
+    });
+  } else if (p.claudeMdStatus === 'mismatch') {
+    out.push({
+      area: 'phase',
+      severity: 'warning',
+      subject: 'CLAUDE.md',
+      message:
+        `CLAUDE.md phase 마커가 phase.txt 와 불일치 ` +
+        `(마커=${p.claudeMdValue ?? '?'}, phase.txt=${p.value ?? '?'})`,
+      hint: '`acorn install` 또는 `acorn phase set` 으로 동기화',
+    });
+  }
+
+  return out;
+}
+
 function txIssues(status: StatusReport): DoctorIssue[] {
   if (!status.pendingTx) return [];
   return [{
@@ -311,6 +357,7 @@ export function runDoctor(opts: DoctorOptions = {}): DoctorReport {
   }
   issues.push(...envIssues(status));
   issues.push(...symlinkIssues(status));
+  issues.push(...phaseIssues(status));
   issues.push(...txIssues(status));
 
   const summary: DoctorSummary = {

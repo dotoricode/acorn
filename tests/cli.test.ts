@@ -122,7 +122,7 @@ test('runCli: lock validate <valid path> → OK + schema 요약 출력 (§15 v0.
     const code = runCli(['lock', 'validate', lockPath], c.io);
     assert.equal(code, EXIT.OK);
     assert.ok(c.out.some((l) => l.includes('harness.lock OK')));
-    assert.ok(c.out.some((l) => l.includes('schema_version=1')));
+    assert.ok(c.out.some((l) => l.includes('schema_version=2')));
     assert.ok(c.out.some((l) => l.includes('guard=block/strict')));
   } finally {
     rmSync(dir, { recursive: true, force: true });

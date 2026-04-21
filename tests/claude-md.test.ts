@@ -181,3 +181,19 @@ test('claudeMdMarkerStatus: corrupt when only START marker present', () => {
     rmSync(root, { recursive: true });
   }
 });
+
+test('planClaudeMdUpdate: throws MARKER_CORRUPT when END without START (orphaned END)', () => {
+  const orphan = `# Project\n\nsome content\n${PHASE_MARKER_END}\n`;
+  assert.throws(
+    () => planClaudeMdUpdate(orphan, 'dev'),
+    (e: unknown) => e instanceof ClaudeMdError && e.code === 'MARKER_CORRUPT',
+  );
+});
+
+test('planClaudeMdUpdate: throws MARKER_CORRUPT when END appears before START', () => {
+  const reversed = `${PHASE_MARKER_END}\nsome content\n${PHASE_MARKER_START}\n`;
+  assert.throws(
+    () => planClaudeMdUpdate(reversed, 'dev'),
+    (e: unknown) => e instanceof ClaudeMdError && e.code === 'MARKER_CORRUPT',
+  );
+});

@@ -9,9 +9,11 @@ import { fileURLToPath } from 'node:url';
 import { defaultHarnessRoot } from './env.ts';
 import { stripBom } from './bom.ts';
 
-export const SCHEMA_VERSION = 1 as const;
+export const SCHEMA_VERSION = 2 as const;
 export const TOOL_NAMES = ['omc', 'gstack', 'ecc'] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
+export const OPTIONAL_TOOL_NAMES = ['superpowers', 'claude-mem'] as const;
+export type OptionalToolName = (typeof OPTIONAL_TOOL_NAMES)[number];
 
 export const GUARD_MODES = ['block', 'warn', 'log'] as const;
 export type GuardMode = (typeof GUARD_MODES)[number];
@@ -42,9 +44,10 @@ export interface GuardConfig {
 }
 
 export interface HarnessLock {
-  readonly schema_version: 1;
+  readonly schema_version: 2;
   readonly acorn_version: string;
   readonly tools: Readonly<Record<ToolName, ToolEntry>>;
+  readonly optional_tools: Readonly<Partial<Record<OptionalToolName, ToolEntry>>>;
   readonly guard: GuardConfig;
 }
 
@@ -133,6 +136,39 @@ function validateGuard(raw: unknown): GuardConfig {
   return { mode: mode as GuardMode, patterns: patterns as GuardPatterns };
 }
 
+function validateOptionalToolEntry(tool: string, raw: unknown): ToolEntry {
+  if (!isObject(raw)) {
+    throw new LockError(`optional_tools.${tool}: object 가 아닙니다`, 'SCHEMA');
+  }
+  const { repo, commit, verified_at } = raw;
+  if (typeof repo !== 'string' || !REPO_RE.test(repo)) {
+    throw new LockError(`optional_tools.${tool}.repo: "owner/name" 형식이어야 합니다`, 'SCHEMA');
+  }
+  if (typeof commit !== 'string' || !SHA1_RE.test(commit)) {
+    throw new LockError(`optional_tools.${tool}.commit: 40자 SHA1 이어야 합니다`, 'SCHEMA');
+  }
+  if (typeof verified_at !== 'string' || !ISO_DATE_RE.test(verified_at)) {
+    throw new LockError(`optional_tools.${tool}.verified_at: YYYY-MM-DD 이어야 합니다`, 'SCHEMA');
+  }
+  return { repo, commit, verified_at };
+}
+
+function validateOptionalTools(
+  raw: Record<string, unknown>,
+): Partial<Record<OptionalToolName, ToolEntry>> {
+  const result: Partial<Record<OptionalToolName, ToolEntry>> = {};
+  for (const key of Object.keys(raw)) {
+    if (!(OPTIONAL_TOOL_NAMES as readonly string[]).includes(key)) {
+      throw new LockError(
+        `optional_tools.${key}: 알 수 없는 도구명. 허용: ${OPTIONAL_TOOL_NAMES.join(', ')}`,
+        'SCHEMA',
+      );
+    }
+    result[key as OptionalToolName] = validateOptionalToolEntry(key, raw[key]);
+  }
+  return result;
+}
+
 export function parseLock(raw: string): HarnessLock {
   // Windows 에디터가 UTF-8 BOM 을 삽입한 경우 JSON.parse 가 실패한다.
   // fail-close 원칙 위반 없이 조용히 제거한다. (DOGFOOD Round 1 §v0.1.1 #1)
@@ -153,13 +189,14 @@ export function parseLock(raw: string): HarnessLock {
 
   const { schema_version, acorn_version, tools, guard } = data;
 
-  // 누락과 불일치를 구분. undefined 일 때 "기대 1, 실제 undefined" 표시는
+  // 누락과 불일치를 구분. undefined 일 때 "기대 2, 실제 undefined" 표시는
   // 필드 자체가 없는 건지 잘못 찍은 건지 구분이 안 되어 혼란을 줌.
   // (DOGFOOD Round 1 §v0.1.1 #2)
   if (!('schema_version' in data)) {
     throw new LockError('schema_version 필드 누락', 'SCHEMA');
   }
-  if (schema_version !== SCHEMA_VERSION) {
+  // v0.8.0: v1(기존) 을 in-memory v2 로 투명 마이그레이션. v1/v2 외 버전은 거부.
+  if (schema_version !== 1 && schema_version !== SCHEMA_VERSION) {
     throw new LockError(
       `schema_version 불일치: 기대 ${SCHEMA_VERSION}, 실제 ${String(schema_version)}`,
       'SCHEMA',
@@ -180,10 +217,15 @@ export function parseLock(raw: string): HarnessLock {
     validatedTools[name] = validateToolEntry(name, tools[name]);
   }
 
+  const optional_tools = isObject(data.optional_tools)
+    ? validateOptionalTools(data.optional_tools)
+    : {};
+
   return {
     schema_version: SCHEMA_VERSION,
     acorn_version,
     tools: validatedTools,
+    optional_tools,
     guard: validateGuard(guard),
   };
 }

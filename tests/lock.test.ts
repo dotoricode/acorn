@@ -13,6 +13,7 @@ import {
   LockError,
   SCHEMA_VERSION,
   TOOL_NAMES,
+  OPTIONAL_TOOL_NAMES,
 } from '../src/core/lock.ts';
 
 const VALID_LOCK = {
@@ -78,7 +79,7 @@ test('readLock: BOM 이 포함된 파일도 정상 읽기', () => {
 });
 
 test('parseLock: schema_version 불일치 → LockError(SCHEMA)', () => {
-  const bad = { ...VALID_LOCK, schema_version: 2 };
+  const bad = { ...VALID_LOCK, schema_version: 3 };
   assert.throws(() => parseLock(JSON.stringify(bad)), (e: unknown) => {
     return e instanceof LockError && e.code === 'SCHEMA' && /불일치/.test(e.message);
   });
@@ -224,7 +225,7 @@ test('seedLockTemplate: 파일 없으면 템플릿 복사 (§15 C1)', () => {
     assert.ok(existsSync(lockPath));
     // 시드된 파일이 parseLock 을 통과해야 사용자가 edit 전에도 schema valid
     const parsed = parseLock(readFileSync(lockPath, 'utf8'));
-    assert.equal(parsed.schema_version, 1);
+    assert.equal(parsed.schema_version, SCHEMA_VERSION);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -304,4 +305,76 @@ test('§15 HIGH-2 / ADR-020: ACORN_ALLOW_ANY_REPO=1 escape — 임의 repo 허�
     if (original === undefined) delete process.env['ACORN_ALLOW_ANY_REPO'];
     else process.env['ACORN_ALLOW_ANY_REPO'] = original;
   }
+});
+
+// ── v0.8.0: schema v2 + optional_tools ──────────────────────────────────────
+
+test('v0.8.0: SCHEMA_VERSION is 2', () => {
+  assert.equal(SCHEMA_VERSION, 2);
+});
+
+test('v0.8.0: v1 lock 투명 마이그레이션 → in-memory schema_version=2', () => {
+  const v1Lock = { ...VALID_LOCK, schema_version: 1 };
+  const lock = parseLock(JSON.stringify(v1Lock));
+  assert.equal(lock.schema_version, 2);
+  assert.deepEqual(lock.optional_tools, {});
+});
+
+test('v0.8.0: v2 lock (optional_tools 빈 객체) 정상 파싱', () => {
+  const v2Lock = { ...VALID_LOCK, schema_version: 2, optional_tools: {} };
+  const lock = parseLock(JSON.stringify(v2Lock));
+  assert.equal(lock.schema_version, 2);
+  assert.deepEqual(lock.optional_tools, {});
+});
+
+test('v0.8.0: optional_tools 에 유효한 superpowers 항목 포함 → 파싱 성공', () => {
+  const v2Lock = {
+    ...VALID_LOCK,
+    schema_version: 2,
+    optional_tools: {
+      superpowers: {
+        repo: 'some-org/superpowers',
+        commit: '1234567890abcdef1234567890abcdef12345678',
+        verified_at: '2026-04-21',
+      },
+    },
+  };
+  const lock = parseLock(JSON.stringify(v2Lock));
+  assert.ok(lock.optional_tools.superpowers);
+  assert.equal(lock.optional_tools.superpowers?.repo, 'some-org/superpowers');
+});
+
+test('v0.8.0: optional_tools 알 수 없는 key → SCHEMA', () => {
+  const v2Lock = {
+    ...VALID_LOCK,
+    schema_version: 2,
+    optional_tools: { unknown_tool: { repo: 'a/b', commit: '0'.repeat(40), verified_at: '2026-01-01' } },
+  };
+  assert.throws(
+    () => parseLock(JSON.stringify(v2Lock)),
+    (e: unknown) =>
+      e instanceof LockError &&
+      e.code === 'SCHEMA' &&
+      /unknown_tool/.test(e.message) &&
+      new RegExp(OPTIONAL_TOOL_NAMES.join('|')).test(e.message),
+  );
+});
+
+test('v0.8.0: optional_tools.superpowers SHA 짧으면 → SCHEMA', () => {
+  const v2Lock = {
+    ...VALID_LOCK,
+    schema_version: 2,
+    optional_tools: {
+      superpowers: { repo: 'a/b', commit: 'short', verified_at: '2026-01-01' },
+    },
+  };
+  assert.throws(
+    () => parseLock(JSON.stringify(v2Lock)),
+    (e: unknown) => e instanceof LockError && e.code === 'SCHEMA' && /SHA1/.test(e.message),
+  );
+});
+
+test('v0.8.0: OPTIONAL_TOOL_NAMES exports superpowers and claude-mem', () => {
+  assert.ok((OPTIONAL_TOOL_NAMES as readonly string[]).includes('superpowers'));
+  assert.ok((OPTIONAL_TOOL_NAMES as readonly string[]).includes('claude-mem'));
 });

@@ -648,6 +648,22 @@ atomic write (tmp+rename) + `<harnessRoot>/backup/<ts>/claude-md/CLAUDE.md.bak`.
 (2) 한 릴리스에 한 이슈 원칙 (ADR-021) — phase 도입 + tool 확장 동시 진행 시 회귀 bisect 비용 ↑.
 (3) `TOOL_NAMES` 확장은 optional tool 지원 설계(ADR-025)와 묶어야 함.
 
+### ADR-025: harness.lock schema v2 + optional_tools (v0.8.0)
+
+**결정**: `schema_version` 을 1 → 2 로 bump 하고 `optional_tools` 필드를 추가.
+코어 3종(`omc`, `gstack`, `ecc`)은 기존 `tools` 에 유지.
+`superpowers`, `claude-mem` 등 third-party 는 `optional_tools` 에 기재.
+
+**설계**:
+- `OPTIONAL_TOOL_NAMES = ['superpowers', 'claude-mem'] as const`
+- `HarnessLock.optional_tools: Partial<Record<OptionalToolName, ToolEntry>>`
+- v1 lock 은 `parseLock` 이 in-memory v2 로 투명 마이그레이션 (디스크 변경 없음)
+- 알 수 없는 optional tool key → `SCHEMA` 에러 (fail-close 원칙)
+- allowlist 없음: optional tool 은 third-party repo 허용 (ACORN_ALLOW_ANY_REPO 불요)
+
+**이유**: (1) 사용자 생태계 확장 요구 수용. (2) 코어 툴 allowlist 분리로 보안 경계 유지.
+(3) v1 파일 보존 (비파괴) — `acorn install` 없이도 기존 설치 그대로 동작.
+
 ---
 
 ## 12. 검증 현황

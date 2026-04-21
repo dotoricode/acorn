@@ -15,6 +15,10 @@ import { join } from 'node:path';
 import { runDoctor, renderDoctor, renderDoctorJson } from '../src/commands/doctor.ts';
 import type { GitRunner } from '../src/core/vendors.ts';
 import { beginTx } from '../src/core/tx.ts';
+import {
+  PHASE_MARKER_START,
+  renderPhaseBlock,
+} from '../src/core/claude-md.ts';
 
 const SHA_OMC = 'a'.repeat(40);
 const SHA_GSTACK = 'b'.repeat(40);
@@ -103,6 +107,8 @@ function setupHealthy(w: WS): { heads: Record<string, string> } {
       },
     }),
   );
+  // v0.7.2: phase.txt 가 없으면 phaseIssues 가 warning 을 추가한다. healthy 상태에서는 설정해둔다.
+  writeFileSync(join(w.harnessRoot, 'phase.txt'), 'dev\n', 'utf8');
   return { heads };
 }
 
@@ -568,6 +574,96 @@ test('runDoctor: isDirty 실패 → warning issue 노출 (§15 C6 silent-lie 방
     assert.ok(omcIssue?.hint.includes('git -C'));
     assert.equal(r.ok, false);
     assert.equal(r.okCritical, true);
+  } finally {
+    w.cleanup();
+  }
+});
+
+// ── v0.7.2: phaseIssues ──────────────────────────────────────────────────────
+
+test('runDoctor: phase.txt 없음 → phase area warning', () => {
+  const w = makeWorkspace();
+  try {
+    // phase.txt 를 생성하지 않는다
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+    });
+    const issue = r.issues.find((i) => i.area === 'phase' && i.subject === 'phase.txt');
+    assert.ok(issue, 'phase.txt 없음 → phase issue');
+    assert.equal(issue?.severity, 'warning');
+    assert.ok(/phase\.txt/.test(issue!.message));
+    assert.ok(/acorn phase set/.test(issue!.hint));
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runDoctor: phase.txt 잘못된 값 → phase area critical', () => {
+  const w = makeWorkspace();
+  try {
+    writeFileSync(join(w.harnessRoot, 'phase.txt'), 'staging\n', 'utf8');
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+    });
+    const issue = r.issues.find((i) => i.area === 'phase' && i.subject === 'phase.txt');
+    assert.ok(issue, 'invalid phase.txt → phase issue');
+    assert.equal(issue?.severity, 'critical');
+    assert.ok(/acorn phase set/.test(issue!.hint));
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runDoctor: CLAUDE.md 마커 mismatch → phase area warning', () => {
+  const w = makeWorkspace();
+  try {
+    writeFileSync(join(w.harnessRoot, 'phase.txt'), 'production\n', 'utf8');
+    const claudeMdPath = join(w.claudeRoot, 'CLAUDE.md');
+    writeFileSync(claudeMdPath, renderPhaseBlock('dev') + '\n', 'utf8');
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      claudeMdPath,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+    });
+    const issue = r.issues.find((i) => i.area === 'phase' && i.subject === 'CLAUDE.md');
+    assert.ok(issue, 'mismatch → phase CLAUDE.md issue');
+    assert.equal(issue?.severity, 'warning');
+    assert.ok(/불일치/.test(issue!.message));
+    assert.ok(/acorn install|acorn phase set/.test(issue!.hint));
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('runDoctor: CLAUDE.md 마커 corrupt → phase area critical', () => {
+  const w = makeWorkspace();
+  try {
+    writeFileSync(join(w.harnessRoot, 'phase.txt'), 'dev\n', 'utf8');
+    const claudeMdPath = join(w.claudeRoot, 'CLAUDE.md');
+    writeFileSync(claudeMdPath, `${PHASE_MARKER_START}\nno end marker`, 'utf8');
+    const r = runDoctor({
+      lockPath: w.lockPath,
+      harnessRoot: w.harnessRoot,
+      claudeRoot: w.claudeRoot,
+      claudeMdPath,
+      settingsPath: w.settingsPath,
+      git: gitMock({}),
+    });
+    const issue = r.issues.find((i) => i.area === 'phase' && i.subject === 'CLAUDE.md');
+    assert.ok(issue, 'corrupt CLAUDE.md → phase CLAUDE.md critical');
+    assert.equal(issue?.severity, 'critical');
+    assert.ok(/손상/.test(issue!.message));
   } finally {
     w.cleanup();
   }

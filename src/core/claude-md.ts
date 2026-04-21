@@ -42,28 +42,37 @@ export function defaultClaudeMdPath(claudeRoot?: string): string {
   return join(claudeRoot ?? defaultClaudeRoot(), 'CLAUDE.md');
 }
 
-function guardLevelLabel(phase: Phase): string {
+function phaseSpecificLines(phase: Phase): string[] {
   switch (phase) {
     case 'prototype':
-      return 'minimal';
+      return [
+        '- guard 수준: minimal — 되돌릴 수 없는 catastrophic 조작만 차단',
+        '- 빠른 탐색 우선, fail-fast 보다 진행 우선',
+        '- phase 변경: `acorn phase <prototype|dev|production>`',
+      ];
     case 'dev':
-      return 'moderate';
+      return [
+        '- guard 수준: moderate',
+        '- 체크인 전 `acorn doctor` 로 drift 확인',
+        '- phase 변경: `acorn phase <prototype|dev|production>`',
+      ];
     case 'production':
-      return 'strict';
+      return [
+        '- guard 수준: strict — 모든 파괴적 패턴 차단',
+        '- 변경 전 `acorn status` 로 상태 확인 필수',
+        '- phase 변경: `acorn phase <prototype|dev|production>`',
+      ];
   }
 }
 
 export function renderPhaseBlock(phase: Phase): string {
-  const guard = guardLevelLabel(phase);
   const lines: string[] = [
     PHASE_MARKER_START,
     `## Acorn Phase: ${phase}`,
     '',
     `이 프로젝트는 현재 **${phase}** 단계입니다 (acorn 이 관리).`,
     '',
-    `- guard 수준: ${guard}`,
-    `- 체크인 전 \`acorn doctor\` 로 drift 확인`,
-    `- phase 변경: \`acorn phase <prototype|dev|production>\``,
+    ...phaseSpecificLines(phase),
     '',
     `ACORN_PHASE_KEYWORD: ${phase}`,
     PHASE_MARKER_END,
@@ -94,10 +103,29 @@ export function planClaudeMdUpdate(current: string | null, phase: Phase): Claude
   const startIdx = current.indexOf(PHASE_MARKER_START);
   const endIdx = current.indexOf(PHASE_MARKER_END);
 
+  // START 있고 END 없음: 손상
   if (startIdx !== -1 && endIdx === -1) {
     throw new ClaudeMdError(
       `CLAUDE.md 에 ${PHASE_MARKER_START} 는 있지만 ${PHASE_MARKER_END} 가 없습니다. ` +
         `마커가 손상됐을 가능성. 수동 점검 후 마커 블록을 제거하거나 복구하세요.`,
+      'MARKER_CORRUPT',
+    );
+  }
+
+  // END 있고 START 없음: 고아 END 마커 → 손상
+  if (startIdx === -1 && endIdx !== -1) {
+    throw new ClaudeMdError(
+      `CLAUDE.md 에 ${PHASE_MARKER_END} 는 있지만 ${PHASE_MARKER_START} 가 없습니다. ` +
+        `마커가 손상됐을 가능성. 수동 점검 후 마커 블록을 제거하거나 복구하세요.`,
+      'MARKER_CORRUPT',
+    );
+  }
+
+  // END 가 START 보다 앞에 있음: 순서 역전 → 손상
+  if (startIdx !== -1 && endIdx < startIdx) {
+    throw new ClaudeMdError(
+      `CLAUDE.md 마커 순서 역전: ${PHASE_MARKER_END} 가 ${PHASE_MARKER_START} 보다 앞에 있습니다. ` +
+        `수동 점검 후 마커 블록을 복구하세요.`,
       'MARKER_CORRUPT',
     );
   }

@@ -3,6 +3,77 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.8.0] — 2026-04-21
+
+🟡 **schema v2 + optional tools** — `harness.lock` 스키마를 2로 올리고
+`superpowers` / `claude-mem` 등 선택적 도구 항목(`optional_tools`) 를 지원.
+기존 v1 lock 은 투명하게 in-memory 마이그레이션되며 디스크 변경 없음 (비파괴).
+
+### Added
+
+- **`OPTIONAL_TOOL_NAMES = ['superpowers', 'claude-mem']`** (`src/core/lock.ts`):
+  선택적 도구 이름 상수 + `OptionalToolName` 타입.
+- **`HarnessLock.optional_tools`** 필드: `Partial<Record<OptionalToolName, ToolEntry>>`.
+  누락 시 빈 객체 `{}` 로 기본값. v1 마이그레이션 시 자동 채움.
+- **`validateOptionalTools` / `validateOptionalToolEntry`** (내부): 알 수 없는 key → SCHEMA 에러.
+  SHA / 날짜 형식 검증은 핵심 툴과 동일. allowlist 없음 (third-party repo 허용).
+- **`templates/harness.lock.template.json`**: `schema_version: 2`, `optional_tools: {}` 추가.
+- **ADR-025**: `docs/acorn-v1-plan.md` 에 설계 기록 (→ 다음 커밋).
+
+### Changed
+
+- `SCHEMA_VERSION` 상수: `1 → 2`.
+- `parseLock`: `schema_version 1` 도 허용 (in-memory v2 마이그레이션). `3+` 는 기존대로 거부.
+- `HarnessLock` 인터페이스 `schema_version: 1 → 2`.
+
+### Migration notes
+
+- v0.7.x 사용자: 디스크 lock 변경 불필요. `acorn install` 은 기존 v1 lock 을 그대로 읽음.
+- lock 을 v2 로 올리려면 `"schema_version": 2, "optional_tools": {}` 추가 후 저장.
+- optional tool 추가: `optional_tools` 에 `"superpowers"` 또는 `"claude-mem"` 항목 기재.
+
+### Not breaking
+
+- v1 lock 은 파싱/install/validate 전부 정상 동작 (silent migration).
+- `optional_tools` 필드 자체 생략 가능 (빈 객체 기본값).
+
+## [0.7.2] — 2026-04-21
+
+🔵 **`acorn doctor` phase drift 검증** — `phase.txt` 부재/잘못된 값 및
+CLAUDE.md 마커 mismatch/corrupt 를 `doctor` 가 능동적으로 감지해 이슈로 보고.
+
+### Added
+
+- **`phaseIssues()`** (`src/commands/doctor.ts`): phase 관련 4가지 이슈 탐지.
+  - `phase.txt` 없음 → `warning`
+  - `phase.txt` 잘못된 값 → `critical`
+  - CLAUDE.md 마커 mismatch → `warning`
+  - CLAUDE.md 마커 corrupt → `critical`
+- **`DoctorArea` += `'phase'`**.
+- **테스트 4개** (`tests/doctor.test.ts`): 각 시나리오 regression guard.
+
+### Changed
+
+- `setupHealthy()` (테스트 헬퍼): `phase.txt='dev'` 를 기본 포함 — healthy 상태는 phase 도 정상.
+
+## [0.7.1] — 2026-04-21
+
+🔵 **CLAUDE.md phase 블록 개선 + 마커 edge case 강화**.
+
+### Fixed
+
+- **phase-specific bullet points**: `renderPhaseBlock` 이 phase 별로 다른
+  guard 수준/작업 힌트를 출력하도록 수정 (`guardLevelLabel()` 제거, `phaseSpecificLines()` 도입).
+  이전에는 모든 phase 가 동일한 generic 줄을 표시했음.
+- **orphaned END 마커**: `PHASE_MARKER_END` 만 있고 `PHASE_MARKER_START` 없는 경우
+  → `ClaudeMdError('MARKER_CORRUPT')` 로 fail-close (이전: silent noop).
+- **역전된 마커 순서**: `END`가 `START`보다 앞에 있는 경우
+  → `ClaudeMdError('MARKER_CORRUPT')` 로 fail-close (이전: 인식 불가).
+
+### Added
+
+- **테스트 2개** (`tests/claude-md.test.ts`): orphaned END, END-before-START edge case.
+
 ## [0.7.0] — 2026-04-20
 
 🟢 **phase 시스템 도입** — "acorn 의 목표는 최고의 툴 조합 설치가 아니라
