@@ -249,6 +249,45 @@ export interface InstallEnvResult {
   readonly movedKeys?: readonly { key: string; to: string }[];
 }
 
+export interface RemoveEnvResult {
+  readonly removedKeys: readonly string[];
+  readonly backupPath: string | null;
+}
+
+export function removeEnvKeys(opts: {
+  readonly settingsPath?: string;
+  readonly harnessRoot?: string;
+  readonly backupTs?: string;
+}): RemoveEnvResult {
+  const settingsPath = opts.settingsPath ?? defaultSettingsPath();
+  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
+
+  if (!existsSync(settingsPath)) return { removedKeys: [], backupPath: null };
+
+  const current = readSettings(settingsPath);
+  const env = current['env'];
+  if (typeof env !== 'object' || env === null || Array.isArray(env)) {
+    return { removedKeys: [], backupPath: null };
+  }
+
+  const envObj = env as Record<string, unknown>;
+  const removed: string[] = [];
+  const next: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(envObj)) {
+    if (ENV_KEYS.includes(k as EnvKey)) {
+      removed.push(k);
+    } else {
+      next[k] = v;
+    }
+  }
+
+  if (removed.length === 0) return { removedKeys: [], backupPath: null };
+
+  const backup = backupSettings(settingsPath, harnessRoot, opts.backupTs);
+  atomicWriteJson(settingsPath, { ...current, env: next });
+  return { removedKeys: removed, backupPath: backup.backupPath };
+}
+
 export function installEnv(opts: InstallEnvOptions): InstallEnvResult {
   const settingsPath = opts.settingsPath ?? defaultSettingsPath();
   const current = readSettings(settingsPath);

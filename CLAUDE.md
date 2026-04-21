@@ -130,9 +130,9 @@ acorn config guard.patterns <strict|moderate|minimal> [--yes]  v0.3.0+
 acorn config env.reset [--yes]                     v0.3.0+
 acorn phase                                        v0.7.0+: 현재 phase 조회
 acorn phase <prototype|dev|production> [--yes]     v0.7.0+: phase 전환 + CLAUDE.md 동기화
+acorn uninstall [--yes]                            v0.9.0+: 전체 언인스톨 (7단계)
 
-### 미구현 (v0.9+ 예정)
-acorn uninstall
+### 미구현 (v1.0+ 예정)
 acorn uninstall --tool <name>
 acorn lock bump                                    ADR-019 에서 암시 (v0.4+)
 

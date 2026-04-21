@@ -60,9 +60,10 @@ test('runCli: 알 수 없는 커맨드 → EXIT.USAGE + stderr', () => {
   assert.ok(c.err.some((l) => l.includes('알 수 없는 커맨드')));
 });
 
-test('usage(): 3개 커맨드 모두 언급', () => {
+test('usage(): 주요 커맨드 모두 언급', () => {
   const u = usage();
   assert.ok(u.includes('install'));
+  assert.ok(u.includes('uninstall'));
   assert.ok(u.includes('status'));
   assert.ok(u.includes('doctor'));
   assert.ok(u.includes('--json'));

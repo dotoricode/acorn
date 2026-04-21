@@ -2,11 +2,11 @@
 
 Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
-> **Status**: **v0.7.0** — phase 시스템 도입. `acorn phase [value] [--yes]` 커맨드,
-> `phase.txt` 단일 진실 소스, CLAUDE.md 마커 자동 주입, guard-check.sh phase 우선순위 체계.
+> **Status**: **v0.9.0** — `acorn uninstall` 도입. install 의 역순 7단계 파이프라인.
+> vendors, 심링크, hooks, phase.txt, gstack marker, settings.json env 키, CLAUDE.md 마커를 안전 제거.
 > v0.3.2 이후 릴리스: v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → v0.4.2
-> → v0.4.3 → v0.4.4 → v0.5.0 → v0.5.1 → v0.6.0 (acorn list + VERSION 런타임 로드)
-> → v0.6.1 (docs) → **v0.7.0** (phase 시스템).
+> → v0.4.3 → v0.4.4 → v0.5.0 → v0.5.1 → v0.6.0 → v0.6.1 → v0.7.0 (phase)
+> → v0.7.1 → v0.7.2 → v0.8.0 (schema v2) → **v0.9.0** (uninstall).
 >
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
@@ -88,6 +88,28 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
 - `acorn list` — `harness.lock` 에 기록된 tool 별로 **repo / SHA / 상태** 를 간결 나열. `status` 보다 단순 — 환경변수·심링크·guard 는 포함하지 않음. CI 에서 "tool SHA 빠르게 확인" 용
 - `acorn list --json` — 기계 판독용 JSON. 예: `acorn list --json | jq -r '.tools[] | select(.state != "locked") | .tool'`
 - Exit code: 모든 tool 이 `locked` 이면 0, 하나라도 `drift` / `missing` / `error` 면 1
+
+**uninstall 커맨드 (v0.9.0+)**
+
+install 의 역순 7단계 파이프라인. 모든 단계를 최선으로 수행하고 결과를 요약 출력한다.
+
+```bash
+acorn uninstall --yes   # 확인 없이 즉시 제거
+acorn uninstall         # non-TTY 환경에서 --yes 없으면 USAGE 에러
+```
+
+제거 항목 (7단계):
+1. `settings.json` env 키 (`CLAUDE_PLUGIN_ROOT` / `OMC_PLUGIN_ROOT` / `ECC_ROOT`) — 다른 키 보존
+2. CLAUDE.md `ACORN:PHASE` 마커 블록 — 나머지 내용 보존
+3. `~/.claude/skills/gstack` 심링크 — 실 디렉토리면 **건드리지 않음** (`not_a_symlink` 보고)
+4. `hooks/guard-check.sh`
+5. `.gstack-setup.sha` marker
+6. `phase.txt`
+7. `vendors/` 디렉토리 전체
+
+보존 항목: `harness.lock`, `tx.log`, `backup/`, harness 루트 디렉토리 자체.
+
+corrupt CLAUDE.md 마커가 있으면 제거를 건너뛰고 경고만 출력 (전체 언인스톨은 계속).
 
 **요구사항**
 - Node.js 24.x (`.nvmrc` 참고, `nvm use` 권장)

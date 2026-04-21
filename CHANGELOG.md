@@ -3,6 +3,30 @@
 모든 주목할 변경 사항을 기록한다.
 [Keep a Changelog](https://keepachangelog.com/) 포맷, [SemVer](https://semver.org/).
 
+## [0.9.0] — 2026-04-21
+
+🔴 **acorn uninstall** — install 의 역순 7단계 파이프라인.
+vendors, 심링크, hooks, phase.txt, gstack marker, settings.json env 키, CLAUDE.md phase 마커를 안전하게 제거.
+비파괴: harness.lock / tx.log / backup 디렉토리는 보존. 실 디렉토리(비심링크) 는 건드리지 않음.
+non-TTY에서 `--yes` 없이 실행 시 USAGE 차단 (등급-3 확인 게이트).
+
+### Added
+
+- **`src/commands/uninstall.ts`**: `runUninstall()` — 7단계 언인스톨 오케스트레이터.
+  `SymlinkRemoveResult` (`removed|absent|not_a_symlink`), `UninstallResult` 인터페이스, `UninstallError` 클래스.
+- **`src/core/claude-md.ts`**: `stripClaudeMdPhaseBlock()` + `applyClaudeMdStrip()` — ACORN:PHASE 마커 제거.
+  corrupt 마커는 throw 대신 `{kind: 'corrupt'}` 반환 (언인스톨 fail-soft).
+- **`src/core/settings.ts`**: `removeEnvKeys()` — ENV_KEYS를 settings.json에서 원자 삭제 + 백업.
+- **CLI `uninstall`**: `cmdUninstall()` — non-TTY+no-`--yes` → USAGE, `--yes` 플래그로 확인 우회.
+- **`tests/uninstall.test.ts`**: 15개 테스트 (빈 환경, vendors, settings, CLAUDE.md, 심링크 3종, 파일 제거 3종, harness.lock 보존, CLI 2종).
+
+### Changed
+
+- **`src/index.ts`**: `usage()` 에 `uninstall` 커맨드 추가, `formatError()` 에 `UninstallError` 처리 추가.
+- **`tests/cli.test.ts`**: usage 테스트에 `uninstall` assertion 추가.
+
+---
+
 ## [0.8.0] — 2026-04-21
 
 🟡 **schema v2 + optional tools** — `harness.lock` 스키마를 2로 올리고

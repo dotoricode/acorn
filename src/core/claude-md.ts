@@ -269,3 +269,76 @@ export function claudeMdMarkerStatus(
 export function defaultHarnessBackupRoot(harnessRoot?: string): string {
   return join(harnessRoot ?? defaultHarnessRoot(), 'backup');
 }
+
+export type ClaudeMdStripResult =
+  | { readonly action: 'noop' }
+  | { readonly action: 'stripped'; readonly nextText: string }
+  | { readonly action: 'corrupt'; readonly reason: string };
+
+export function stripClaudeMdPhaseBlock(current: string): ClaudeMdStripResult {
+  const startIdx = current.indexOf(PHASE_MARKER_START);
+  const endIdx = current.indexOf(PHASE_MARKER_END);
+
+  if (startIdx === -1 && endIdx === -1) return { action: 'noop' };
+
+  if (startIdx !== -1 && endIdx === -1) {
+    return { action: 'corrupt', reason: `${PHASE_MARKER_START} 있지만 ${PHASE_MARKER_END} 없음` };
+  }
+  if (startIdx === -1 && endIdx !== -1) {
+    return { action: 'corrupt', reason: `${PHASE_MARKER_END} 있지만 ${PHASE_MARKER_START} 없음` };
+  }
+  if (endIdx < startIdx) {
+    return { action: 'corrupt', reason: `마커 순서 역전 (END 가 START 보다 앞)` };
+  }
+
+  const endOfBlock = endIdx + PHASE_MARKER_END.length;
+  const before = current.slice(0, startIdx).replace(/\n+$/, '');
+  const after = current.slice(endOfBlock).replace(/^\n+/, '');
+
+  let nextText: string;
+  if (before.length > 0 && after.length > 0) {
+    nextText = `${before}\n\n${after}`;
+  } else if (before.length > 0) {
+    nextText = `${before}\n`;
+  } else {
+    nextText = after;
+  }
+
+  return { action: 'stripped', nextText };
+}
+
+export type ClaudeMdStripAction =
+  | { readonly kind: 'noop' }
+  | { readonly kind: 'stripped'; readonly backup: string | null }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'corrupt'; readonly reason: string };
+
+export function applyClaudeMdStrip(opts: {
+  readonly claudeMdPath: string;
+  readonly harnessRoot: string;
+  readonly backupTs?: string;
+}): ClaudeMdStripAction {
+  const { claudeMdPath, harnessRoot } = opts;
+  const ts = opts.backupTs ?? backupDirTs();
+
+  if (!existsSync(claudeMdPath)) return { kind: 'missing' };
+
+  let current: string;
+  try {
+    current = readFileSync(claudeMdPath, 'utf8');
+  } catch (e) {
+    throw new ClaudeMdError(
+      `CLAUDE.md 읽기 실패: ${claudeMdPath} (${e instanceof Error ? e.message : String(e)})`,
+      'IO',
+    );
+  }
+
+  const strip = stripClaudeMdPhaseBlock(current);
+
+  if (strip.action === 'noop') return { kind: 'noop' };
+  if (strip.action === 'corrupt') return { kind: 'corrupt', reason: strip.reason };
+
+  const backup = backupClaudeMd(claudeMdPath, harnessRoot, ts);
+  atomicWriteText(claudeMdPath, strip.nextText);
+  return { kind: 'stripped', backup };
+}

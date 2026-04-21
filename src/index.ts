@@ -2,6 +2,7 @@
 // acorn — Claude Code harness manager CLI router
 
 import { runInstall, InstallError, defaultGstackSetup } from './commands/install.ts';
+import { runUninstall, UninstallError } from './commands/uninstall.ts';
 import {
   collectStatus,
   renderStatus,
@@ -80,6 +81,7 @@ export function usage(): string {
 
 Commands:
   install        harness.lock 기준으로 OMC/gstack/ECC 설치 + env 주입
+  uninstall      harness 전체 제거 (vendors / symlink / env / hooks / CLAUDE.md 마커) (v0.9.0+)
   status         현재 설치 상태 요약 (read-only)
   list           lock 기준 tool 목록 + SHA + 상태 (read-only, v0.6.0+)
   doctor         진단 + 권장 조치
@@ -122,10 +124,14 @@ phase 서브커맨드:
   acorn phase <prototype|dev|production>  phase 변경 (Y/n 확인)
   acorn phase <value> --yes           확인 프롬프트 스킵
 
+uninstall flags:
+  --yes              타이핑 확인 프롬프트 스킵 (non-TTY/CI 에서 필수)
+
 예시:
   acorn install
   acorn install --run-gstack-setup
   acorn install --adopt --yes
+  acorn uninstall --yes
   acorn status --json
   acorn list
   acorn list --json
@@ -173,6 +179,10 @@ function parseArgs(args: readonly string[]): ParsedArgs {
 function formatError(e: unknown): string {
   if (e instanceof InstallError) {
     const head = `[install/${e.code}] ${e.message}`;
+    return e.hint ? `${head}\n   → ${e.hint}` : head;
+  }
+  if (e instanceof UninstallError) {
+    const head = `[uninstall/${e.code}] ${e.message}`;
     return e.hint ? `${head}\n   → ${e.hint}` : head;
   }
   if (e instanceof ConfigError) {
@@ -287,6 +297,58 @@ function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
   }
 }
 
+function cmdUninstall(parsed: ParsedArgs, io: CliIO): number {
+  const yes = parsed.flags.has('yes');
+  const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+
+  if (!yes) {
+    if (!isTty) {
+      io.stderr(
+        `[uninstall/CONFIRM_REQUIRED] uninstall 은 destructive 작업입니다. ` +
+          `non-TTY 환경에서는 --yes 명시 필요.`,
+      );
+      return EXIT.USAGE;
+    }
+    io.stdout(`⚠️  acorn uninstall 은 harness 를 완전히 제거합니다:`);
+    io.stdout(`   • vendors/ 디렉토리 삭제`);
+    io.stdout(`   • gstack 심링크 제거`);
+    io.stdout(`   • settings.json env 키 제거`);
+    io.stdout(`   • CLAUDE.md phase 마커 제거`);
+    io.stdout(`   • hooks / phase.txt / gstack marker 제거`);
+    io.stdout(``);
+    io.stdout(`확인하려면 'uninstall' 을 입력하세요 (취소: Enter):`);
+    const buf = Buffer.alloc(32);
+    let confirmed = false;
+    try {
+      const n = readSync(0, buf, 0, buf.length, null);
+      const input = buf.slice(0, n).toString('utf8').trim();
+      confirmed = input === 'uninstall';
+    } catch {
+      confirmed = false;
+    }
+    if (!confirmed) {
+      io.stdout(`취소됨: uninstall`);
+      return EXIT.OK;
+    }
+  }
+
+  try {
+    const r = runUninstall({ logger: (l) => io.stdout(l) });
+    io.stdout(``);
+    io.stdout(`✅ uninstall 완료`);
+    io.stdout(
+      `   settings=[${r.settingsRemoved.join(', ') || '없음'}]` +
+        `  claudeMd=${r.claudeMd.kind}` +
+        `  symlink=${r.symlink}` +
+        `  vendors=${r.vendorsRemoved ? 'removed' : 'absent'}`,
+    );
+    return EXIT.OK;
+  } catch (e) {
+    io.stderr(formatError(e));
+    return exitFor(e);
+  }
+}
+
 function cmdStatus(parsed: ParsedArgs, io: CliIO): number {
   try {
     // §15 M3: CLI 진입 시 process.env 를 명시 전달해 runtime env check 활성.
@@ -352,6 +414,8 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
   switch (head) {
     case 'install':
       return cmdInstall(parsed, io);
+    case 'uninstall':
+      return cmdUninstall(parsed, io);
     case 'status':
       return cmdStatus(parsed, io);
     case 'list':
