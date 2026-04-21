@@ -181,11 +181,12 @@ acorn phase dev                    # dev 로 복귀 (Y/n 확인)
 | 계층 | 모듈 | 역할 |
 |---|---|---|
 | CLI | `src/index.ts` | argv 라우팅 + exit code 매핑 + VERSION 런타임 로드 (v0.6.0+) |
-| commands | `install.ts` | 8단계 preflight-우선 설치 파이프라인 |
+| commands | `install.ts` | 9단계 preflight-우선 설치 파이프라인 |
 | commands | `status.ts` | 읽기 전용 상태 요약 + JSON |
 | commands | `list.ts` | lock 기준 tool/SHA/상태 간결 나열 (v0.6.0+) |
 | commands | `doctor.ts` | 진단 + 이슈별 복구 힌트 |
 | commands | `config.ts` | guard.mode / guard.patterns / env.reset 조작 (v0.3.0+) |
+| commands | `phase.ts` | `acorn phase` 커맨드 — phase.txt + CLAUDE.md 동기화 (v0.7.0+) |
 | core | `lock.ts` | harness.lock 스키마 검증 + allowlist (v0.4.0+) |
 | core | `env.ts` | 환경변수 3키 계산 + diff (v0.4.1+ 빈 문자열 fallback) |
 | core | `settings.ts` | settings.json 멱등 머지 + 원자 쓰기 (v0.4.1+ BOM/fail-close) |
@@ -197,6 +198,8 @@ acorn phase dev                    # dev 로 복귀 (Y/n 확인)
 | core | `bom.ts` | UTF-8 BOM strip 단일 소스 (v0.4.1+) |
 | core | `adopt.ts` | `--adopt` 의 pre-adopt rename (v0.3.0+) |
 | core | `gstack-marker.ts` | gstack setup SHA marker (v0.1.3+ 멱등성) |
+| core | `phase.ts` | phase.txt read/write/seed — prototype/dev/production (v0.7.0+) |
+| core | `claude-md.ts` | ACORN:PHASE 마커 비파괴 주입 + backup + atomic write (v0.7.0+) |
 | core | `sha-display.ts` | drift 메시지에서 lock vs 실제 SHA 구분 표시 |
 | hook | `hooks/guard-check.sh` | PreToolUse 위험 커맨드 차단 |
 
@@ -318,11 +321,12 @@ acorn v0.3.2  •  ~/.claude/skills/harness
 
 테스트: 71 → 86개 (+15)
 
-### `src/commands/install.ts` — 설치 오케스트레이터 (Sprint 6)
+### `src/commands/install.ts` — 설치 오케스트레이터 (Sprint 6, v0.7.0 에서 9단계로 확장)
 
-`harness.lock` 기반으로 세 툴을 검증된 SHA에 고정 설치하고, gstack 심링크와
-`settings.json` env 3키를 **비파괴적으로** 구성한다.
-내부 코어 4개 모듈(`lock` / `env` / `symlink` / `settings`)과 신규 `core/vendors.ts`를 조립한다.
+`harness.lock` 기반으로 세 툴을 검증된 SHA에 고정 설치하고, gstack 심링크,
+CLAUDE.md phase 마커, `settings.json` env 3키를 **비파괴적으로** 구성한다.
+내부 코어 모듈(`lock` / `env` / `symlink` / `settings` / `phase` / `claude-md`)과
+`core/vendors.ts`를 조립한다.
 
 ```ts
 import { runInstall, InstallError } from '@dotoricode/acorn/commands/install';
@@ -347,14 +351,15 @@ try {
 #### 실행 순서 (preflight 우선)
 
 ```
-[1/8] harness.lock 파싱
-[2/8] env 3키 계산
-[3/8] settings.json 충돌 체크   ← 읽기 전용, 조기 실패
-[4/8] vendors clone/checkout   (OMC, gstack, ECC)
-[5/8] gstack 심링크
-[6/8] gstack setup (콜백, 선택)
-[7/8] hooks 배포                ← v0.1.2 신설 (ADR-017): guard-check.sh
-[8/8] settings.json 원자 쓰기  ← 마지막, 백업 후
+[1/9] harness.lock 파싱
+[2/9] env 3키 계산
+[3/9] settings.json 충돌 체크   ← 읽기 전용, 조기 실패
+[4/9] vendors clone/checkout   (OMC, gstack, ECC)
+[5/9] gstack 심링크
+[6/9] gstack setup (콜백, 선택)
+[7/9] hooks 배포                ← v0.1.2 신설 (ADR-017): guard-check.sh
+[8/9] CLAUDE.md phase 마커 주입 ← v0.7.0 신설 (ADR-023): ACORN:PHASE 블록
+[9/9] settings.json 원자 쓰기  ← 마지막, 백업 후
 ```
 
 **핵심 불변식**: 충돌이 감지되면 디스크를 건드리기 전에 중단된다.
@@ -554,11 +559,12 @@ Claude Code `~/.claude/settings.json`에 훅을 등록:
 | 변수 | 동작 |
 |---|---|
 | `ACORN_GUARD_BYPASS=1` | guard 우회. 의미는 설정 방식에 따라 다름: **inline** `ACORN_GUARD_BYPASS=1 <cmd>` → `<cmd>` 1회만. **`export ACORN_GUARD_BYPASS=1`** → unset 할 때까지 세션 전체 (매 호출마다 stderr `⚠️ BYPASS ACTIVE` 반복, v0.3.5+ `acorn doctor` 가 critical 로 지적). |
+| `ACORN_PHASE_OVERRIDE=prototype\|dev\|production` | phase.txt 무시하고 지정 phase 강제 (v0.7.0+) |
 | `ACORN_GUARD_MODE=block\|warn\|log` | 모드 강제 지정 (lock 파일보다 우선) |
-| `ACORN_GUARD_PATTERNS=strict\|moderate\|minimal` | 패턴 레벨 강제 지정 (lock 파일보다 우선, v0.2.0+) |
+| `ACORN_GUARD_PATTERNS=strict\|moderate\|minimal` | 패턴 레벨 강제 지정 (phase 보다 우선, v0.2.0+) |
 | `ACORN_HARNESS_ROOT=<path>` | harness 루트 경로 (기본: `~/.claude/skills/harness`) |
 
-우선순위: **env > `harness.lock.guard.*` > default (`mode=block`, `patterns=strict`)**
+**우선순위** (patterns 결정 체계, v0.7.0+): `ACORN_GUARD_BYPASS` > `ACORN_PHASE_OVERRIDE` > `ACORN_GUARD_PATTERNS` > `phase.txt` > `harness.lock.guard.patterns` > 기본 `strict`
 
 | 모드 | 동작 |
 |---|---|
