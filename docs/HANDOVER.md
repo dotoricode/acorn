@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-21 (Mac / **v0.9.0 — acorn uninstall 도입**)
+> 마지막 갱신: 2026-04-21 (Mac / **v0.9.0 — acorn uninstall + acorn_version 자동 스탬프**)
 
 ---
 
@@ -10,7 +10,7 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` (push 대기), 태그 **`v0.9.0`** (push 대기) |
-| 진행 중 작업 | **v0.9.0 — acorn uninstall 완료**. install 역순 7단계 파이프라인. vendors/심링크/hooks/phase.txt/gstack marker/settings.json env 키/CLAUDE.md 마커 안전 제거. 테스트 311/311 Mac (0 실패). |
+| 진행 중 작업 | **v0.9.0 완료**. uninstall 7단계 + install 후 acorn_version 자동 스탬프(stampLockVersion). `acorn status` 에 v0.9.0 정상 노출 확인. 테스트 311/311 Mac (0 실패). |
 | 다음 작업 | **v1.0.0**: npm publish 활성화 (NPM_TOKEN GitHub Secret 설정 + tag push). 실환경 fresh macOS 검증. |
 | 테스트 | Mac: **311/311** (0 실패). Windows: 기존 EPERM 유지 예상. |
 | 릴리스 커밋 체인 | v0.1.0 → … → v0.7.0 → v0.7.1 → v0.7.2 → v0.8.0 → **v0.9.0** |
