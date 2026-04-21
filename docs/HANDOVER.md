@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-20 (Mac / **v0.7.0 — phase 시스템 도입**)
+> 마지막 갱신: 2026-04-21 (Mac / **v0.9.0 — acorn uninstall 도입**)
 
 ---
 
@@ -9,11 +9,11 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (origin 미push, 로컬 커밋 대기), 태그 **`v0.7.0`** (미push) |
-| 진행 중 작업 | **v0.7.0 — phase 시스템 완료**. `phase.txt` (single truth source), `acorn phase` 커맨드, CLAUDE.md 마커 주입, guard-check.sh phase 우선순위 체계. 테스트 283/283 Mac (0 실패). |
-| 다음 작업 | **v0.7.1**: 도그푸딩 피드백 hotfix (phase 블록 문구 개정, 마커 edge case). **v0.7.2**: `acorn doctor` phase 검증 확장. **v0.8.0**: `TOOL_NAMES` 확장 + schema v2 + optional tools (ADR-025). |
-| 테스트 | Mac: **283/283** (0 실패). Windows: 기존 EPERM 18건 유지 예상. |
-| 릴리스 커밋 체인 | v0.1.0 → … → v0.6.0 → v0.6.1 → **v0.7.0** |
+| 브랜치 | `main` (push 대기), 태그 **`v0.9.0`** (push 대기) |
+| 진행 중 작업 | **v0.9.0 — acorn uninstall 완료**. install 역순 7단계 파이프라인. vendors/심링크/hooks/phase.txt/gstack marker/settings.json env 키/CLAUDE.md 마커 안전 제거. 테스트 311/311 Mac (0 실패). |
+| 다음 작업 | **v1.0.0**: npm publish 활성화 (NPM_TOKEN GitHub Secret 설정 + tag push). 실환경 fresh macOS 검증. |
+| 테스트 | Mac: **311/311** (0 실패). Windows: 기존 EPERM 유지 예상. |
+| 릴리스 커밋 체인 | v0.1.0 → … → v0.7.0 → v0.7.1 → v0.7.2 → v0.8.0 → **v0.9.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |
 | v0.3.2 본문 | `16a2e40` S3 · `fbd3a60` S4 · `c81e2ef` S5 · `9cb7519` release |
 | v0.3.3 본문 | `209f325` docs(usage) · `6050cf7` docs(readme) · `388191c` docs(claude-md) · `90b7c03` release |

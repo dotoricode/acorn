@@ -729,6 +729,12 @@ direnv 설정 완료
 - [x] vendor partial clone 정리 + dirty tree 감지(LOCAL_CHANGES) + git timeout *(Sprint 6.5)*
 - [x] gstack 심링크 원자 교체(rename) + inspectGstackSymlink *(Sprint 6.5)*
 - [x] defaultHarnessRoot 단일화 + CLAUDE_CONFIG_DIR 존중 *(Sprint 6.5)*
+- [x] `acorn uninstall [--yes]` — install 역순 7단계 파이프라인 *(v0.9.0)*
+  - vendors 디렉토리, gstack 심링크, hooks/guard-check.sh, .gstack-setup.sha, phase.txt,
+    settings.json ENV_KEYS, CLAUDE.md ACORN:PHASE 마커 제거. harness.lock/tx.log/backup 보존.
+  - corrupt CLAUDE.md 마커 → fail-soft (제거 건너뜀, 전체 언인스톨 계속)
+  - 비심링크 디렉토리 보호 (not_a_symlink — 건드리지 않음)
+  - non-TTY + `--yes` 없음 → USAGE 차단 (등급-3 확인 게이트)
 
 ### guard 동작
 - [x] `rm -rf /tmp/foo` → 차단 *(Sprint 1)*
