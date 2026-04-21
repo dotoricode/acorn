@@ -273,6 +273,25 @@ acorn config env.reset --yes
 
 backup 자동 생성. 이후 `acorn install` 로 재주입.
 
+### 전체 언인스톨 (v0.9.0+)
+
+acorn 이 설치한 모든 것을 제거한다. `harness.lock` / `tx.log` / `backup/` 는 보존.
+
+```bash
+acorn uninstall --yes
+```
+
+7단계로 동작한다:
+1. `settings.json` env 3키 제거 (CLAUDE_PLUGIN_ROOT / OMC_PLUGIN_ROOT / ECC_ROOT)
+2. CLAUDE.md `ACORN:PHASE` 마커 블록 제거
+3. `~/.claude/skills/gstack` 심링크 제거 (실 디렉토리면 건드리지 않음)
+4. `hooks/guard-check.sh` 제거
+5. `.gstack-setup.sha` marker 제거
+6. `phase.txt` 제거
+7. `vendors/` 디렉토리 제거
+
+완료 후 `acorn status` 로 확인. 재설치는 `acorn install`.
+
 ### 도그푸딩 누적 요약 (도그푸딩 모드 전용)
 
 ```bash
@@ -318,7 +337,8 @@ acorn install --adopt --yes        # non-TTY/CI
 | `acorn config env.reset` | env 3키 제거 (다른 키 보존) | 드물게 | v0.3.0 |
 | `acorn phase` | 현재 phase 확인 | 수시 | v0.7.0 |
 | `acorn phase <v> [--yes]` | `prototype\|dev\|production` 전환 | 작업 단계 변경 시 | v0.7.0 |
-| `acorn --version` | `0.7.0` | 확인용 | v0.1.0 |
+| `acorn uninstall --yes` | 전체 언인스톨 (7단계) | 제거 시 | v0.9.0 |
+| `acorn --version` | `0.9.0` | 확인용 | v0.1.0 |
 | `acorn --help` | usage | 까먹었을 때 | v0.1.0 |
 | `dn <메모>` | 1줄 관찰 기록 (도그푸딩) | — | dev-only |
 | `dn ux/bug/idea/blocker <메모>` | 라벨 + 메모 | — | dev-only |
@@ -413,6 +433,7 @@ dreport   # 이번 주 얼마나 썼나, 뭐 적었나
 | `[config/SCHEMA]` (v0.3.0+) | 값 enum 확인: `guard.mode=block\|warn\|log`, `guard.patterns=strict\|moderate\|minimal` |
 | `[phase/INVALID_VALUE]` (v0.7.0+) | `acorn phase prototype\|dev\|production` 중 하나여야 함 |
 | `[phase/CONFIRM_REQUIRED]` (v0.7.0+) | non-TTY 에서 `acorn phase <v> --yes` 로 재실행 |
+| `[uninstall/CONFIRM_REQUIRED]` (v0.9.0+) | non-TTY 에서 `acorn uninstall --yes` 로 재실행 |
 | `acorn status` 에서 `⚠️ CLAUDE.md` | `acorn install` 또는 `acorn phase <현재값> --yes` 로 마커 동기화 |
 | gstack dirty warning 계속 | `cd vendors/gstack && git status` 로 원인 파악 후 커밋·스태시·reset 중 선택. `.agents/` 같은 setup 부산물은 자동 허용 (v0.1.1+) |
 
