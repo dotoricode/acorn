@@ -7,9 +7,28 @@ import {
   seedLockTemplate,
   stampLockVersion,
   TOOL_NAMES,
+  type AnyHarnessLock,
   type HarnessLock,
+  type HarnessLockV3,
   type ToolName,
 } from '../core/lock.ts';
+import {
+  detectProvider,
+  defaultDetectEnv,
+  type DetectEnv,
+  type DetectResult,
+} from '../core/provider-detect.ts';
+import { buildInstallPlan, type InstallPlan } from '../core/provider-install.ts';
+import {
+  inferProfile,
+  type ProjectProfile,
+  type ProjectSignals,
+} from '../core/project-profile.ts';
+import {
+  recommend,
+  renderRecommendation,
+  type RecommendationResult,
+} from '../core/recommend.ts';
 import {
   computeEnv,
   defaultClaudeRoot,
@@ -309,7 +328,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   // 1. lock 파싱
   log(`[1/9] harness.lock 파싱`);
   tx.phase('lock');
-  const lock = readLock(lockPath);
+  const lock = readLock(lockPath) as HarnessLock;
 
   // 2. env 계산
   log(`[2/9] env 계산`);
@@ -566,4 +585,142 @@ function runInstallInner(ctx: InnerContext): InstallResult {
     hooks,
     settings,
   };
+}
+
+// ── guided install (Sprint 04) ────────────────────────────────────────────────
+
+export type InstallMode = 'normal' | 'guided' | 'detect-only';
+
+export interface GuidedInstallOptions {
+  readonly lockPath?: string;
+  readonly harnessRoot?: string;
+  readonly claudeRoot?: string;
+  readonly projectFiles?: readonly string[];
+  readonly projectDeps?: readonly string[];
+  readonly detectEnv?: DetectEnv;
+  readonly mode?: 'guided' | 'detect-only';
+}
+
+export interface ProviderDetection {
+  readonly provider: string;
+  readonly result: DetectResult;
+}
+
+export interface ProviderPlan {
+  readonly provider: string;
+  readonly plan: InstallPlan;
+}
+
+export interface GuidedInstallReport {
+  readonly mode: 'guided' | 'detect-only';
+  readonly schemaVersion: number;
+  readonly schemaV3: boolean;
+  readonly profile?: ProjectProfile;
+  readonly recommendations?: RecommendationResult;
+  readonly detections: readonly ProviderDetection[];
+  readonly plans?: readonly ProviderPlan[];
+}
+
+export function runGuidedInstall(opts: GuidedInstallOptions = {}): GuidedInstallReport {
+  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
+  const claudeRoot = opts.claudeRoot ?? defaultClaudeRoot();
+  const lockPath = opts.lockPath ?? `${harnessRoot}/harness.lock`;
+  const mode = opts.mode ?? 'guided';
+
+  const anyLock: AnyHarnessLock = readLock(lockPath);
+  const schemaVersion = anyLock.schema_version;
+
+  if (schemaVersion !== 3) {
+    return { mode, schemaVersion, schemaV3: false, detections: [] };
+  }
+
+  const lock = anyLock as HarnessLockV3;
+  const env = opts.detectEnv ?? defaultDetectEnv(harnessRoot);
+
+  const providerNames = Object.keys(lock.providers);
+  const detections: ProviderDetection[] = providerNames.map((name) => ({
+    provider: name,
+    result: detectProvider(name, env),
+  }));
+
+  if (mode === 'detect-only') {
+    return { mode, schemaVersion, schemaV3: true, detections };
+  }
+
+  const signals: ProjectSignals = opts.projectDeps !== undefined
+    ? { files: opts.projectFiles ?? [], dependencies: opts.projectDeps }
+    : { files: opts.projectFiles ?? [] };
+  const profile = inferProfile(signals);
+  const recommendations = recommend(profile);
+
+  const plans: ProviderPlan[] = detections
+    .filter((d) => d.result.state === 'missing')
+    .map((d) => ({
+      provider: d.provider,
+      plan: buildInstallPlan(d.provider, { harnessRoot, claudeRoot }),
+    }));
+
+  return { mode, schemaVersion, schemaV3: true, profile, recommendations, detections, plans };
+}
+
+export function renderGuidedReport(report: GuidedInstallReport): string {
+  const lines: string[] = [];
+  const bar = '━'.repeat(52);
+
+  lines.push(bar);
+  lines.push(`acorn install --mode ${report.mode}   [schema v${report.schemaVersion}]`);
+  lines.push('');
+
+  if (!report.schemaV3) {
+    lines.push('⚠️  guided mode 는 schema v3 lock 에서만 지원됩니다.');
+    lines.push('   현재 lock 은 v2 입니다. 기존 acorn install 을 사용하세요.');
+    return lines.join('\n');
+  }
+
+  lines.push('Provider Status:');
+  for (const d of report.detections) {
+    const icon = d.result.state === 'installed' ? '●' : d.result.state === 'missing' ? '○' : '?';
+    const detail = d.result.detail ? `   ${d.result.detail}` : '';
+    lines.push(`  ${icon} ${d.provider.padEnd(14)} ${d.result.state}${detail}`);
+  }
+  lines.push('');
+
+  if (report.profile !== undefined) {
+    const p = report.profile;
+    lines.push('Project Profile:');
+    lines.push(
+      `  UI: ${String(p.hasUi).padEnd(5)}  Backend: ${String(p.hasBackend).padEnd(5)}  ` +
+        `Workers: ${String(p.hasWorkers).padEnd(5)}  Tests: ${p.testMaturity}`,
+    );
+    lines.push('');
+  }
+
+  if (report.recommendations !== undefined) {
+    lines.push(renderRecommendation(report.recommendations));
+    lines.push('');
+  }
+
+  if (report.plans !== undefined) {
+    if (report.plans.length === 0) {
+      lines.push('✅ 모든 provider 가 설치되어 있습니다.');
+    } else {
+      lines.push('Install Steps:');
+      for (const pp of report.plans) {
+        lines.push(`  ${pp.provider} (${pp.plan.strategy}):`);
+        for (const step of pp.plan.steps) {
+          if (step.kind === 'shell' || step.kind === 'git-clone') {
+            lines.push(`    $ ${step.command ?? step.description}`);
+          } else {
+            lines.push(`    • ${step.description}`);
+          }
+        }
+        if (pp.plan.notes) {
+          lines.push(`    ℹ  ${pp.plan.notes}`);
+        }
+      }
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }

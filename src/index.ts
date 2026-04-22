@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 // acorn — Claude Code harness manager CLI router
 
-import { runInstall, InstallError, defaultGstackSetup } from './commands/install.ts';
+import {
+  runInstall,
+  runGuidedInstall,
+  renderGuidedReport,
+  InstallError,
+  defaultGstackSetup,
+  type InstallMode,
+} from './commands/install.ts';
 import { runUninstall, UninstallError } from './commands/uninstall.ts';
 import {
   collectStatus,
@@ -23,7 +30,7 @@ import {
 import { readSync, readFileSync } from 'node:fs';
 import { dirname, join as pathJoin } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LockError, readLock } from './core/lock.ts';
+import { LockError, readLock, type HarnessLock } from './core/lock.ts';
 import {
   runConfig,
   renderConfigAction,
@@ -226,6 +233,17 @@ function exitFor(e: unknown): number {
 
 function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
   try {
+    const modeArg = parsed.values.get('mode') as InstallMode | undefined;
+    if (modeArg === 'guided' || modeArg === 'detect-only') {
+      const report = runGuidedInstall({ mode: modeArg });
+      io.stdout(renderGuidedReport(report));
+      return EXIT.OK;
+    }
+    if (modeArg !== undefined && modeArg !== 'normal') {
+      io.stderr(`[install/ARGS] --mode 값이 잘못되었습니다: "${modeArg}". 허용값: normal, guided, detect-only`);
+      return EXIT.USAGE;
+    }
+
     const runSetup = parsed.flags.has('run-gstack-setup');
     const skipSetup = parsed.flags.has('skip-gstack-setup');
     if (runSetup && skipSetup) {
@@ -461,7 +479,7 @@ function cmdLock(rest: readonly string[], io: CliIO): number {
 function cmdLockValidate(args: readonly string[], io: CliIO): number {
   const lockPath = args[0];
   try {
-    const lock = readLock(lockPath);
+    const lock = readLock(lockPath) as HarnessLock;
     io.stdout(
       `✅ harness.lock OK  ` +
         `(schema_version=${lock.schema_version}, ` +
