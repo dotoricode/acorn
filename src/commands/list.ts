@@ -8,7 +8,7 @@
  *   - 기본: 표 형식 (TOOL / SHA / STATE / REPO)
  *   - `--json`: 기계 판독용 JSON (CI/jq 용)
  */
-import { readLock, TOOL_NAMES, type ToolName } from '../core/lock.ts';
+import { readLock, TOOL_NAMES, type HarnessLock, type ToolName } from '../core/lock.ts';
 import { defaultHarnessRoot, vendorsRoot } from '../core/env.ts';
 import {
   defaultGitRunner,
@@ -45,7 +45,7 @@ export interface ListOptions {
 export function collectList(opts: ListOptions = {}): ListReport {
   const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
   const git = opts.git ?? defaultGitRunner;
-  const lock = readLock(opts.lockPath);
+  const lock = readLock(opts.lockPath) as HarnessLock;
   const vRoot = vendorsRoot(harnessRoot);
 
   const tools: ListEntry[] = [];

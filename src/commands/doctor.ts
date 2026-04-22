@@ -10,8 +10,10 @@ import {
 import {
   defaultGitRunner,
   unexpectedDirtyPaths,
+  readCurrentCommit,
   type GitRunner,
 } from '../core/vendors.ts';
+import { vendorsRoot } from '../core/env.ts';
 import { distinguishingPair } from '../core/sha-display.ts';
 
 export type DoctorSeverity = 'critical' | 'warning' | 'info';
@@ -22,8 +24,10 @@ export type DoctorArea =
   | 'tx'
   | 'lock'
   | 'settings'
-  | 'guard' // §15 HIGH-3 lite (v0.3.5): ACORN_GUARD_BYPASS 세션 감지
-  | 'phase'; // v0.7.2: phase drift 검증
+  | 'guard'      // §15 HIGH-3 lite (v0.3.5): ACORN_GUARD_BYPASS 세션 감지
+  | 'phase'      // v0.7.2: phase drift 검증
+  | 'capability' // v0.9.x: v3 capability/provider 검증
+  | 'preset';    // v0.9.x: preset 상태 검증
 
 export interface DoctorIssue {
   readonly area: DoctorArea;
@@ -344,6 +348,84 @@ function txIssues(status: StatusReport): DoctorIssue[] {
   }];
 }
 
+// ── v3 capability / provider diagnostics ─────────────────────────────────────
+
+function capabilityIssues(status: StatusReport): DoctorIssue[] {
+  const v3 = status.v3;
+  if (!v3) return [];
+
+  const out: DoctorIssue[] = [];
+
+  for (const cap of v3.capabilities) {
+    if (cap.configuredProviders.length === 0) {
+      out.push({
+        area: 'capability',
+        severity: 'warning',
+        subject: cap.capability,
+        message: `${cap.capability} 활성화됨 — lock 에 제공자가 설정되지 않음`,
+        hint: 'harness.lock capabilities 섹션에 providers 배열을 추가하거나 acorn install 재실행',
+      });
+      continue;
+    }
+
+    if (!cap.anyInstalled) {
+      const severity: DoctorSeverity = cap.capability === 'hooks' ? 'critical' : 'warning';
+      out.push({
+        area: 'capability',
+        severity,
+        subject: cap.capability,
+        message: `${cap.capability} 활성화됨 — 모든 제공자 미설치 (${cap.configuredProviders.join(', ')})`,
+        hint: 'acorn install 실행',
+      });
+    } else {
+      const missing = cap.providerStates.filter((p) => p.state !== 'installed');
+      if (missing.length > 0) {
+        out.push({
+          area: 'capability',
+          severity: 'info',
+          subject: cap.capability,
+          message: `${cap.capability} 제공자 일부 미설치: ${missing.map((p) => p.provider).join(', ')}`,
+          hint: 'acorn install 로 누락된 제공자 추가 설치',
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+function v3ProviderMismatchIssues(status: StatusReport, git: GitRunner): DoctorIssue[] {
+  const v3 = status.v3;
+  if (!v3) return [];
+
+  const out: DoctorIssue[] = [];
+  const vRoot = vendorsRoot(status.harnessRoot);
+
+  for (const entry of v3.lockProviders) {
+    if (entry.installStrategy !== 'git-clone' || !entry.commit) continue;
+    const vendorPath = join(vRoot, entry.provider);
+    if (!existsSync(vendorPath)) continue; // capability check already reports this
+
+    try {
+      const actual = readCurrentCommit(vendorPath, git);
+      if (actual !== entry.commit) {
+        const [lockDisp, actualDisp] = distinguishingPair(entry.commit, actual);
+        out.push({
+          area: 'vendor',
+          severity: 'warning',
+          subject: entry.provider,
+          message: `${entry.provider} SHA 불일치 (lock=${lockDisp}, 실제=${actualDisp})`,
+          hint: '의도적 변경이면 harness.lock 갱신. 아니면 acorn install 로 재checkout',
+        });
+      }
+    } catch {
+      // can't read SHA — ignore, not a critical issue
+    }
+  }
+
+  return out;
+}
+
 export function runDoctor(opts: DoctorOptions = {}): DoctorReport {
   const status = collectStatus(opts);
   const git = opts.git ?? defaultGitRunner;
@@ -353,12 +435,17 @@ export function runDoctor(opts: DoctorOptions = {}): DoctorReport {
   // §15 HIGH-3 lite: guard 안전 점검을 먼저 — critical 시 가장 눈에 띄게.
   issues.push(...guardIssues(opts));
   for (const name of TOOL_NAMES) {
-    issues.push(...toolIssues(status.tools[name as ToolName], join(vRoot, name), git));
+    const t = status.tools[name as ToolName];
+    if (t.state === 'not_applicable') continue;
+    issues.push(...toolIssues(t, join(vRoot, name), git));
   }
   issues.push(...envIssues(status));
   issues.push(...symlinkIssues(status));
   issues.push(...phaseIssues(status));
   issues.push(...txIssues(status));
+  // v3 capability / provider checks
+  issues.push(...capabilityIssues(status));
+  issues.push(...v3ProviderMismatchIssues(status, git));
 
   const summary: DoctorSummary = {
     critical: issues.filter((i) => i.severity === 'critical').length,

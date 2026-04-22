@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-21 (Mac / **v0.9.0 — acorn uninstall + acorn_version 자동 스탬프**)
+> 마지막 갱신: 2026-04-22 (Mac / **v0.9.0 — Sprint 06~08: capability status/doctor, hooks v3, qa_headless, docs migration**)
 
 ---
 
@@ -9,10 +9,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 브랜치 | `main` (push 대기), 태그 **`v0.9.0`** (push 대기) |
-| 진행 중 작업 | **v0.9.0 완료**. uninstall 7단계 + install 후 acorn_version 자동 스탬프. v2 설계 plan 완성 (docs/acorn-v2-plan.md). |
-| 다음 작업 | **v0.9.1**: Step 1 — lock.ts schema_version 3 타입 + 파싱. 설계: docs/acorn-v2-plan.md §9 Milestone 1 참조. |
-| 테스트 | Mac: **311/311** (0 실패). Windows: 기존 EPERM 유지 예상. |
+| 브랜치 | `main` |
+| 진행 중 작업 | **Sprint 08 완료**. capability-first docs 갱신 (README, CLAUDE.md, HANDOVER, template). Sprint 06: capability status/doctor. Sprint 07: hooksCapabilityStatus + qa-headless. |
+| 다음 작업 | **Sprint 09**: provider install 파이프라인 (v3 lock 기반 `acorn install` 실제 provider 설치 연결). |
+| 테스트 | Mac: **568/568** (0 실패). Windows: 기존 EPERM 유지 예상. |
 | 릴리스 커밋 체인 | v0.1.0 → … → v0.7.0 → v0.7.1 → v0.7.2 → v0.8.0 → **v0.9.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |
 | v0.3.2 본문 | `16a2e40` S3 · `fbd3a60` S4 · `c81e2ef` S5 · `9cb7519` release |

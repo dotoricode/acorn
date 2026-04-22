@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { defaultHarnessRoot } from './env.ts';
 import { stripBom } from './bom.ts';
 
+// ── v2 constants & types ────────────────────────────────────────────────────
+
 export const SCHEMA_VERSION = 2 as const;
 export const TOOL_NAMES = ['omc', 'gstack', 'ecc'] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -53,6 +55,56 @@ export interface HarnessLock {
   readonly guard: GuardConfig;
 }
 
+// ── v3 constants & types ────────────────────────────────────────────────────
+
+export const CAPABILITY_NAMES = [
+  'planning',
+  'spec',
+  'tdd',
+  'review',
+  'qa_ui',
+  'qa_headless',
+  'hooks',
+  'memory',
+] as const;
+export type CapabilityName = (typeof CAPABILITY_NAMES)[number];
+
+export interface CapabilityConfig {
+  readonly providers: readonly string[];
+}
+
+export type ProviderInstallStrategy = 'git-clone' | 'npm' | 'npx';
+
+export type ProviderEntry =
+  | {
+      readonly install_strategy: 'git-clone';
+      readonly repo: string;
+      readonly commit: string;
+      readonly verified_at: string;
+    }
+  | {
+      readonly install_strategy: 'npm' | 'npx';
+      readonly install_cmd: string;
+      readonly verified_at: string;
+    };
+
+export interface PresetEntry {
+  readonly capabilities: readonly CapabilityName[];
+}
+
+export interface HarnessLockV3 {
+  readonly schema_version: 3;
+  readonly acorn_version: string;
+  readonly capabilities: Readonly<Partial<Record<CapabilityName, CapabilityConfig>>>;
+  readonly providers: Readonly<Record<string, ProviderEntry>>;
+  readonly presets?: Readonly<Record<string, PresetEntry>>;
+  readonly guard: GuardConfig;
+}
+
+export type AnyHarnessLock = HarnessLock | HarnessLockV3;
+
+// ── error types ─────────────────────────────────────────────────────────────
+
 export type LockErrorCode = 'NOT_FOUND' | 'PARSE' | 'SCHEMA' | 'IO';
 
 export class LockError extends Error {
@@ -68,6 +120,8 @@ export function defaultLockPath(harnessRoot?: string): string {
   return join(harnessRoot ?? defaultHarnessRoot(), 'harness.lock');
 }
 
+// ── shared regexes ───────────────────────────────────────────────────────────
+
 const SHA1_RE = /^[a-f0-9]{40}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
@@ -76,11 +130,31 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+// ── shared JSON parser ───────────────────────────────────────────────────────
+
+function parseRawJson(raw: string): Record<string, unknown> {
+  const stripped = stripBom(raw);
+  let data: unknown;
+  try {
+    data = JSON.parse(stripped);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new LockError(`JSON 파싱 실패: ${msg}`, 'PARSE');
+  }
+  if (!isObject(data)) {
+    throw new LockError('루트가 object 가 아닙니다', 'SCHEMA');
+  }
+  if (!('schema_version' in data)) {
+    throw new LockError('schema_version 필드 누락', 'SCHEMA');
+  }
+  return data;
+}
+
+// ── v2 validators ────────────────────────────────────────────────────────────
+
 /**
  * §15 HIGH-2 / ADR-020 (v0.4.0): repo allowlist 검증.
  * `ACORN_ALLOW_ANY_REPO=1` 이면 검증 skip (escape hatch).
- * `parseLock` 호출 시점에 process.env 를 읽어 결정 — env 기반이라
- * 테스트는 env 조작으로 양 케이스 확인 가능.
  */
 function isRepoAllowed(tool: ToolName, repo: string): boolean {
   if (process.env['ACORN_ALLOW_ANY_REPO'] === '1') return true;
@@ -171,46 +245,137 @@ function validateOptionalTools(
   return result;
 }
 
-export function parseLock(raw: string): HarnessLock {
-  // Windows 에디터가 UTF-8 BOM 을 삽입한 경우 JSON.parse 가 실패한다.
-  // fail-close 원칙 위반 없이 조용히 제거한다. (DOGFOOD Round 1 §v0.1.1 #1)
-  // v0.4.1: stripBom 을 core/bom.ts 로 통합.
-  const stripped = stripBom(raw);
+// ── v3 validators ────────────────────────────────────────────────────────────
 
-  let data: unknown;
-  try {
-    data = JSON.parse(stripped);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new LockError(`JSON 파싱 실패: ${msg}`, 'PARSE');
-  }
-
-  if (!isObject(data)) {
-    throw new LockError('루트가 object 가 아닙니다', 'SCHEMA');
-  }
-
-  const { schema_version, acorn_version, tools, guard } = data;
-
-  // 누락과 불일치를 구분. undefined 일 때 "기대 2, 실제 undefined" 표시는
-  // 필드 자체가 없는 건지 잘못 찍은 건지 구분이 안 되어 혼란을 줌.
-  // (DOGFOOD Round 1 §v0.1.1 #2)
-  if (!('schema_version' in data)) {
-    throw new LockError('schema_version 필드 누락', 'SCHEMA');
-  }
-  // v0.8.0: v1(기존) 을 in-memory v2 로 투명 마이그레이션. v1/v2 외 버전은 거부.
-  if (schema_version !== 1 && schema_version !== SCHEMA_VERSION) {
+function validateCapabilityName(name: string): CapabilityName {
+  if (!(CAPABILITY_NAMES as readonly string[]).includes(name)) {
     throw new LockError(
-      `schema_version 불일치: 기대 ${SCHEMA_VERSION}, 실제 ${String(schema_version)}`,
+      `capabilities: "${name}" 는 허용된 capability 이름이 아닙니다. ` +
+        `허용: ${CAPABILITY_NAMES.join(', ')}`,
       'SCHEMA',
     );
   }
+  return name as CapabilityName;
+}
+
+function validateCapabilityConfig(name: string, raw: unknown): CapabilityConfig {
+  if (!isObject(raw)) {
+    throw new LockError(`capabilities.${name}: object 가 아닙니다`, 'SCHEMA');
+  }
+  const { providers } = raw;
+  if (
+    !Array.isArray(providers) ||
+    !providers.every((p): p is string => typeof p === 'string')
+  ) {
+    throw new LockError(`capabilities.${name}.providers: string[] 이어야 합니다`, 'SCHEMA');
+  }
+  return { providers: providers as readonly string[] };
+}
+
+function validateCapabilities(
+  raw: unknown,
+): Partial<Record<CapabilityName, CapabilityConfig>> {
+  if (!isObject(raw)) {
+    throw new LockError('capabilities: object 가 아닙니다', 'SCHEMA');
+  }
+  const result: Partial<Record<CapabilityName, CapabilityConfig>> = {};
+  for (const key of Object.keys(raw)) {
+    const capName = validateCapabilityName(key);
+    result[capName] = validateCapabilityConfig(key, raw[key]);
+  }
+  return result;
+}
+
+function validateProviderEntry(name: string, raw: unknown): ProviderEntry {
+  if (!isObject(raw)) {
+    throw new LockError(`providers.${name}: object 가 아닙니다`, 'SCHEMA');
+  }
+  const { install_strategy, verified_at } = raw;
+  if (
+    typeof install_strategy !== 'string' ||
+    !(['git-clone', 'npm', 'npx'] as readonly string[]).includes(install_strategy)
+  ) {
+    throw new LockError(
+      `providers.${name}.install_strategy: git-clone|npm|npx 중 하나여야 합니다`,
+      'SCHEMA',
+    );
+  }
+  if (typeof verified_at !== 'string' || !ISO_DATE_RE.test(verified_at)) {
+    throw new LockError(`providers.${name}.verified_at: YYYY-MM-DD 이어야 합니다`, 'SCHEMA');
+  }
+  if (install_strategy === 'git-clone') {
+    const { repo, commit } = raw;
+    if (typeof repo !== 'string' || !REPO_RE.test(repo)) {
+      throw new LockError(`providers.${name}.repo: "owner/name" 형식이어야 합니다`, 'SCHEMA');
+    }
+    if (typeof commit !== 'string' || !SHA1_RE.test(commit)) {
+      throw new LockError(`providers.${name}.commit: 40자 SHA1 이어야 합니다`, 'SCHEMA');
+    }
+    return { install_strategy: 'git-clone', repo, commit, verified_at };
+  }
+  const { install_cmd } = raw;
+  if (typeof install_cmd !== 'string' || install_cmd.length === 0) {
+    throw new LockError(
+      `providers.${name}.install_cmd: npm/npx 전략에서 비어있지 않은 문자열이어야 합니다`,
+      'SCHEMA',
+    );
+  }
+  return { install_strategy: install_strategy as 'npm' | 'npx', install_cmd, verified_at };
+}
+
+function validateProviders(raw: unknown): Record<string, ProviderEntry> {
+  if (!isObject(raw)) {
+    throw new LockError('providers: object 가 아닙니다', 'SCHEMA');
+  }
+  const result: Record<string, ProviderEntry> = {};
+  for (const name of Object.keys(raw)) {
+    result[name] = validateProviderEntry(name, raw[name]);
+  }
+  return result;
+}
+
+function validatePresetEntry(name: string, raw: unknown): PresetEntry {
+  if (!isObject(raw)) {
+    throw new LockError(`presets.${name}: object 가 아닙니다`, 'SCHEMA');
+  }
+  const { capabilities } = raw;
+  if (!Array.isArray(capabilities)) {
+    throw new LockError(`presets.${name}.capabilities: array 이어야 합니다`, 'SCHEMA');
+  }
+  const validated: CapabilityName[] = [];
+  for (const cap of capabilities) {
+    if (typeof cap !== 'string') {
+      throw new LockError(
+        `presets.${name}.capabilities: 모든 항목이 string 이어야 합니다`,
+        'SCHEMA',
+      );
+    }
+    validated.push(validateCapabilityName(cap));
+  }
+  return { capabilities: validated };
+}
+
+function validatePresets(raw: unknown): Record<string, PresetEntry> {
+  if (!isObject(raw)) {
+    throw new LockError('presets: object 가 아닙니다', 'SCHEMA');
+  }
+  const result: Record<string, PresetEntry> = {};
+  for (const name of Object.keys(raw)) {
+    result[name] = validatePresetEntry(name, raw[name]);
+  }
+  return result;
+}
+
+// ── internal body parsers (take pre-parsed objects) ─────────────────────────
+
+function parseLockV2Body(data: Record<string, unknown>): HarnessLock {
+  const { acorn_version, tools, guard } = data;
   if (typeof acorn_version !== 'string' || acorn_version.length === 0) {
     throw new LockError('acorn_version: 비어있지 않은 문자열이어야 합니다', 'SCHEMA');
   }
   if (!isObject(tools)) {
     throw new LockError('tools: object 가 아닙니다', 'SCHEMA');
   }
-
   const validatedTools: Record<ToolName, ToolEntry> = {} as Record<ToolName, ToolEntry>;
   for (const name of TOOL_NAMES) {
     if (!(name in tools)) {
@@ -218,11 +383,9 @@ export function parseLock(raw: string): HarnessLock {
     }
     validatedTools[name] = validateToolEntry(name, tools[name]);
   }
-
   const optional_tools = isObject(data.optional_tools)
     ? validateOptionalTools(data.optional_tools)
     : {};
-
   return {
     schema_version: SCHEMA_VERSION,
     acorn_version,
@@ -232,7 +395,83 @@ export function parseLock(raw: string): HarnessLock {
   };
 }
 
-export function readLock(lockPath?: string): HarnessLock {
+function parseLockV3Body(data: Record<string, unknown>): HarnessLockV3 {
+  const { acorn_version, guard } = data;
+  if (typeof acorn_version !== 'string' || acorn_version.length === 0) {
+    throw new LockError('acorn_version: 비어있지 않은 문자열이어야 합니다', 'SCHEMA');
+  }
+  const capabilities = validateCapabilities(data['capabilities'] ?? {});
+  const providers = validateProviders(data['providers'] ?? {});
+  const presets = isObject(data['presets'])
+    ? validatePresets(data['presets'])
+    : undefined;
+  const result: HarnessLockV3 = {
+    schema_version: 3,
+    acorn_version,
+    capabilities,
+    providers,
+    guard: validateGuard(guard),
+  };
+  if (presets !== undefined) {
+    return { ...result, presets };
+  }
+  return result;
+}
+
+// ── public parse API ─────────────────────────────────────────────────────────
+
+/**
+ * v1|v2 lock JSON 을 파싱해 HarnessLock 을 반환한다.
+ * v1 입력은 in-memory v2 로 투명 마이그레이션된다.
+ * v3 이상은 거부한다.
+ */
+export function parseLockV2(raw: string): HarnessLock {
+  const data = parseRawJson(raw);
+  const { schema_version } = data;
+  if (schema_version !== 1 && schema_version !== 2) {
+    throw new LockError(
+      `schema_version 불일치: 기대 1|2, 실제 ${String(schema_version)}`,
+      'SCHEMA',
+    );
+  }
+  return parseLockV2Body(data);
+}
+
+/**
+ * v3 lock JSON 을 파싱해 HarnessLockV3 를 반환한다.
+ * v3 이외의 버전은 거부한다.
+ */
+export function parseLockV3(raw: string): HarnessLockV3 {
+  const data = parseRawJson(raw);
+  if (data['schema_version'] !== 3) {
+    throw new LockError(
+      `schema_version 불일치: 기대 3, 실제 ${String(data['schema_version'])}`,
+      'SCHEMA',
+    );
+  }
+  return parseLockV3Body(data);
+}
+
+/**
+ * v1|v2|v3 lock JSON 을 파싱해 AnyHarnessLock 을 반환한다.
+ * schema_version 을 보고 v2 또는 v3 파서로 디스패치한다.
+ */
+export function parseLock(raw: string): AnyHarnessLock {
+  const data = parseRawJson(raw);
+  const { schema_version } = data;
+  if (schema_version === 1 || schema_version === 2) {
+    return parseLockV2Body(data);
+  }
+  if (schema_version === 3) {
+    return parseLockV3Body(data);
+  }
+  throw new LockError(
+    `schema_version 불일치: 기대 1|2|3, 실제 ${String(schema_version)}`,
+    'SCHEMA',
+  );
+}
+
+export function readLock(lockPath?: string): AnyHarnessLock {
   const path = lockPath ?? defaultLockPath();
   if (!existsSync(path)) {
     throw new LockError(`harness.lock 없음: ${path}`, 'NOT_FOUND');
@@ -251,10 +490,10 @@ export function getTool(lock: HarnessLock, name: ToolName): ToolEntry {
   return lock.tools[name];
 }
 
+// ── template & stamp utilities ───────────────────────────────────────────────
+
 /**
  * 패키지 동봉된 harness.lock 템플릿 경로를 반환한다.
- * - dev (src/core/lock.ts 실행): `<repo>/templates/harness.lock.template.json`
- * - prod (dist/core/lock.js 실행): 같은 상대 경로로 해소됨
  * §15 C1: 빈 harness root 에서 install 즉시 실패하지 않도록 seedLockTemplate 가 참조.
  */
 export function lockTemplatePath(): string {
@@ -266,7 +505,6 @@ export function lockTemplatePath(): string {
  * 대상 lockPath 가 존재하지 않으면 템플릿을 복사해서 시드한다.
  * - 기존 파일은 덮어쓰지 않음 (비파괴 원칙)
  * - 부모 디렉토리는 자동 생성 (mkdirSync recursive)
- * - BOM 없이 utf8 로 기록
  * §15 C1: install 의 첫 실패 UX 를 "에러 + 에디터 열어라" 로 개선.
  */
 export function stampLockVersion(lockPath: string, version: string): void {

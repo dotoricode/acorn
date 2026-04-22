@@ -11,6 +11,34 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { backupDirTs } from './time.ts';
+import { type AnyHarnessLock } from './lock.ts';
+
+// ── hooks capability status (v3) ──────────────────────────────────────────────
+
+/**
+ * 'provider-managed': v3 lock + hooks capability 에 제공자 지정됨.
+ * 훅 설치는 해당 제공자(예: claudekit)가 담당 — acorn 은 registry 복제하지 않음.
+ *
+ * 'legacy-fallback': v2 lock 이거나 hooks capability 가 미설정.
+ * installGuardHook 으로 guard-check.sh 단일 파일 배포.
+ */
+export type HooksCapabilityMode = 'provider-managed' | 'legacy-fallback';
+
+export interface HooksCapabilityStatus {
+  readonly mode: HooksCapabilityMode;
+  readonly providers: readonly string[];
+}
+
+export function hooksCapabilityStatus(lock: AnyHarnessLock): HooksCapabilityStatus {
+  if (lock.schema_version !== 3) {
+    return { mode: 'legacy-fallback', providers: [] };
+  }
+  const hooksCap = lock.capabilities['hooks'];
+  if (!hooksCap || hooksCap.providers.length === 0) {
+    return { mode: 'legacy-fallback', providers: [] };
+  }
+  return { mode: 'provider-managed', providers: [...hooksCap.providers] };
+}
 
 export type HooksErrorCode = 'SOURCE_MISSING' | 'IO';
 

@@ -1,6 +1,6 @@
 # acorn
 
-Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
+Claude Code 하네스 CLI — capability-first 모델로 원하는 기능(capability)을 선언하고, 검증된 제공자(provider)를 격리 설치한다.
 패키지명: @dotoricode/acorn
 
 ## 핵심 원칙
@@ -20,7 +20,9 @@ src/
 │                v0.2.0+)
 ├── core/       핵심 로직 현재 구현: lock, env, settings, symlink, vendors,
 │               tx, hooks, gstack-marker, sha-display, adopt (v0.3.0+),
-│               phase (v0.7.0+), claude-md (v0.7.0+)
+│               phase (v0.7.0+), claude-md (v0.7.0+),
+│               providers, preset, provider-detect, provider-install (v0.9+),
+│               qa-headless (v0.9+)
 │               (registry 는 v1.1+ 연기, 별도 core/guard 모듈 없음 —
 │                guard 정책은 harness.lock + hooks/guard-check.sh 에 존재)
 └── dev/        dotori 전용 커맨드 (check, lock, validate, release) —
@@ -91,9 +93,14 @@ ACORN_ALLOW_ANY_REPO=1        lock repo allowlist bypass (fork/dev용)
 우선순위: ACORN_GUARD_BYPASS > ACORN_PHASE_OVERRIDE > ACORN_GUARD_PATTERNS
           > phase.txt > harness.lock.guard.patterns > strict
 
-## 툴별 설치 방식
+## 툴별 설치 방식 (v3 provider 모델)
 
-gstack  디렉토리 심링크 방식 (절대경로 하드코딩 대응)
+gstack      git-clone + 디렉토리 심링크 (절대경로 하드코딩 대응)
+superpowers git-clone (planning/spec 제공자)
+gsd         npx install_cmd (planning/qa_headless 제공자)
+claudekit   npx install_cmd (hooks 제공자)
+
+v2 legacy (schema_version 2 lock 에 여전히 동작):
 OMC     환경변수 주입 (CLAUDE_PLUGIN_ROOT, OMC_PLUGIN_ROOT)
 ECC     환경변수 주입 (CLAUDE_PLUGIN_ROOT, ECC_ROOT)
 

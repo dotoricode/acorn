@@ -1,12 +1,10 @@
 # acorn
 
-Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
+Claude Code 하네스 CLI — **capability-first** 모델.
 
-> **Status**: **v0.9.0** — `acorn uninstall` 도입. install 의 역순 7단계 파이프라인.
-> vendors, 심링크, hooks, phase.txt, gstack marker, settings.json env 키, CLAUDE.md 마커를 안전 제거.
-> v0.3.2 이후 릴리스: v0.3.3 → v0.3.4 → v0.3.5 → v0.4.0 → v0.4.1 → v0.4.2
-> → v0.4.3 → v0.4.4 → v0.5.0 → v0.5.1 → v0.6.0 → v0.6.1 → v0.7.0 (phase)
-> → v0.7.1 → v0.7.2 → v0.8.0 (schema v2) → **v0.9.0** (uninstall).
+원하는 기능(capability)을 선언하면 acorn 이 적합한 제공자(provider)를 격리 설치한다.
+
+> **Status**: **v0.9.0** — capability/provider/preset 모델 도입 (schema v3). `acorn uninstall` 도입.
 >
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
@@ -14,15 +12,74 @@ Claude Code 하네스 엔지니어링 툴(OMC, gstack, ECC) 통합 관리 CLI.
 
 ---
 
+## 핵심 모델: capability → provider → preset
+
+### Capability — 원하는 기능
+
+| capability | 의미 |
+|---|---|
+| `hooks` | Claude Code PreToolUse/PostToolUse 훅 관리 |
+| `planning` | 스펙·태스크·플래닝 지원 |
+| `tdd` | 테스트 주도 개발 워크플로우 |
+| `review` | 코드 리뷰 에이전트 |
+| `qa_headless` | API/worker/cron/webhook/CLI 수동 QA 가이드 (provider 없어도 first-class) |
+| `memory` | 컨텍스트 영속화 |
+
+### Provider — 기능을 제공하는 도구
+
+| provider | 설치 방식 | 주요 capability |
+|---|---|---|
+| gstack | git-clone + 심링크 | tdd, review |
+| superpowers | git-clone | planning, spec |
+| gsd | npx | planning, qa_headless |
+| claudekit | npx | hooks |
+
+### Preset — 용도별 capability 묶음
+
+| preset | capabilities | 언제 |
+|---|---|---|
+| `starter` | hooks, planning, qa_headless | 빠른 시작, 탐색 단계 |
+| `builder` | hooks, planning, tdd, review, qa_headless | 본격 개발 |
+
+---
+
 ## 개요
 
-Claude Code 하네스 생태계의 세 툴(OMC / gstack / ECC)을 **검증된 SHA 조합**으로 격리 설치하고,
-위험 커맨드를 차단하는 guard 훅을 함께 제공한다.
-
 - **격리 우선** — `~/.claude/skills/harness/` 단일 위치 관리
-- **버전 고정** — `harness.lock`에 기록된 SHA만 사용
+- **버전 고정** — `harness.lock`에 기록된 SHA/검증 정보만 사용
 - **fail-close** — 파싱/실행 실패 시 허용이 아닌 차단
 - **비파괴적** — `settings.json` 멱등 머지, 충돌 시 백업 후 중단
+- **qa_headless 독립** — provider 없어도 5가지 프로젝트 유형별 체크리스트 제공
+
+---
+
+## 기존 사용자 마이그레이션 (v0.8 → v0.9)
+
+v0.8 이하 (`schema_version 2`, `prototype/dev/production` phase) 사용자는 **당장 깨지지 않는다.**
+acorn 은 v2 lock 을 계속 파싱하고 설치한다.
+
+새 모델(v3)로 이전하려면:
+
+```bash
+# 1. harness.lock 을 v3 템플릿으로 교체
+#    (acorn install 이 없으면 자동 시드)
+acorn install   # → LOCK_SEEDED 에러 + 템플릿 생성
+
+# 2. 템플릿의 git-clone provider commit SHA 를 실제 값으로 채움
+#    gstack:      garrytan/gstack 최신 HEAD SHA
+#    superpowers: obra/superpowers 최신 HEAD SHA
+
+# 3. 재설치
+acorn install
+```
+
+| 이전 개념 | 새 개념 |
+|---|---|
+| `phase: prototype` | preset `starter` |
+| `phase: dev` | preset `builder` |
+| `phase: production` | preset `builder` + guard strict |
+| `tools: {omc, gstack, ecc}` | `providers: {gstack, superpowers, gsd, claudekit}` |
+| guard 수준 = phase 연동 | guard 는 `harness.lock.guard` 에서 직접 지정 |
 
 ---
 
@@ -195,9 +252,9 @@ acorn phase dev                    # dev 로 복귀 (Y/n 확인)
 
 ---
 
-## 구성 모듈 (v0.1.0)
+## 구성 모듈 (v0.9.0)
 
-핵심 구현은 크게 3개 오케스트레이터(`commands/`) + 6개 코어 모듈(`core/`) + 1개 훅 스크립트.
+핵심 구현은 오케스트레이터(`commands/`) + 코어 모듈(`core/`) + 1개 훅 스크립트.
 각 모듈은 독립적으로 import 가능하며 `GitRunner` 등 주요 외부 의존성은 주입식이다.
 
 | 계층 | 모듈 | 역할 |
@@ -206,16 +263,21 @@ acorn phase dev                    # dev 로 복귀 (Y/n 확인)
 | commands | `install.ts` | 9단계 preflight-우선 설치 파이프라인 |
 | commands | `status.ts` | 읽기 전용 상태 요약 + JSON |
 | commands | `list.ts` | lock 기준 tool/SHA/상태 간결 나열 (v0.6.0+) |
-| commands | `doctor.ts` | 진단 + 이슈별 복구 힌트 |
+| commands | `doctor.ts` | 진단 + capability 이슈 + 이슈별 복구 힌트 (v0.9.0+ capability area 추가) |
 | commands | `config.ts` | guard.mode / guard.patterns / env.reset 조작 (v0.3.0+) |
 | commands | `phase.ts` | `acorn phase` 커맨드 — phase.txt + CLAUDE.md 동기화 (v0.7.0+) |
-| core | `lock.ts` | harness.lock 스키마 검증 + allowlist (v0.4.0+) |
+| core | `lock.ts` | harness.lock v2/v3 스키마 파싱 + allowlist. v3: capability/provider/preset (v0.9.0+) |
+| core | `providers.ts` | v3 provider registry — gstack/superpowers/gsd/claudekit 메타데이터 (v0.9.0+) |
+| core | `preset.ts` | preset 파싱 + canonical 이름 — starter/builder + legacy alias (v0.9.0+) |
+| core | `provider-detect.ts` | provider 설치 여부 감지 (git-clone: dirExists, npx: commandExists) (v0.9.0+) |
+| core | `provider-install.ts` | provider install plan 생성 + recommendation (v0.9.0+) |
+| core | `qa-headless.ts` | qa_headless first-class guidance — 5 project types, provider 없어도 동작 (v0.9.0+) |
+| core | `hooks.ts` | guard-check.sh 배포 + v3 hooksCapabilityStatus (v0.1.2+, v0.9.0+) |
 | core | `env.ts` | 환경변수 3키 계산 + diff (v0.4.1+ 빈 문자열 fallback) |
 | core | `settings.ts` | settings.json 멱등 머지 + 원자 쓰기 (v0.4.1+ BOM/fail-close) |
 | core | `symlink.ts` | gstack 디렉토리 심링크 원자 교체 |
 | core | `vendors.ts` | git clone + SHA 핀 + dirty 감지 + tool name guard (v0.5.0+) |
 | core | `tx.ts` | install 트랜잭션 로그 (JSONL) |
-| core | `hooks.ts` | `<harnessRoot>/hooks/guard-check.sh` 배포 (v0.1.2+) |
 | core | `time.ts` | 타임스탬프 단일 소스 (v0.5.1+, backup 디렉토리 공유) |
 | core | `bom.ts` | UTF-8 BOM strip 단일 소스 (v0.4.1+) |
 | core | `adopt.ts` | `--adopt` 의 pre-adopt rename (v0.3.0+) |
@@ -300,9 +362,23 @@ const { ok, issues } = summarize(report);
 if (!ok) process.exit(1);
 ```
 
-출력 예:
+출력 예 (v3 lock):
 ```
-acorn v0.3.2  •  ~/.claude/skills/harness
+acorn v0.9.0  •  ~/.claude/skills/harness
+────────────────────────────────────────────────────────────
+  capabilities:
+    hooks        ✅  provider-managed (claudekit)
+    planning     ✅  gsd, superpowers
+    tdd          ✅  gstack
+    review       ✅  gstack
+    qa_headless  ✅  first-class (provider 없어도 동작)
+  preset: builder
+  guard:  block / strict
+```
+
+출력 예 (v2 legacy lock):
+```
+acorn v0.9.0  •  ~/.claude/skills/harness
 ────────────────────────────────────────────────────────────
   omc     04655ee  ✅  locked
   gstack  c6e6a21  ✅  locked  (symlinked)
@@ -661,21 +737,21 @@ CI 그린 유지). 로컬 테스트 실패가 실 버그는 아님.
 
 ## 로드맵
 
-v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4)
+v0.1.0 Radical MVP — 10 스프린트 (상세: `docs/acorn-v1-plan.md` §4): ✅ 완료
+
+v0.9.x — capability-first 모델 도입:
 
 | Sprint | 산출물 | 상태 |
 |---|---|---|
-| 0 | Node 24 LTS 전환, TS 안정성 | ✅ 완료 |
-| 1 | `hooks/guard-check.sh` | ✅ 완료 |
-| 2 | `src/core/lock.ts` | ✅ 완료 |
-| 3 | `src/core/env.ts` | ✅ 완료 |
-| 4 | `src/core/settings.ts` | ✅ 완료 |
-| 5 | `src/core/symlink.ts` | ✅ 완료 |
-| 6 | `src/commands/install.ts` + `src/core/vendors.ts` | ✅ 완료 |
-| 7 | `src/commands/status.ts` | ✅ 완료 |
-| 8 | `src/commands/doctor.ts` | ✅ 완료 |
-| 9 | `src/index.ts` (CLI 라우터) | ✅ 완료 |
-| 10 | README 정비 + CI placeholder | ✅ 완료 |
+| 01 | lock.ts schema_version 3 타입 + 파싱 | ✅ 완료 |
+| 02 | provider registry + detect + install plan | ✅ 완료 |
+| 03 | recommendation engine (project profile 추론) | ✅ 완료 |
+| 04 | guided install mode (v3 lock 기반) | ✅ 완료 |
+| 05 | preset layer (starter/builder, legacy alias) | ✅ 완료 |
+| 06 | status/doctor — capability 중심 상태 확인 | ✅ 완료 |
+| 07 | hooks v3 provider-managed + qa_headless first-class | ✅ 완료 |
+| 08 | docs migration — capability-first README/CLAUDE.md/template | ✅ 완료 |
+| 09 | provider install 파이프라인 연결 | ⏳ 예정 |
 
 ---
 

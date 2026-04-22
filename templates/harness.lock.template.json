@@ -1,25 +1,57 @@
 {
-  "_comment": "acorn install 가 harness.lock 없음을 감지하고 생성한 템플릿입니다. 각 tool 의 'commit' 을 실제 SHA 로 바꾼 뒤 'acorn install' 을 재실행하세요. SHA 수집: 각 저장소의 git log 에서 v0.x 태그 또는 검증 시점 HEAD. '_comment' 필드는 무시되므로 남겨두어도 무관합니다.",
-  "schema_version": 2,
-  "acorn_version": "0.1.0",
-  "tools": {
-    "omc": {
-      "repo": "Yeachan-Heo/oh-my-claudecode",
-      "commit": "0000000000000000000000000000000000000000",
-      "verified_at": "1970-01-01"
+  "_comment": "acorn install 이 harness.lock 없음을 감지하고 생성한 v3 템플릿입니다. git-clone 제공자의 'commit' 을 실제 SHA 로 바꾼 뒤 'acorn install' 을 재실행하세요. SHA 수집: 각 저장소 git log 또는 HEAD SHA. '_comment' 와 '_v3_guide' 는 무시되므로 남겨두어도 무관합니다.",
+  "_v3_guide": "v3 구조: capabilities(원하는 기능) → providers(설치 도구) → guard(안전 장치). 프리셋(presets)으로 용도별 조합을 정의합니다.",
+  "schema_version": 3,
+  "acorn_version": "0.9.0",
+  "capabilities": {
+    "hooks": {
+      "providers": ["claudekit"]
     },
+    "planning": {
+      "providers": ["gsd", "superpowers"]
+    },
+    "tdd": {
+      "providers": ["gstack"]
+    },
+    "review": {
+      "providers": ["gstack"]
+    },
+    "qa_headless": {
+      "providers": []
+    }
+  },
+  "providers": {
     "gstack": {
+      "install_strategy": "git-clone",
       "repo": "garrytan/gstack",
       "commit": "0000000000000000000000000000000000000000",
       "verified_at": "1970-01-01"
     },
-    "ecc": {
-      "repo": "affaan-m/everything-claude-code",
+    "superpowers": {
+      "install_strategy": "git-clone",
+      "repo": "obra/superpowers",
       "commit": "0000000000000000000000000000000000000000",
+      "verified_at": "1970-01-01"
+    },
+    "gsd": {
+      "install_strategy": "npx",
+      "install_cmd": "npx get-shit-done@latest",
+      "verified_at": "1970-01-01"
+    },
+    "claudekit": {
+      "install_strategy": "npx",
+      "install_cmd": "npx claudekit@latest",
       "verified_at": "1970-01-01"
     }
   },
-  "optional_tools": {},
+  "presets": {
+    "starter": {
+      "capabilities": ["hooks", "planning", "qa_headless"]
+    },
+    "builder": {
+      "capabilities": ["hooks", "planning", "tdd", "review", "qa_headless"]
+    }
+  },
   "guard": {
     "mode": "block",
     "patterns": "strict"

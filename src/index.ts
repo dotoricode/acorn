@@ -38,6 +38,7 @@ import {
   type ConfirmFn,
 } from './commands/config.ts';
 import { runPhase, renderPhaseAction, PhaseError } from './commands/phase.ts';
+import { runPreset, renderPresetAction, PresetError } from './commands/preset.ts';
 import { VendorError } from './core/vendors.ts';
 import { SettingsError } from './core/settings.ts';
 import { SymlinkError } from './core/symlink.ts';
@@ -95,6 +96,7 @@ Commands:
   lock validate  harness.lock schema 검증 (read-only, CI 친화)
   config         guard.mode / guard.patterns / env.reset 조작 (v0.3.0+)
   phase          현재 phase 조회 / 변경 (prototype|dev|production) (v0.7.0+)
+  preset         현재 preset 조회 / 변경 (starter|builder|frontend|backend) (v0.10.0+)
 
 Global flags:
   -h, --help      도움말
@@ -200,6 +202,10 @@ function formatError(e: unknown): string {
     const head = `[phase/${e.code}] ${e.message}`;
     return e.hint ? `${head}\n   → ${e.hint}` : head;
   }
+  if (e instanceof PresetError) {
+    const head = `[preset/${e.code}] ${e.message}`;
+    return e.hint ? `${head}\n   → ${e.hint}` : head;
+  }
   if (e instanceof LockError) return `[lock/${e.code}] ${e.message}`;
   if (e instanceof VendorError) return `[vendor/${e.code}/${e.tool}] ${e.message}`;
   if (e instanceof SettingsError) return `[settings/${e.code}] ${e.message}`;
@@ -225,6 +231,10 @@ function exitFor(e: unknown): number {
     if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
   }
   if (e instanceof PhaseError) {
+    if (e.code === 'INVALID_VALUE') return EXIT.CONFIG;
+    if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
+  }
+  if (e instanceof PresetError) {
     if (e.code === 'INVALID_VALUE') return EXIT.CONFIG;
     if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
   }
@@ -446,6 +456,8 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
       return cmdConfig(rest, io);
     case 'phase':
       return cmdPhase(rest, io);
+    case 'preset':
+      return cmdPreset(rest, io);
     default:
       io.stderr(`알 수 없는 커맨드: ${head}`);
       io.stderr('');
@@ -513,6 +525,32 @@ function cmdPhase(rest: readonly string[], io: CliIO): number {
     };
     const action = runPhase(value, isTty ? { yes, confirm: confirmFn } : { yes });
     io.stdout(renderPhaseAction(action));
+    return EXIT.OK;
+  } catch (e) {
+    io.stderr(formatError(e));
+    return exitFor(e);
+  }
+}
+
+function cmdPreset(rest: readonly string[], io: CliIO): number {
+  const parsed = parseArgs(rest);
+  const value = parsed.positional[0];
+  const yes = parsed.flags.has('yes');
+  try {
+    const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+    const confirmFn: ConfirmFn = (prompt) => {
+      io.stdout(`${prompt} [Y/n]`);
+      const buf = Buffer.alloc(8);
+      try {
+        const n = readSync(0, buf, 0, buf.length, null);
+        const input = buf.slice(0, n).toString('utf8').trim().toLowerCase();
+        return input === '' || input.startsWith('y');
+      } catch {
+        return false;
+      }
+    };
+    const action = runPreset(value, isTty ? { yes, confirm: confirmFn } : { yes });
+    io.stdout(renderPresetAction(action));
     return EXIT.OK;
   } catch (e) {
     io.stderr(formatError(e));

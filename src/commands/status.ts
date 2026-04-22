@@ -1,4 +1,4 @@
-import { readLock, TOOL_NAMES, type ToolName, type GuardConfig } from '../core/lock.ts';
+import { readLock, TOOL_NAMES, type HarnessLock, type HarnessLockV3, type AnyHarnessLock, type ToolName, type GuardConfig, type CapabilityName } from '../core/lock.ts';
 import {
   computeEnv,
   defaultClaudeRoot,
@@ -22,12 +22,14 @@ import {
   readCurrentCommit,
   type GitRunner,
 } from '../core/vendors.ts';
+import { readPreset, type PresetRead } from '../core/preset.ts';
+import { detectProvider, defaultDetectEnv, type DetectEnv } from '../core/provider-detect.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { lastInProgress, type TxEvent } from '../core/tx.ts';
 import { shortSha, distinguishingPair } from '../core/sha-display.ts';
 
-export type VendorState = 'locked' | 'drift' | 'missing' | 'error';
+export type VendorState = 'locked' | 'drift' | 'missing' | 'error' | 'not_applicable';
 
 export interface PhaseStatusField {
   readonly value: Phase | null;
@@ -46,6 +48,35 @@ export interface ToolStatus {
   readonly error?: string;
 }
 
+// ── v3 status types ───────────────────────────────────────────────────────────
+
+export interface CapabilityProviderStatus {
+  readonly provider: string;
+  readonly state: 'installed' | 'missing' | 'unknown';
+  readonly detail?: string;
+}
+
+export interface CapabilityStatusEntry {
+  readonly capability: CapabilityName;
+  readonly configuredProviders: readonly string[];
+  readonly providerStates: readonly CapabilityProviderStatus[];
+  readonly anyInstalled: boolean;
+}
+
+export interface V3ProviderLockEntry {
+  readonly provider: string;
+  readonly installStrategy: string;
+  readonly commit?: string;
+}
+
+export interface V3StatusSection {
+  readonly preset: PresetRead;
+  readonly capabilities: readonly CapabilityStatusEntry[];
+  readonly lockProviders: readonly V3ProviderLockEntry[];
+}
+
+// ── StatusReport ──────────────────────────────────────────────────────────────
+
 export interface StatusReport {
   readonly acornVersion: string;
   readonly harnessRoot: string;
@@ -54,17 +85,12 @@ export interface StatusReport {
   readonly guard: GuardConfig;
   readonly env: readonly EnvDiffEntry[];
   /**
-   * §15 M3: settings.json 과 별개로 process.env (Claude Code 세션 런타임) 와
-   * 비교한 결과. settings 가 정확해도 세션이 reload 안 했으면 이쪽이 mismatch.
-   * 테스트 등 주입된 env 로 계산. CollectOptions.runtimeEnv 미지정 시 process.env 사용.
-   */
-  /**
-   * §15 v0.4.1 #5: `runtimeEnv` 미지정 시 빈 배열 (runtime 체크 skip 의미) —
-   * 이전엔 `diffEnv(desired, desired)` self-compare 로 "모두 match" 거짓 반환.
+   * §15 v0.4.1 #5: `runtimeEnv` 미지정 시 빈 배열 (runtime 체크 skip 의미).
    */
   readonly envRuntime: readonly EnvDiffEntry[];
   readonly gstackSymlink: SymlinkInspection;
   readonly pendingTx: TxEvent | null;
+  readonly v3?: V3StatusSection;
 }
 
 export interface CollectOptions {
@@ -75,12 +101,82 @@ export interface CollectOptions {
   readonly claudeMdPath?: string;
   readonly git?: GitRunner;
   /**
-   * §15 M3: Claude Code 세션 runtime env. 미지정 시 runtime check 를 skip
-   * (envRuntime=[]) — 라이브러리 호출자에겐 "요청 안 함" 의미.
-   * CLI (index.ts) 는 process.env 명시 주입. v0.4.1 #5 에서 self-compare 제거.
+   * §15 M3: Claude Code 세션 runtime env. 미지정 시 runtime check skip.
    */
   readonly runtimeEnv?: Readonly<Record<string, string | undefined>>;
+  /** 테스트 주입용 detect environment (v3 provider 감지) */
+  readonly detectEnv?: DetectEnv;
 }
+
+// ── helper: build placeholder tools for v3 locks ─────────────────────────────
+
+function notApplicableTools(): Record<ToolName, ToolStatus> {
+  const tools = {} as Record<ToolName, ToolStatus>;
+  for (const name of TOOL_NAMES) {
+    tools[name] = {
+      tool: name,
+      repo: '',
+      lockCommit: '',
+      actualCommit: null,
+      state: 'not_applicable',
+    };
+  }
+  return tools;
+}
+
+// ── helper: build shared phase field ─────────────────────────────────────────
+
+function buildPhaseField(
+  harnessRoot: string,
+  claudeMdPath: string,
+): PhaseStatusField {
+  const phaseRead = readPhase(harnessRoot);
+  const claudeMdPhase = readPhaseFromClaudeMd(claudeMdPath);
+  const claudeMdSt = claudeMdMarkerStatus(claudeMdPath, phaseRead.value);
+  return {
+    value: phaseRead.value,
+    path: phaseRead.path,
+    status: phaseRead.status,
+    claudeMdValue: claudeMdPhase,
+    claudeMdStatus: claudeMdSt,
+  };
+}
+
+// ── helper: build v3 section ──────────────────────────────────────────────────
+
+function buildV3Section(lock3: HarnessLockV3, harnessRoot: string, dEnv: DetectEnv): V3StatusSection {
+  const capabilityStatuses: CapabilityStatusEntry[] = [];
+  const capKeys = Object.keys(lock3.capabilities) as CapabilityName[];
+  for (const cap of capKeys) {
+    const capConfig = lock3.capabilities[cap];
+    const configuredProviders: string[] = capConfig?.providers ? [...capConfig.providers] : [];
+    const providerStates: CapabilityProviderStatus[] = configuredProviders.map((pName) => {
+      const result = detectProvider(pName, dEnv);
+      if (result.detail !== undefined) {
+        return { provider: pName, state: result.state, detail: result.detail };
+      }
+      return { provider: pName, state: result.state };
+    });
+    capabilityStatuses.push({
+      capability: cap,
+      configuredProviders,
+      providerStates,
+      anyInstalled: providerStates.some((p) => p.state === 'installed'),
+    });
+  }
+
+  const lockProviders: V3ProviderLockEntry[] = Object.entries(lock3.providers).map(([name, entry]) => {
+    if (entry.install_strategy === 'git-clone') {
+      return { provider: name, installStrategy: entry.install_strategy, commit: entry.commit };
+    }
+    return { provider: name, installStrategy: entry.install_strategy };
+  });
+
+  const preset = readPreset(harnessRoot);
+  return { preset, capabilities: capabilityStatuses, lockProviders };
+}
+
+// ── collectStatus ─────────────────────────────────────────────────────────────
 
 export function collectStatus(opts: CollectOptions = {}): StatusReport {
   const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
@@ -89,7 +185,44 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
   const claudeMdPath = opts.claudeMdPath ?? defaultClaudeMdPath(claudeRoot);
   const git = opts.git ?? defaultGitRunner;
 
-  const lock = readLock(opts.lockPath);
+  const anyLock: AnyHarnessLock = readLock(opts.lockPath);
+
+  const desired = computeEnv(harnessRoot);
+  const current = readSettings(settingsPath);
+  const currentEnv =
+    typeof current['env'] === 'object' && current['env'] !== null && !Array.isArray(current['env'])
+      ? (current['env'] as Record<string, string | undefined>)
+      : {};
+  const envDiff = diffEnv(desired, currentEnv);
+  const envRuntimeDiff: readonly EnvDiffEntry[] = opts.runtimeEnv
+    ? diffEnv(desired, opts.runtimeEnv)
+    : [];
+
+  const phaseField = buildPhaseField(harnessRoot, claudeMdPath);
+  const gstackSymlink = inspectGstackSymlink({ harnessRoot, claudeRoot });
+  const pendingTx = lastInProgress(harnessRoot);
+
+  // ── v3 path ───────────────────────────────────────────────────────────────
+  if (anyLock.schema_version === 3) {
+    const lock3 = anyLock as HarnessLockV3;
+    const dEnv = opts.detectEnv ?? defaultDetectEnv(harnessRoot);
+    const v3 = buildV3Section(lock3, harnessRoot, dEnv);
+    return {
+      acornVersion: lock3.acorn_version,
+      harnessRoot,
+      tools: notApplicableTools(),
+      phase: phaseField,
+      guard: lock3.guard,
+      env: envDiff,
+      envRuntime: envRuntimeDiff,
+      gstackSymlink,
+      pendingTx,
+      v3,
+    };
+  }
+
+  // ── v2 path (original logic) ──────────────────────────────────────────────
+  const lock = anyLock as HarnessLock;
   const vRoot = vendorsRoot(harnessRoot);
 
   const tools: Record<ToolName, ToolStatus> = {} as Record<ToolName, ToolStatus>;
@@ -127,33 +260,6 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
     }
   }
 
-  const desired = computeEnv(harnessRoot);
-  const current = readSettings(settingsPath);
-  const currentEnv =
-    typeof current['env'] === 'object' && current['env'] !== null && !Array.isArray(current['env'])
-      ? (current['env'] as Record<string, string | undefined>)
-      : {};
-  const envDiff = diffEnv(desired, currentEnv);
-  // §15 M3 / v0.4.1 #5: 세션 runtime env 와도 비교.
-  // runtimeEnv 미지정 = "runtime 체크 요청 안 함" → 빈 배열 반환.
-  // 이전 (v0.4.0 까지) 은 `diffEnv(desired, desired)` self-compare 로 "모두 match"
-  // 를 거짓 반환해 라이브러리 호출자가 실제 세션 상태를 확인한 줄 착각할 수 있었다.
-  // CLI 경로는 index.ts 에서 `runtimeEnv: process.env` 명시 전달하므로 영향 없음.
-  const envRuntimeDiff: readonly EnvDiffEntry[] = opts.runtimeEnv
-    ? diffEnv(desired, opts.runtimeEnv)
-    : [];
-
-  const phaseRead = readPhase(harnessRoot);
-  const claudeMdPhase = readPhaseFromClaudeMd(claudeMdPath);
-  const claudeMdSt = claudeMdMarkerStatus(claudeMdPath, phaseRead.value);
-  const phaseField: PhaseStatusField = {
-    value: phaseRead.value,
-    path: phaseRead.path,
-    status: phaseRead.status,
-    claudeMdValue: claudeMdPhase,
-    claudeMdStatus: claudeMdSt,
-  };
-
   return {
     acornVersion: lock.acorn_version,
     harnessRoot,
@@ -162,10 +268,12 @@ export function collectStatus(opts: CollectOptions = {}): StatusReport {
     guard: lock.guard,
     env: envDiff,
     envRuntime: envRuntimeDiff,
-    gstackSymlink: inspectGstackSymlink({ harnessRoot, claudeRoot }),
-    pendingTx: lastInProgress(harnessRoot),
+    gstackSymlink,
+    pendingTx,
   };
 }
+
+// ── render helpers ────────────────────────────────────────────────────────────
 
 function stateIcon(state: VendorState): string {
   switch (state) {
@@ -177,6 +285,8 @@ function stateIcon(state: VendorState): string {
       return '❌';
     case 'error':
       return '⛔';
+    case 'not_applicable':
+      return '—';
   }
 }
 
@@ -185,8 +295,6 @@ function stateLabel(s: ToolStatus): string {
     case 'locked':
       return 'locked';
     case 'drift': {
-      // §15 v0.2.0 S2: 7-char short SHA 로는 "끝만 다른" drift 가 같아 보여 혼란.
-      // 차이 나는 위치까지 확장해서 두 SHA 를 나란히 보여준다.
       const [lockDisp, actualDisp] = distinguishingPair(s.lockCommit, s.actualCommit);
       return `drift (lock=${lockDisp} 실제=${actualDisp})`;
     }
@@ -194,6 +302,8 @@ function stateLabel(s: ToolStatus): string {
       return 'missing';
     case 'error':
       return 'error';
+    case 'not_applicable':
+      return 'n/a';
   }
 }
 
@@ -201,18 +311,56 @@ function envIcon(status: EnvDiffEntry['status']): string {
   return status === 'match' ? '✅' : status === 'missing' ? '❌' : '⚠️';
 }
 
+function capProviderIcon(state: 'installed' | 'missing' | 'unknown'): string {
+  return state === 'installed' ? '●' : state === 'missing' ? '○' : '?';
+}
+
+// ── renderStatus ──────────────────────────────────────────────────────────────
+
 export function renderStatus(r: StatusReport): string {
   const lines: string[] = [];
   lines.push(`acorn v${r.acornVersion}  •  ${r.harnessRoot}`);
   lines.push('─'.repeat(60));
-  for (const name of TOOL_NAMES) {
-    const t = r.tools[name];
-    const suffix = name === 'gstack' ? '  (symlinked)' : '';
-    lines.push(
-      `  ${name.padEnd(7)} ${shortSha(t.lockCommit)}  ${stateIcon(t.state)}  ${stateLabel(t)}${suffix}`,
-    );
+
+  // v2 tools section (skip for v3 locks)
+  const hasV2Tools = Object.values(r.tools).some((t) => t.state !== 'not_applicable');
+  if (hasV2Tools) {
+    for (const name of TOOL_NAMES) {
+      const t = r.tools[name];
+      if (t.state === 'not_applicable') continue;
+      const suffix = name === 'gstack' ? '  (symlinked)' : '';
+      lines.push(
+        `  ${name.padEnd(7)} ${shortSha(t.lockCommit)}  ${stateIcon(t.state)}  ${stateLabel(t)}${suffix}`,
+      );
+    }
+    lines.push('─'.repeat(60));
   }
-  lines.push('─'.repeat(60));
+
+  // v3 preset + capabilities section
+  if (r.v3) {
+    const { preset, capabilities } = r.v3;
+    const presetVal = preset.value ?? '(미설정)';
+    const legacyNote = preset.legacy ? '  [legacy phase.txt]' : '';
+    const presetIcon = preset.status === 'ok' ? '✅' : preset.status === 'missing' ? '❌' : '⚠️';
+    lines.push(`  preset   ${presetVal}${legacyNote}  ${presetIcon}`);
+
+    if (capabilities.length > 0) {
+      lines.push('  capabilities:');
+      for (const cap of capabilities) {
+        const allMissing = cap.configuredProviders.length > 0 && !cap.anyInstalled;
+        const capIcon = cap.configuredProviders.length === 0 ? '⚠️' : allMissing ? '❌' : '✅';
+        const providerStr = cap.providerStates
+          .map((p) => `${capProviderIcon(p.state)} ${p.provider}`)
+          .join('  ');
+        const noProvider = cap.configuredProviders.length === 0 ? '(제공자 미설정)' : '';
+        lines.push(`    ${capIcon} ${cap.capability.padEnd(14)} ${providerStr}${noProvider}`);
+      }
+    } else {
+      lines.push('  capabilities: (없음)');
+    }
+    lines.push('─'.repeat(60));
+  }
+
   {
     const p = r.phase;
     const phaseVal = p.value ?? (p.status === 'missing' ? '(미설정)' : '(잘못된값)');
@@ -254,6 +402,8 @@ export function renderStatusJson(r: StatusReport): string {
   return JSON.stringify(r, null, 2);
 }
 
+// ── summarize ─────────────────────────────────────────────────────────────────
+
 export interface StatusSummary {
   readonly ok: boolean;
   readonly issues: readonly string[];
@@ -261,10 +411,14 @@ export interface StatusSummary {
 
 export function summarize(r: StatusReport): StatusSummary {
   const issues: string[] = [];
+
+  // v2 tool issues (skip not_applicable)
   for (const name of TOOL_NAMES) {
     const t = r.tools[name];
+    if (t.state === 'not_applicable') continue;
     if (t.state !== 'locked') issues.push(`${name}: ${t.state}`);
   }
+
   for (const e of r.env) {
     if (e.status !== 'match') issues.push(`env.${e.key}: ${e.status}`);
   }
@@ -275,5 +429,17 @@ export function summarize(r: StatusReport): StatusSummary {
     issues.push(`gstack-symlink: ${r.gstackSymlink.status}`);
   }
   if (r.pendingTx) issues.push(`tx.in_progress: ${r.pendingTx.phase ?? 'begin'}`);
+
+  // v3 capability issues
+  if (r.v3) {
+    for (const cap of r.v3.capabilities) {
+      if (cap.configuredProviders.length === 0) {
+        issues.push(`capability.${cap.capability}: no providers configured`);
+      } else if (!cap.anyInstalled) {
+        issues.push(`capability.${cap.capability}: no provider installed`);
+      }
+    }
+  }
+
   return { ok: issues.length === 0, issues };
 }
