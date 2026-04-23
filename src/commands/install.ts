@@ -20,6 +20,13 @@ import {
 } from '../core/provider-detect.ts';
 import { buildInstallPlan, type InstallPlan } from '../core/provider-install.ts';
 import {
+  executeV3Providers,
+  collectActiveProviders,
+  defaultNpxRunner,
+  type NpxRunner,
+  type ProviderExecResult,
+} from '../core/provider-execute.ts';
+import {
   inferProfile,
   type ProjectProfile,
   type ProjectSignals,
@@ -172,6 +179,8 @@ export interface InstallOptions {
   readonly adopt?: boolean;
   /** §15 S4: `--follow-symlink` — 심링크 vendor 의 target HEAD 로 lock 확인 */
   readonly followSymlink?: boolean;
+  /** v3 lock: injectable npx runner for testing */
+  readonly npxRunner?: NpxRunner;
 }
 
 /**
@@ -188,9 +197,10 @@ export type GstackSetupReason =
   | 'no-callback'; // 콜백 미제공 + marker 불일치 = 실행이 필요했지만 묵시적 스킵
 
 export interface InstallResult {
-  readonly lock: HarnessLock;
-  readonly vendors: Readonly<Record<ToolName, InstallVendorResult>>;
-  readonly gstackSymlink: EnsureResult;
+  readonly lock: AnyHarnessLock;
+  readonly vendors: Readonly<Partial<Record<ToolName, InstallVendorResult>>>;
+  readonly v3Providers?: readonly ProviderExecResult[];
+  readonly gstackSymlink?: EnsureResult;
   readonly gstackSetupRan: boolean;
   readonly gstackSetupReason: GstackSetupReason;
   readonly hooks: HooksResult;
@@ -328,7 +338,9 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   // 1. lock 파싱
   log(`[1/9] harness.lock 파싱`);
   tx.phase('lock');
-  const lock = readLock(lockPath) as HarnessLock;
+  const anyLock = readLock(lockPath);
+  const isV3 = anyLock.schema_version === 3;
+  const lock = isV3 ? null : (anyLock as HarnessLock);
 
   // 2. env 계산
   log(`[2/9] env 계산`);
@@ -365,70 +377,99 @@ function runInstallInner(ctx: InnerContext): InstallResult {
     }
   }
 
-  // 4. vendors clone
-  log(`[4/9] vendors clone/checkout`);
+  // 4. vendors clone / v3 providers execute
+  log(`[4/9] ${isV3 ? 'providers 설치 (v3)' : 'vendors clone/checkout'}`);
   tx.phase('vendors');
-  const vendors: Record<ToolName, InstallVendorResult> = {} as Record<
-    ToolName,
-    InstallVendorResult
-  >;
-  for (const name of TOOL_NAMES) {
-    const tool = lock.tools[name];
+  const vendors: Partial<Record<ToolName, InstallVendorResult>> = {};
+  let v3Providers: readonly ProviderExecResult[] | undefined;
+
+  if (isV3) {
+    const lockV3 = anyLock as HarnessLockV3;
     try {
-      const r = installVendor({
-        tool: name,
-        repo: tool.repo,
-        commit: tool.commit,
-        vendorsRoot: vRoot,
+      v3Providers = executeV3Providers(lockV3, {
+        harnessRoot,
         git,
-        adopt: opts.adopt ?? false,
-        followSymlink: opts.followSymlink ?? false,
+        adopt: opts.adopt,
+        followSymlink: opts.followSymlink,
+        npxRunner: opts.npxRunner,
+        log,
       });
-      vendors[name] = r;
-      if (r.action === 'adopted' && r.preAdoptPath) {
-        log(
-          `      ${name}: adopted (preserved ${r.preAdoptPath}, re-cloned @ ${r.commit.slice(0, 7)})`,
-        );
-      } else if (r.action === 'adopted' && opts.followSymlink) {
-        // v0.3.4 H-3: --follow-symlink 성공 경로 — target HEAD 가 lock SHA 와 일치
-        log(
-          `      ${name}: adopted (symlink target HEAD=${r.commit.slice(0, 7)} — lock 일치)`,
-        );
-      } else {
-        log(`      ${name}: ${r.action} (${r.commit.slice(0, 7)})`);
-      }
     } catch (e) {
       throw new InstallError(
-        `vendor 설치 실패 (${name}): ${e instanceof Error ? e.message : String(e)}`,
+        `v3 provider 설치 실패: ${e instanceof Error ? e.message : String(e)}`,
         'VENDOR',
         e,
-        vendorHint(name, e, vRoot),
       );
+    }
+  } else {
+    for (const name of TOOL_NAMES) {
+      const tool = lock!.tools[name];
+      try {
+        const r = installVendor({
+          tool: name,
+          repo: tool.repo,
+          commit: tool.commit,
+          vendorsRoot: vRoot,
+          git,
+          adopt: opts.adopt ?? false,
+          followSymlink: opts.followSymlink ?? false,
+        });
+        vendors[name] = r;
+        if (r.action === 'adopted' && r.preAdoptPath) {
+          log(
+            `      ${name}: adopted (preserved ${r.preAdoptPath}, re-cloned @ ${r.commit.slice(0, 7)})`,
+          );
+        } else if (r.action === 'adopted' && opts.followSymlink) {
+          log(
+            `      ${name}: adopted (symlink target HEAD=${r.commit.slice(0, 7)} — lock 일치)`,
+          );
+        } else {
+          log(`      ${name}: ${r.action} (${r.commit.slice(0, 7)})`);
+        }
+      } catch (e) {
+        throw new InstallError(
+          `vendor 설치 실패 (${name}): ${e instanceof Error ? e.message : String(e)}`,
+          'VENDOR',
+          e,
+          vendorHint(name, e, vRoot),
+        );
+      }
     }
   }
 
-  // 5. gstack 심링크
-  log(`[5/9] gstack 심링크`);
+  // 5. gstack 심링크 — v3 에서는 gstack provider 가 활성일 때만 실행.
+  const v3HasGstack =
+    isV3 && v3Providers !== undefined && v3Providers.some((r) => r.provider === 'gstack' && (r.action === 'cloned' || r.action === 'noop'));
   tx.phase('symlink');
-  let gstackSymlink: EnsureResult;
-  try {
-    gstackSymlink = installGstackSymlink({ harnessRoot, claudeRoot, backupTs });
-    log(`      ${gstackSymlink.action}: ${gstackSymlink.target}`);
-  } catch (e) {
-    throw new InstallError(
-      `gstack 심링크 실패: ${e instanceof Error ? e.message : String(e)}`,
-      'SYMLINK',
-      e,
-    );
+  let gstackSymlink: EnsureResult | undefined;
+  if (!isV3 || v3HasGstack) {
+    log(`[5/9] gstack 심링크`);
+    try {
+      gstackSymlink = installGstackSymlink({ harnessRoot, claudeRoot, backupTs });
+      log(`      ${gstackSymlink.action}: ${gstackSymlink.target}`);
+    } catch (e) {
+      throw new InstallError(
+        `gstack 심링크 실패: ${e instanceof Error ? e.message : String(e)}`,
+        'SYMLINK',
+        e,
+      );
+    }
+  } else {
+    log(`[5/9] gstack 심링크 (스킵 — v3 lock 에 gstack 없음)`);
   }
 
   // 6. gstack setup — §15 C3: 같은 gstack SHA 에서 이미 setup 실행됐으면 noop.
   let gstackSetupRan = false;
   let gstackSetupReason: GstackSetupReason;
   tx.phase('gstack-setup');
-  const expectedGstackSha = lock.tools.gstack.commit;
+  const expectedGstackSha = isV3
+    ? ((anyLock as HarnessLockV3).providers['gstack'] as { commit?: string } | undefined)?.commit ?? ''
+    : lock!.tools.gstack.commit;
   const markerSha = readGstackSetupMarker(harnessRoot);
-  if (opts.skipGstackSetup) {
+  if (isV3 && !v3HasGstack) {
+    log(`[6/9] gstack setup (스킵 — v3 lock 에 gstack 없음)`);
+    gstackSetupReason = 'skip-flag';
+  } else if (opts.skipGstackSetup) {
     log(`[6/9] gstack setup (스킵)`);
     gstackSetupReason = 'skip-flag';
   } else if (markerSha === expectedGstackSha) {
@@ -442,7 +483,7 @@ function runInstallInner(ctx: InnerContext): InstallResult {
       const setupFn = opts.gstackSetup;
       if (setupFn) {
         setupFn({
-          gstackSource: gstackSymlink.source,
+          gstackSource: gstackSymlink!.source,
           claudeRoot,
         });
         gstackSetupRan = true;
@@ -577,8 +618,9 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   } catch { /* best effort — 버전 스탬프 실패는 install 성공에 영향 없음 */ }
 
   return {
-    lock,
+    lock: anyLock,
     vendors,
+    v3Providers,
     gstackSymlink,
     gstackSetupRan,
     gstackSetupReason,

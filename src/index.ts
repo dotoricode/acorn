@@ -304,7 +304,10 @@ function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
     });
     io.stdout('');
     io.stdout(`✅ 설치 완료`);
-    io.stdout(`   settings: ${r.settings.action}  hooks: ${r.hooks.action}  vendors: ${Object.values(r.vendors).map((v) => `${v.tool}=${v.action}`).join(' ')}`);
+    const providersSummary = r.v3Providers !== undefined
+      ? r.v3Providers.map((p) => `${p.provider}=${p.action}`).join(' ')
+      : Object.values(r.vendors).map((v) => `${v.tool}=${v.action}`).join(' ');
+    io.stdout(`   settings: ${r.settings.action}  hooks: ${r.hooks.action}  providers: ${providersSummary}`);
     // §15 H-1 (v0.3.4): silent no-op 방지 — setup 이 필요했지만 콜백 미제공으로
     // 안 돌았을 때만 경고. marker-noop / skip-flag / ran 은 모두 의도된 상태.
     if (r.gstackSetupReason === 'no-callback') {
