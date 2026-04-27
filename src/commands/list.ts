@@ -1,14 +1,21 @@
 /**
  * §15 v0.6.0 — `acorn list` 커맨드.
- * 읽기 전용 (등급 1): harness.lock 에 기록된 tool 의 repo / SHA / 설치 상태를
+ * 읽기 전용 (등급 1): harness.lock 에 기록된 tool/provider 의 repo / SHA / 설치 상태를
  * 간결하게 나열. `acorn status` 가 설정/심링크/guard/tx 까지 포괄하는 반면
- * `acorn list` 는 "어떤 tool 이 어떤 SHA 로 잠겨있나" 에만 초점.
+ * `acorn list` 는 "어떤 tool/provider 가 어떤 SHA 로 잠겨있나" 에만 초점.
  *
  * 출력:
  *   - 기본: 표 형식 (TOOL / SHA / STATE / REPO)
  *   - `--json`: 기계 판독용 JSON (CI/jq 용)
  */
-import { readLock, TOOL_NAMES, type HarnessLock, type ToolName } from '../core/lock.ts';
+import {
+  readLock,
+  TOOL_NAMES,
+  type AnyHarnessLock,
+  type HarnessLock,
+  type HarnessLockV3,
+  type ToolName,
+} from '../core/lock.ts';
 import { defaultHarnessRoot, vendorsRoot } from '../core/env.ts';
 import {
   defaultGitRunner,
@@ -19,10 +26,10 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { shortSha, distinguishingPair } from '../core/sha-display.ts';
 
-export type ListState = 'locked' | 'drift' | 'missing' | 'error';
+export type ListState = 'locked' | 'drift' | 'missing' | 'error' | 'npx';
 
 export interface ListEntry {
-  readonly tool: ToolName;
+  readonly tool: string;
   readonly repo: string;
   readonly lockCommit: string;
   readonly actualCommit: string | null;
@@ -42,60 +49,67 @@ export interface ListOptions {
   readonly git?: GitRunner;
 }
 
-export function collectList(opts: ListOptions = {}): ListReport {
-  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
-  const git = opts.git ?? defaultGitRunner;
-  const lock = readLock(opts.lockPath) as HarnessLock;
-  const vRoot = vendorsRoot(harnessRoot);
-
+function collectV2(lock: HarnessLock, vRoot: string, git: GitRunner): ListEntry[] {
   const tools: ListEntry[] = [];
   for (const name of TOOL_NAMES) {
     const entry = lock.tools[name];
     const path = join(vRoot, name);
     if (!existsSync(path)) {
-      tools.push({
-        tool: name,
-        repo: entry.repo,
-        lockCommit: entry.commit,
-        actualCommit: null,
-        state: 'missing',
-      });
+      tools.push({ tool: name, repo: entry.repo, lockCommit: entry.commit, actualCommit: null, state: 'missing' });
       continue;
     }
     try {
       const actual = readCurrentCommit(path, git);
-      tools.push({
-        tool: name,
-        repo: entry.repo,
-        lockCommit: entry.commit,
-        actualCommit: actual,
-        state: actual === entry.commit ? 'locked' : 'drift',
-      });
+      tools.push({ tool: name, repo: entry.repo, lockCommit: entry.commit, actualCommit: actual, state: actual === entry.commit ? 'locked' : 'drift' });
     } catch (e) {
-      tools.push({
-        tool: name,
-        repo: entry.repo,
-        lockCommit: entry.commit,
-        actualCommit: null,
-        state: 'error',
-        error: e instanceof Error ? e.message : String(e),
-      });
+      tools.push({ tool: name, repo: entry.repo, lockCommit: entry.commit, actualCommit: null, state: 'error', error: e instanceof Error ? e.message : String(e) });
     }
   }
+  return tools;
+}
 
-  return { harnessRoot, acornVersion: lock.acorn_version, tools };
+function collectV3(lock: HarnessLockV3, vRoot: string, git: GitRunner): ListEntry[] {
+  const tools: ListEntry[] = [];
+  for (const [name, entry] of Object.entries(lock.providers)) {
+    if (entry.install_strategy === 'git-clone') {
+      const path = join(vRoot, name);
+      if (!existsSync(path)) {
+        tools.push({ tool: name, repo: entry.repo, lockCommit: entry.commit, actualCommit: null, state: 'missing' });
+        continue;
+      }
+      try {
+        const actual = readCurrentCommit(path, git);
+        tools.push({ tool: name, repo: entry.repo, lockCommit: entry.commit, actualCommit: actual, state: actual === entry.commit ? 'locked' : 'drift' });
+      } catch (e) {
+        tools.push({ tool: name, repo: entry.repo, lockCommit: entry.commit, actualCommit: null, state: 'error', error: e instanceof Error ? e.message : String(e) });
+      }
+    } else {
+      tools.push({ tool: name, repo: entry.install_cmd, lockCommit: '', actualCommit: null, state: 'npx' });
+    }
+  }
+  return tools;
+}
+
+export function collectList(opts: ListOptions = {}): ListReport {
+  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
+  const git = opts.git ?? defaultGitRunner;
+  const anyLock: AnyHarnessLock = readLock(opts.lockPath);
+  const vRoot = vendorsRoot(harnessRoot);
+
+  const tools = anyLock.schema_version === 3
+    ? collectV3(anyLock as HarnessLockV3, vRoot, git)
+    : collectV2(anyLock as HarnessLock, vRoot, git);
+
+  return { harnessRoot, acornVersion: anyLock.acorn_version, tools };
 }
 
 function stateIcon(state: ListState): string {
   switch (state) {
-    case 'locked':
-      return '✅';
-    case 'drift':
-      return '⚠️';
-    case 'missing':
-      return '❌';
-    case 'error':
-      return '⛔';
+    case 'locked': return '✅';
+    case 'drift':  return '⚠️';
+    case 'missing': return '❌';
+    case 'error':  return '⛔';
+    case 'npx':   return '📦';
   }
 }
 
@@ -103,20 +117,19 @@ export function renderList(r: ListReport): string {
   const lines: string[] = [];
   lines.push(`acorn v${r.acornVersion}  •  ${r.harnessRoot}`);
   lines.push('─'.repeat(72));
-  // 헤더
-  lines.push(
-    `  ${'TOOL'.padEnd(8)} ${'SHA'.padEnd(10)} ${'STATE'.padEnd(8)} REPO`,
-  );
+  lines.push(`  ${'TOOL'.padEnd(12)} ${'SHA'.padEnd(10)} ${'STATE'.padEnd(8)} REPO/CMD`);
   for (const t of r.tools) {
     let shaDisp: string;
     if (t.state === 'drift' && t.actualCommit) {
       const [lockDisp, actualDisp] = distinguishingPair(t.lockCommit, t.actualCommit);
       shaDisp = `${lockDisp}→${actualDisp}`;
+    } else if (t.state === 'npx') {
+      shaDisp = 'npx';
     } else {
       shaDisp = shortSha(t.lockCommit);
     }
     lines.push(
-      `  ${t.tool.padEnd(8)} ${shaDisp.padEnd(10)} ${stateIcon(t.state)} ${t.state.padEnd(6)} ${t.repo}`,
+      `  ${t.tool.padEnd(12)} ${shaDisp.padEnd(10)} ${stateIcon(t.state)} ${t.state.padEnd(6)} ${t.repo}`,
     );
   }
   return lines.join('\n');
@@ -131,14 +144,10 @@ export interface ListSummary {
   readonly issues: readonly string[];
 }
 
-/**
- * list 의 "문제 있음" 판정. missing / drift / error 는 모두 비-locked 상태로
- * 사용자가 알아야 할 이슈. CI 에서 `acorn list` 실행 시 exit code 로 표현.
- */
 export function summarizeList(r: ListReport): ListSummary {
   const issues: string[] = [];
   for (const t of r.tools) {
-    if (t.state !== 'locked') issues.push(`${t.tool}: ${t.state}`);
+    if (t.state !== 'locked' && t.state !== 'npx') issues.push(`${t.tool}: ${t.state}`);
   }
   return { ok: issues.length === 0, issues };
 }

@@ -494,12 +494,15 @@ function cmdLock(rest: readonly string[], io: CliIO): number {
 function cmdLockValidate(args: readonly string[], io: CliIO): number {
   const lockPath = args[0];
   try {
-    const lock = readLock(lockPath) as HarnessLock;
+    const lock = readLock(lockPath);
+    const itemCount = lock.schema_version === 3
+      ? `providers=${Object.keys((lock as import('./core/lock.ts').HarnessLockV3).providers).length}`
+      : `tools=${Object.keys((lock as HarnessLock).tools).length}`;
     io.stdout(
       `✅ harness.lock OK  ` +
         `(schema_version=${lock.schema_version}, ` +
         `acorn_version=${lock.acorn_version}, ` +
-        `tools=${Object.keys(lock.tools).length}, ` +
+        `${itemCount}, ` +
         `guard=${lock.guard.mode}/${lock.guard.patterns})`,
     );
     return EXIT.OK;

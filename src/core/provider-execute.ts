@@ -26,7 +26,7 @@ export function defaultNpxRunner(): NpxRunner {
   return {
     run(cmd) {
       const parts = cmd.trim().split(/\s+/);
-      const prog = parts[0];
+      const prog = parts[0] ?? '';
       const args = parts.slice(1);
       const res = spawnSync(prog, args, { stdio: 'inherit', shell: false });
       if (res.error) throw res.error;
