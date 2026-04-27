@@ -40,7 +40,7 @@
     },
     "claudekit": {
       "install_strategy": "npx",
-      "install_cmd": "npx claudekit@latest",
+      "install_cmd": "npx claudekit@latest setup --yes --user --hooks pre-commit",
       "verified_at": "1970-01-01"
     }
   },
