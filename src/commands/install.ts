@@ -389,9 +389,9 @@ function runInstallInner(ctx: InnerContext): InstallResult {
       v3Providers = executeV3Providers(lockV3, {
         harnessRoot,
         git,
-        adopt: opts.adopt,
-        followSymlink: opts.followSymlink,
-        npxRunner: opts.npxRunner,
+        ...(opts.adopt !== undefined ? { adopt: opts.adopt } : {}),
+        ...(opts.followSymlink !== undefined ? { followSymlink: opts.followSymlink } : {}),
+        ...(opts.npxRunner !== undefined ? { npxRunner: opts.npxRunner } : {}),
         log,
       });
     } catch (e) {
@@ -620,8 +620,8 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   return {
     lock: anyLock,
     vendors,
-    v3Providers,
-    gstackSymlink,
+    ...(v3Providers !== undefined ? { v3Providers } : {}),
+    ...(gstackSymlink !== undefined ? { gstackSymlink } : {}),
     gstackSetupRan,
     gstackSetupReason,
     hooks,
