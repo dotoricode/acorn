@@ -4,6 +4,7 @@ import { buildInstallPlan } from '../src/core/provider-install.ts';
 
 const HARNESS = '/tmp/harness';
 const CLAUDE = '/tmp/claude';
+const n = (s: string) => s.replace(/\\/g, '/');
 
 // ── gstack (clone strategy) ───────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ test('gstack plan has git-clone step with correct repo', () => {
   const cloneStep = plan.steps.find((s) => s.kind === 'git-clone');
   assert.ok(cloneStep !== undefined, 'expected a git-clone step');
   assert.ok(cloneStep.command?.includes('garrytan/gstack'));
-  assert.ok(cloneStep.command?.includes(HARNESS));
+  assert.ok(n(cloneStep.command ?? '').includes(n(HARNESS)));
 });
 
 test('gstack plan includes symlink step', () => {
@@ -26,7 +27,7 @@ test('gstack plan includes symlink step', () => {
   const symlinkStep = plan.steps.find((s) => s.kind === 'symlink');
   assert.ok(symlinkStep !== undefined, 'expected a symlink step');
   assert.ok(symlinkStep.from?.includes('gstack'));
-  assert.ok(symlinkStep.to?.includes(CLAUDE));
+  assert.ok(n(symlinkStep.to ?? '').includes(n(CLAUDE)));
 });
 
 // ── claudekit (npx strategy) ──────────────────────────────────────────────────

@@ -97,9 +97,10 @@ function makeEnv(opts: {
 }): DetectEnv {
   const dirs = new Set(opts.existingDirs ?? []);
   const cmds = new Set(opts.existingCmds ?? []);
+  const norm = (p: string) => p.replace(/\\/g, '/');
   return {
     harnessRoot: opts.harnessRoot,
-    dirExists: (p) => dirs.has(p),
+    dirExists: (p) => dirs.has(p) || dirs.has(norm(p)),
     commandExists: (cmd) => cmds.has(cmd),
   };
 }
