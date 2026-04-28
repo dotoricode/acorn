@@ -482,3 +482,45 @@ test('runInstall: v2 lock still works (backward compat)', () => {
     rmSync(dirname(settingsPath), { recursive: true, force: true });
   }
 });
+
+// v0.9.2: plugin-marketplace strategy → plugin-guidance action (no execute)
+test('executeV3Providers: plugin-marketplace → plugin-guidance action + 안내 detail', () => {
+  const harnessRoot = makeTmpDir();
+  try {
+    const lock: HarnessLockV3 = {
+      schema_version: 3,
+      acorn_version: '0.9.2',
+      capabilities: { planning: { providers: ['superpowers'] } },
+      providers: {
+        superpowers: {
+          install_strategy: 'plugin-marketplace',
+          marketplace: 'obra/superpowers-marketplace',
+          plugin: 'superpowers',
+          verified_at: '2026-04-28',
+        },
+      },
+      guard: { mode: 'block', patterns: 'moderate' },
+    };
+
+    let npxCalled = false;
+    const noopNpx: NpxRunner = { run: () => { npxCalled = true; } };
+    const heads = new Map<string, string>();
+    const logs: string[] = [];
+
+    const results = executeV3Providers(lock, {
+      harnessRoot,
+      git: makeFakeGit(heads),
+      npxRunner: noopNpx,
+      log: (l) => logs.push(l),
+    }) as readonly ProviderExecResult[];
+
+    assert.equal(npxCalled, false, 'plugin-marketplace 는 npx 를 실행하지 않아야 함');
+    const sp = results.find((r) => r.provider === 'superpowers');
+    assert.ok(sp, 'superpowers 결과가 있어야 함');
+    assert.equal(sp?.action, 'plugin-guidance');
+    assert.ok(sp?.detail?.includes('/plugin install superpowers@obra/superpowers-marketplace'));
+    assert.ok(logs.some((l) => /plugin marketplace/.test(l)));
+  } finally {
+    rmSync(harnessRoot, { recursive: true, force: true });
+  }
+});

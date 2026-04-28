@@ -9,6 +9,7 @@ export type ProviderExecAction =
   | 'cloned'
   | 'noop'
   | 'npx-ran'
+  | 'plugin-guidance'
   | 'skipped-placeholder';
 
 export interface ProviderExecResult {
@@ -89,6 +90,13 @@ export function executeV3Providers(
       const action: ProviderExecAction = r.action === 'noop' ? 'noop' : 'cloned';
       results.push({ provider: name, action, commit: r.commit });
       opts.log(`  ${name}: ${r.action} (${r.commit.slice(0, 7)})`);
+    } else if (entry.install_strategy === 'plugin-marketplace') {
+      // v0.9.2: acorn 은 Claude Code 외부에서 plugin marketplace 설치를 실행할
+      // 수 없다 (CLI 내부 명령). 안내 문구만 출력하고 사용자 책임으로 위임.
+      const cmd = `/plugin install ${entry.plugin}@${entry.marketplace}`;
+      const detail = `claude  ${cmd}  (Claude Code 세션 안에서 실행)`;
+      results.push({ provider: name, action: 'plugin-guidance', detail });
+      opts.log(`  ${name}: plugin marketplace — ${detail}`);
     } else {
       const cmd = entry.install_cmd;
       try {

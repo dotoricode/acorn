@@ -186,3 +186,28 @@ test('renderRecommendation returns non-empty string', () => {
   assert.ok(rendered.includes('planning'));
   assert.ok(rendered.includes('hooks'));
 });
+
+// v0.9.2: memory capability 정책 (plan §11) — 모든 프로필에서 노출 + experimental flag
+test('recommend: memory 는 모든 프로필에서 항상 등장 (priority=optional, experimental=true)', () => {
+  for (const profile of [FRONTEND, BACKEND, WORKER_ONLY, FULLSTACK]) {
+    const memory = recommend(profile).capabilities.find((c) => c.capability === 'memory');
+    assert.ok(memory !== undefined, `profile (hasUi=${profile.hasUi}, hasBackend=${profile.hasBackend}) 에서 memory 가 없음`);
+    assert.equal(memory.priority, 'optional');
+    assert.equal(memory.experimental, true);
+  }
+});
+
+test('recommend: memory reason — workers/fullstack 신호 시 "후보" 톤, 그 외 "끄는 쪽 안전" 톤', () => {
+  // FRONTEND: hasUi=true, hasBackend=false, hasWorkers=false → no memory signal
+  const fe = recommend(FRONTEND).capabilities.find((c) => c.capability === 'memory');
+  assert.ok(fe !== undefined && /experimental/.test(fe.reason));
+
+  // FULLSTACK: hasBackend=true, hasUi=true → memorySignal=true
+  const fs = recommend(FULLSTACK).capabilities.find((c) => c.capability === 'memory');
+  assert.ok(fs !== undefined && /후보/.test(fs.reason));
+});
+
+test('renderRecommendation: experimental capability 는 (experimental) 태그 노출', () => {
+  const rendered = renderRecommendation(recommend(FRONTEND));
+  assert.ok(/memory.*\(experimental\)/.test(rendered), 'rendered 출력에 (experimental) 태그가 있어야 함');
+});

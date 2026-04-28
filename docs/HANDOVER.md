@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-28 (Mac / **v0.9.1 — Sprint 1~9 완료, v0.9.x 마무리 트랙 진입**)
+> 마지막 갱신: 2026-04-28 (Mac / **v0.9.2 — plugin-marketplace + memory capability**)
 
 ---
 
@@ -10,9 +10,9 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` |
-| 진행 중 작업 | **v0.9.1 마무리**: docs/acorn-v2-plan.md 커밋, README/USAGE/HANDOVER 동기화, install mode `normal` → `auto` 리네임 (`normal` 은 deprecated alias). |
-| 다음 작업 | **v0.9.2**: plugin-marketplace 설치 전략 + memory capability 정책 (plan §11 코드화). |
-| 테스트 | Mac: **582/582** (0 실패, v0.9.0 기준 580 + mode alias 테스트 2). CI 3-OS matrix (ubuntu/mac/windows) 모두 success. |
+| 진행 중 작업 | **v0.9.2 완료**: plugin-marketplace install_strategy 추가 (lock schema + provider-execute plugin-guidance action) · memory capability 항상 노출 + experimental flag (plan §11 코드화) · list 커맨드 plugin state 표시. |
+| 다음 작업 | **v0.9.3**: drift 감지 확장 — npx/npm provider 에 `version` 필드 + `npm view` 비교, doctor 의 version drift 항목. |
+| 테스트 | Mac: **590/590** (0 실패, v0.9.1 기준 582 + plugin-marketplace 4 + memory 3 + plugin-execute 1). CI 3-OS matrix 모두 success. |
 | 로드맵 | `~/.claude-personal/plans/tingly-sprouting-sun.md` — v0.9.1 ~ v0.9.9, v1.0.0 publish 보류 |
 | 릴리스 커밋 체인 | v0.1.0 → … → v0.7.0 → v0.7.1 → v0.7.2 → v0.8.0 → **v0.9.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |

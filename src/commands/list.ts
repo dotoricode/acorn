@@ -26,7 +26,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { shortSha, distinguishingPair } from '../core/sha-display.ts';
 
-export type ListState = 'locked' | 'drift' | 'missing' | 'error' | 'npx';
+export type ListState = 'locked' | 'drift' | 'missing' | 'error' | 'npx' | 'plugin';
 
 export interface ListEntry {
   readonly tool: string;
@@ -83,6 +83,16 @@ function collectV3(lock: HarnessLockV3, vRoot: string, git: GitRunner): ListEntr
       } catch (e) {
         tools.push({ tool: name, repo: entry.repo, lockCommit: entry.commit, actualCommit: null, state: 'error', error: e instanceof Error ? e.message : String(e) });
       }
+    } else if (entry.install_strategy === 'plugin-marketplace') {
+      // v0.9.2: plugin marketplace 는 acorn 외부 (Claude Code) 설치라 lock 가
+      // SHA/cmd 같은 값을 갖지 않는다. repo 칼럼에 플러그인 좌표만 노출.
+      tools.push({
+        tool: name,
+        repo: `${entry.plugin}@${entry.marketplace}`,
+        lockCommit: '',
+        actualCommit: null,
+        state: 'plugin',
+      });
     } else {
       tools.push({ tool: name, repo: entry.install_cmd, lockCommit: '', actualCommit: null, state: 'npx' });
     }
@@ -110,6 +120,7 @@ function stateIcon(state: ListState): string {
     case 'missing': return '❌';
     case 'error':  return '⛔';
     case 'npx':   return '📦';
+    case 'plugin': return '🔌';
   }
 }
 
@@ -125,6 +136,8 @@ export function renderList(r: ListReport): string {
       shaDisp = `${lockDisp}→${actualDisp}`;
     } else if (t.state === 'npx') {
       shaDisp = 'npx';
+    } else if (t.state === 'plugin') {
+      shaDisp = 'plugin';
     } else {
       shaDisp = shortSha(t.lockCommit);
     }
@@ -147,7 +160,10 @@ export interface ListSummary {
 export function summarizeList(r: ListReport): ListSummary {
   const issues: string[] = [];
   for (const t of r.tools) {
-    if (t.state !== 'locked' && t.state !== 'npx') issues.push(`${t.tool}: ${t.state}`);
+    // npx / plugin 은 acorn 이 직접 추적할 수 없는 외부 설치라 issue 가 아님.
+    if (t.state !== 'locked' && t.state !== 'npx' && t.state !== 'plugin') {
+      issues.push(`${t.tool}: ${t.state}`);
+    }
   }
   return { ok: issues.length === 0, issues };
 }

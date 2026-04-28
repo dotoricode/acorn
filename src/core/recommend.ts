@@ -9,6 +9,8 @@ export interface CapabilityRecommendation {
   readonly providers: readonly string[];
   readonly priority: RecommendationPriority;
   readonly reason: string;
+  /** v0.9.2+: experimental capability 는 기본 disabled 권장 (예: memory). */
+  readonly experimental?: boolean;
 }
 
 export interface RecommendationResult {
@@ -99,14 +101,19 @@ export function recommend(profile: ProjectProfile): RecommendationResult {
     'Hooks automate quality gates (guard, type-check, lint) on every Claude tool call.',
   ));
 
-  // memory — workers, or fullstack with state across sessions
-  if (profile.hasWorkers || (profile.hasBackend && profile.hasUi)) {
-    caps.push(rec(
-      'memory',
-      'optional',
-      'Long-running or multi-context sessions benefit from persistent memory.',
-    ));
-  }
+  // memory — v0.9.2+ plan §11 정책: 항상 노출하되 experimental 로 기본 disabled 권고.
+  // workers / fullstack 같은 강한 시그널이 있을 때만 reason 을 "고려해볼 만함" 톤으로,
+  // 그 외엔 "끄는 쪽이 안전" 톤. provider 가 안정화될 때까지 사용자 환경 오염 방지.
+  const memorySignal = profile.hasWorkers || (profile.hasBackend && profile.hasUi);
+  caps.push({
+    capability: 'memory',
+    providers: providersFor('memory'),
+    priority: 'optional',
+    experimental: true,
+    reason: memorySignal
+      ? '장기 실행 / 멀티 컨텍스트 작업에서 후보. provider 가 experimental 단계라 기본 disabled 권장.'
+      : 'experimental capability — 안정 provider 가 등장하기 전까지 disabled 가 기본값.',
+  });
 
   return { capabilities: caps };
 }
@@ -117,7 +124,8 @@ export function renderRecommendation(result: RecommendationResult): string {
   const lines: string[] = ['Recommended capabilities:'];
   for (const r of result.capabilities) {
     const provStr = r.providers.length > 0 ? r.providers.join(', ') : 'no provider yet';
-    lines.push(`  [${r.priority.padEnd(11)}] ${r.capability.padEnd(12)} → ${provStr}`);
+    const expTag = r.experimental ? ' (experimental)' : '';
+    lines.push(`  [${r.priority.padEnd(11)}] ${r.capability.padEnd(12)}${expTag} → ${provStr}`);
     lines.push(`               ${r.reason}`);
   }
   return lines.join('\n');

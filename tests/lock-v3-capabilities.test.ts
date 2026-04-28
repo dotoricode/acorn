@@ -306,3 +306,86 @@ test('v3: parseLock schema_version 4 → SCHEMA 불일치', () => {
       e instanceof LockError && e.code === 'SCHEMA' && /불일치/.test(e.message),
   );
 });
+
+// v0.9.2: plugin-marketplace install_strategy
+test('v3: plugin-marketplace strategy → marketplace + plugin 필드 파싱', () => {
+  const lock: HarnessLockV3 = {
+    ...VALID_V3,
+    capabilities: { ...VALID_V3.capabilities, planning: { providers: ['superpowers-plugin'] } },
+    providers: {
+      ...VALID_V3.providers,
+      'superpowers-plugin': {
+        install_strategy: 'plugin-marketplace',
+        marketplace: 'obra/superpowers-marketplace',
+        plugin: 'superpowers',
+        verified_at: '2026-04-28',
+      },
+    },
+  };
+  const parsed = parseLockV3(JSON.stringify(lock));
+  const sp = parsed.providers['superpowers-plugin'];
+  assert.equal(sp?.install_strategy, 'plugin-marketplace');
+  if (sp?.install_strategy === 'plugin-marketplace') {
+    assert.equal(sp.marketplace, 'obra/superpowers-marketplace');
+    assert.equal(sp.plugin, 'superpowers');
+  }
+});
+
+test('v3: plugin-marketplace marketplace 형식 위반 → SCHEMA', () => {
+  const lock = {
+    ...VALID_V3,
+    providers: {
+      bad: {
+        install_strategy: 'plugin-marketplace',
+        marketplace: 'no-slash-here',
+        plugin: 'superpowers',
+        verified_at: '2026-04-28',
+      },
+    },
+  };
+  assert.throws(
+    () => parseLockV3(JSON.stringify(lock)),
+    (e: unknown) =>
+      e instanceof LockError && e.code === 'SCHEMA' && /marketplace/.test(e.message),
+  );
+});
+
+test('v3: plugin-marketplace plugin 빈 문자열 → SCHEMA', () => {
+  const lock = {
+    ...VALID_V3,
+    providers: {
+      bad: {
+        install_strategy: 'plugin-marketplace',
+        marketplace: 'obra/superpowers-marketplace',
+        plugin: '',
+        verified_at: '2026-04-28',
+      },
+    },
+  };
+  assert.throws(
+    () => parseLockV3(JSON.stringify(lock)),
+    (e: unknown) =>
+      e instanceof LockError && e.code === 'SCHEMA' && /plugin/.test(e.message),
+  );
+});
+
+test('v3: install_strategy 알 수 없는 값 → SCHEMA + 새 enum 메시지', () => {
+  const lock = {
+    ...VALID_V3,
+    providers: {
+      bad: {
+        install_strategy: 'docker-pull',
+        verified_at: '2026-04-28',
+      },
+    },
+  };
+  assert.throws(
+    () => parseLockV3(JSON.stringify(lock)),
+    (e: unknown) =>
+      e instanceof LockError &&
+      e.code === 'SCHEMA' &&
+      /plugin-marketplace/.test(e.message) &&
+      /git-clone/.test(e.message),
+  );
+});
+

@@ -58,6 +58,16 @@ export function detectProvider(providerName: string, env: DetectEnv): DetectResu
     return { provider: providerName, state: 'missing' };
   }
 
+  if (strategy === 'plugin-marketplace') {
+    // v0.9.2: plugin marketplace 는 Claude Code 내부 명령으로만 설치/제거가 가능.
+    // acorn 은 status 만 안내 — 실제 설치 검증은 사용자 책임.
+    return {
+      provider: providerName,
+      state: 'unknown',
+      detail: 'plugin marketplace — Claude Code 세션에서 /plugin install 로 확인 필요',
+    };
+  }
+
   return {
     provider: providerName,
     state: 'unknown',

@@ -73,7 +73,7 @@ export interface CapabilityConfig {
   readonly providers: readonly string[];
 }
 
-export type ProviderInstallStrategy = 'git-clone' | 'npm' | 'npx';
+export type ProviderInstallStrategy = 'git-clone' | 'npm' | 'npx' | 'plugin-marketplace';
 
 export type ProviderEntry =
   | {
@@ -85,6 +85,15 @@ export type ProviderEntry =
   | {
       readonly install_strategy: 'npm' | 'npx';
       readonly install_cmd: string;
+      readonly verified_at: string;
+    }
+  | {
+      // v0.9.2+: Claude Code plugin marketplace.
+      // acorn 자체는 설치 실행을 못하므로 사용자에게 `claude /plugin install <pkg>@<marketplace>`
+      // 안내 출력만 하고 verify 는 detect 모듈에 위임.
+      readonly install_strategy: 'plugin-marketplace';
+      readonly marketplace: string; // e.g. "obra/superpowers-marketplace"
+      readonly plugin: string;       // e.g. "superpowers"
       readonly verified_at: string;
     };
 
@@ -291,12 +300,10 @@ function validateProviderEntry(name: string, raw: unknown): ProviderEntry {
     throw new LockError(`providers.${name}: object 가 아닙니다`, 'SCHEMA');
   }
   const { install_strategy, verified_at } = raw;
-  if (
-    typeof install_strategy !== 'string' ||
-    !(['git-clone', 'npm', 'npx'] as readonly string[]).includes(install_strategy)
-  ) {
+  const VALID_STRATEGIES: readonly string[] = ['git-clone', 'npm', 'npx', 'plugin-marketplace'];
+  if (typeof install_strategy !== 'string' || !VALID_STRATEGIES.includes(install_strategy)) {
     throw new LockError(
-      `providers.${name}.install_strategy: git-clone|npm|npx 중 하나여야 합니다`,
+      `providers.${name}.install_strategy: ${VALID_STRATEGIES.join('|')} 중 하나여야 합니다`,
       'SCHEMA',
     );
   }
@@ -312,6 +319,22 @@ function validateProviderEntry(name: string, raw: unknown): ProviderEntry {
       throw new LockError(`providers.${name}.commit: 40자 SHA1 이어야 합니다`, 'SCHEMA');
     }
     return { install_strategy: 'git-clone', repo, commit, verified_at };
+  }
+  if (install_strategy === 'plugin-marketplace') {
+    const { marketplace, plugin } = raw;
+    if (typeof marketplace !== 'string' || !REPO_RE.test(marketplace)) {
+      throw new LockError(
+        `providers.${name}.marketplace: "owner/name" 형식이어야 합니다`,
+        'SCHEMA',
+      );
+    }
+    if (typeof plugin !== 'string' || plugin.length === 0) {
+      throw new LockError(
+        `providers.${name}.plugin: 비어있지 않은 문자열이어야 합니다`,
+        'SCHEMA',
+      );
+    }
+    return { install_strategy: 'plugin-marketplace', marketplace, plugin, verified_at };
   }
   const { install_cmd } = raw;
   if (typeof install_cmd !== 'string' || install_cmd.length === 0) {
