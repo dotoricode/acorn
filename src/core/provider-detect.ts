@@ -4,6 +4,94 @@ import { execFileSync } from 'node:child_process';
 import { vendorsRoot } from './env.ts';
 import { getProvider } from './providers.ts';
 
+/**
+ * v0.9.3+: npm provider version drift 검출.
+ * `npm view <pkg> version --json` 결과를 lock 의 `version` 과 비교.
+ * 네트워크/registry 실패 시 graceful skip — 'unknown' 으로 보고하고 doctor 가 무시.
+ */
+export type VersionDriftState = 'match' | 'drift' | 'unknown';
+
+export interface VersionDriftResult {
+  readonly state: VersionDriftState;
+  readonly lockVersion: string;
+  readonly latestVersion?: string;
+  readonly detail?: string;
+}
+
+export interface NpmRunner {
+  /**
+   * Returns the latest published version of `pkg`, or null on failure.
+   * Implementations should swallow network errors and return null.
+   */
+  latestVersion(pkg: string): string | null;
+}
+
+export function defaultNpmRunner(): NpmRunner {
+  return {
+    latestVersion(pkg) {
+      try {
+        const out = execFileSync('npm', ['view', pkg, 'version', '--json'], {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 5000,
+        }).toString().trim();
+        // npm view returns either "1.2.3" or {error}. Parse defensively.
+        const v = JSON.parse(out);
+        return typeof v === 'string' ? v : null;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/**
+ * Pure comparator for testability. Returns 'match' iff lock and latest are
+ * identical strings (no semver coercion — exact pin is the contract).
+ */
+export function compareNpmVersion(
+  lockVersion: string,
+  latestVersion: string | null,
+): VersionDriftResult {
+  if (latestVersion === null) {
+    return { state: 'unknown', lockVersion, detail: 'npm view 실패 (네트워크/권한)' };
+  }
+  if (lockVersion === latestVersion) {
+    return { state: 'match', lockVersion, latestVersion };
+  }
+  return {
+    state: 'drift',
+    lockVersion,
+    latestVersion,
+    detail: `lock: ${lockVersion} → registry: ${latestVersion}`,
+  };
+}
+
+/**
+ * Extract npm package name from `install_cmd` like "npx claudekit@latest setup --yes"
+ * → "claudekit". Returns null if the command does not look like an npx invocation.
+ */
+export function extractNpmPackage(installCmd: string): string | null {
+  // Strip leading runner: "npx ", "npm exec ", "pnpm dlx ", "yarn dlx "
+  const stripped = installCmd
+    .trim()
+    .replace(/^(npx|npm\s+exec|pnpm\s+dlx|yarn\s+dlx)\s+/i, '');
+  // First token before whitespace = package spec ("name@version" or "name")
+  const spec = stripped.split(/\s+/, 1)[0];
+  if (!spec) return null;
+  // Strip trailing @version (including @scope/pkg@version)
+  // Scoped: @scope/name OR @scope/name@version
+  // Unscoped: name OR name@version
+  if (spec.startsWith('@')) {
+    const slashIdx = spec.indexOf('/');
+    if (slashIdx === -1) return null;
+    const rest = spec.slice(slashIdx + 1);
+    const atIdx = rest.indexOf('@');
+    return atIdx === -1 ? spec : `${spec.slice(0, slashIdx + 1)}${rest.slice(0, atIdx)}`;
+  }
+  const atIdx = spec.indexOf('@');
+  return atIdx === -1 ? spec : spec.slice(0, atIdx);
+}
+
 export type DetectState = 'installed' | 'missing' | 'unknown';
 
 export interface DetectResult {

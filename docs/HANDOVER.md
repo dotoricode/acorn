@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-28 (Mac / **v0.9.2 — plugin-marketplace + memory capability**)
+> 마지막 갱신: 2026-04-28 (Mac / **v0.9.3 — npm/npx provider version drift 감지**)
 
 ---
 
@@ -10,9 +10,9 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` |
-| 진행 중 작업 | **v0.9.2 완료**: plugin-marketplace install_strategy 추가 (lock schema + provider-execute plugin-guidance action) · memory capability 항상 노출 + experimental flag (plan §11 코드화) · list 커맨드 plugin state 표시. |
-| 다음 작업 | **v0.9.3**: drift 감지 확장 — npx/npm provider 에 `version` 필드 + `npm view` 비교, doctor 의 version drift 항목. |
-| 테스트 | Mac: **590/590** (0 실패, v0.9.1 기준 582 + plugin-marketplace 4 + memory 3 + plugin-execute 1). CI 3-OS matrix 모두 success. |
+| 진행 중 작업 | **v0.9.3 완료**: npm/npx provider 에 optional `version` 필드 (semver) + `compareNpmVersion` 헬퍼 + `extractNpmPackage` 추출 · `acorn doctor` 가 `npm view <pkg> version` 결과를 lock 와 비교해 info-level drift 보고 · `--skip-npm-version-check` 플래그 추가 · `acorn list` 가 npm provider lock 버전 (vX.Y.Z) 노출. |
+| 다음 작업 | **v0.9.4**: AcornError 통합 + 복구 hint 표준화 (errors.ts 신규, 기존 InstallError/LockError/ConfigError/PresetError 마이그레이션). |
+| 테스트 | Mac: **607/607** (0 실패, v0.9.2 기준 590 + npm helpers 7 + lock semver 4 + doctor drift 5 + 기타 1). CI 3-OS matrix 모두 success. |
 | 로드맵 | `~/.claude-personal/plans/tingly-sprouting-sun.md` — v0.9.1 ~ v0.9.9, v1.0.0 publish 보류 |
 | 릴리스 커밋 체인 | v0.1.0 → … → v0.7.0 → v0.7.1 → v0.7.2 → v0.8.0 → **v0.9.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |

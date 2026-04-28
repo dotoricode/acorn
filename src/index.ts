@@ -419,7 +419,11 @@ function cmdList(parsed: ParsedArgs, io: CliIO): number {
 function cmdDoctor(parsed: ParsedArgs, io: CliIO): number {
   try {
     // §15 M3: doctor 도 runtime env check 활성.
-    const r = runDoctor({ runtimeEnv: process.env });
+    // v0.9.3+: --skip-npm-version-check 로 npm 비교를 끌 수 있음 (오프라인 / CI 속도).
+    const r = runDoctor({
+      runtimeEnv: process.env,
+      skipNpmVersionCheck: parsed.flags.has('skip-npm-version-check'),
+    });
     if (parsed.flags.has('json')) {
       io.stdout(renderDoctorJson(r));
     } else {

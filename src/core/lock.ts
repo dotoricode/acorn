@@ -86,6 +86,11 @@ export type ProviderEntry =
       readonly install_strategy: 'npm' | 'npx';
       readonly install_cmd: string;
       readonly verified_at: string;
+      /**
+       * v0.9.3+: 선택적 npm semver. 있으면 doctor 가 `npm view <pkg> version` 결과와
+       * 비교해 version drift 를 보고. 없으면 기존 동작 (verified_at 만 검사).
+       */
+      readonly version?: string;
     }
   | {
       // v0.9.2+: Claude Code plugin marketplace.
@@ -134,6 +139,9 @@ export function defaultLockPath(harnessRoot?: string): string {
 const SHA1_RE = /^[a-f0-9]{40}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+// v0.9.3+: npm semver — major.minor.patch (+ optional prerelease/build tags).
+// 정확한 SemVer 2.0 보다 살짝 느슨 (실용 npm 패키지 버전 거의 모두 통과).
+const SEMVER_LIKE_RE = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/;
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -336,12 +344,26 @@ function validateProviderEntry(name: string, raw: unknown): ProviderEntry {
     }
     return { install_strategy: 'plugin-marketplace', marketplace, plugin, verified_at };
   }
-  const { install_cmd } = raw;
+  const { install_cmd, version } = raw;
   if (typeof install_cmd !== 'string' || install_cmd.length === 0) {
     throw new LockError(
       `providers.${name}.install_cmd: npm/npx 전략에서 비어있지 않은 문자열이어야 합니다`,
       'SCHEMA',
     );
+  }
+  if (version !== undefined) {
+    if (typeof version !== 'string' || !SEMVER_LIKE_RE.test(version)) {
+      throw new LockError(
+        `providers.${name}.version: semver 형식 문자열이어야 합니다 (예: "1.2.3", "1.2.3-beta.1")`,
+        'SCHEMA',
+      );
+    }
+    return {
+      install_strategy: install_strategy as 'npm' | 'npx',
+      install_cmd,
+      verified_at,
+      version,
+    };
   }
   return { install_strategy: install_strategy as 'npm' | 'npx', install_cmd, verified_at };
 }

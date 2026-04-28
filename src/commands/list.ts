@@ -94,7 +94,15 @@ function collectV3(lock: HarnessLockV3, vRoot: string, git: GitRunner): ListEntr
         state: 'plugin',
       });
     } else {
-      tools.push({ tool: name, repo: entry.install_cmd, lockCommit: '', actualCommit: null, state: 'npx' });
+      // v0.9.3+: lock.version 이 있으면 SHA 칼럼에 semver 표시 ("v1.2.3" 등).
+      const versionLabel = entry.version ? `v${entry.version}` : '';
+      tools.push({
+        tool: name,
+        repo: entry.install_cmd,
+        lockCommit: versionLabel,
+        actualCommit: null,
+        state: 'npx',
+      });
     }
   }
   return tools;
@@ -135,7 +143,8 @@ export function renderList(r: ListReport): string {
       const [lockDisp, actualDisp] = distinguishingPair(t.lockCommit, t.actualCommit);
       shaDisp = `${lockDisp}→${actualDisp}`;
     } else if (t.state === 'npx') {
-      shaDisp = 'npx';
+      // v0.9.3+: lock.version 이 있으면 "v1.2.3", 없으면 'npx'
+      shaDisp = t.lockCommit.startsWith('v') ? t.lockCommit : 'npx';
     } else if (t.state === 'plugin') {
       shaDisp = 'plugin';
     } else {

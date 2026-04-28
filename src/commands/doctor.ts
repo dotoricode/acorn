@@ -15,6 +15,12 @@ import {
 } from '../core/vendors.ts';
 import { vendorsRoot } from '../core/env.ts';
 import { distinguishingPair } from '../core/sha-display.ts';
+import {
+  defaultNpmRunner,
+  compareNpmVersion,
+  extractNpmPackage,
+  type NpmRunner,
+} from '../core/provider-detect.ts';
 
 export type DoctorSeverity = 'critical' | 'warning' | 'info';
 export type DoctorArea =
@@ -53,6 +59,10 @@ export interface DoctorReport {
 
 export interface DoctorOptions extends CollectOptions {
   readonly git?: GitRunner;
+  /** v0.9.3+: npm version drift 검출용. 미주입 시 실제 `npm view` 호출. */
+  readonly npm?: NpmRunner;
+  /** v0.9.3+: npm 비교 자체를 끄는 플래그 (오프라인/속도 우선 환경). */
+  readonly skipNpmVersionCheck?: boolean;
 }
 
 function checkVendorIntegrity(
@@ -426,6 +436,39 @@ function v3ProviderMismatchIssues(status: StatusReport, git: GitRunner): DoctorI
   return out;
 }
 
+/**
+ * v0.9.3+: npm/npx provider version drift 검출.
+ * lock 에 `version` 이 있으면 npm registry 의 latest 와 비교해 warning 출력.
+ * `version` 미설정이거나 npm runner 가 비활성이면 침묵.
+ */
+function npmVersionDriftIssues(
+  status: StatusReport,
+  npm: NpmRunner,
+): DoctorIssue[] {
+  const v3 = status.v3;
+  if (!v3) return [];
+
+  const out: DoctorIssue[] = [];
+  for (const entry of v3.lockProviders) {
+    if (entry.installStrategy !== 'npm' && entry.installStrategy !== 'npx') continue;
+    if (!entry.version || !entry.installCmd) continue;
+    const pkg = extractNpmPackage(entry.installCmd);
+    if (!pkg) continue;
+    const result = compareNpmVersion(entry.version, npm.latestVersion(pkg));
+    if (result.state === 'drift') {
+      out.push({
+        area: 'vendor',
+        severity: 'info', // 정보성 — 사용자가 해당 버전을 의도해서 고정했을 수 있음
+        subject: entry.provider,
+        message: `${entry.provider} npm 버전 drift (${result.detail})`,
+        hint: `의도적 pinning 이면 무시, 업데이트 의향이면 install_cmd 와 lock.version 을 ${result.latestVersion} 로 갱신`,
+      });
+    }
+    // 'match' / 'unknown' 은 silent — drift 만 사용자에게 노출.
+  }
+  return out;
+}
+
 export function runDoctor(opts: DoctorOptions = {}): DoctorReport {
   const status = collectStatus(opts);
   const git = opts.git ?? defaultGitRunner;
@@ -446,6 +489,11 @@ export function runDoctor(opts: DoctorOptions = {}): DoctorReport {
   // v3 capability / provider checks
   issues.push(...capabilityIssues(status));
   issues.push(...v3ProviderMismatchIssues(status, git));
+  // v0.9.3+: npm version drift (선택적, --skip-npm-version-check 로 끔 가능)
+  if (!opts.skipNpmVersionCheck) {
+    const npm = opts.npm ?? defaultNpmRunner();
+    issues.push(...npmVersionDriftIssues(status, npm));
+  }
 
   const summary: DoctorSummary = {
     critical: issues.filter((i) => i.severity === 'critical').length,

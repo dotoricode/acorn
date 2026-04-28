@@ -389,3 +389,82 @@ test('v3: install_strategy 알 수 없는 값 → SCHEMA + 새 enum 메시지', 
   );
 });
 
+// v0.9.3: optional version 필드 (npm/npx)
+test('v3: npm/npx provider 의 version 필드 (semver) 파싱', () => {
+  const lock: HarnessLockV3 = {
+    ...VALID_V3,
+    providers: {
+      ckit: {
+        install_strategy: 'npx',
+        install_cmd: 'npx claudekit@1.2.3',
+        version: '1.2.3',
+        verified_at: '2026-04-28',
+      },
+    },
+  };
+  const parsed = parseLockV3(JSON.stringify(lock));
+  const ck = parsed.providers['ckit'];
+  assert.equal(ck?.install_strategy, 'npx');
+  if (ck?.install_strategy === 'npx') {
+    assert.equal(ck.version, '1.2.3');
+  }
+});
+
+test('v3: version 필드 누락 → 기존 동작 (선택 필드)', () => {
+  const lock: HarnessLockV3 = {
+    ...VALID_V3,
+    providers: {
+      ckit: {
+        install_strategy: 'npx',
+        install_cmd: 'npx claudekit@latest',
+        verified_at: '2026-04-28',
+      },
+    },
+  };
+  const parsed = parseLockV3(JSON.stringify(lock));
+  const ck = parsed.providers['ckit'];
+  assert.equal(ck?.install_strategy, 'npx');
+  if (ck?.install_strategy === 'npx') {
+    assert.equal(ck.version, undefined);
+  }
+});
+
+test('v3: version 형식 위반 → SCHEMA (semver 강제)', () => {
+  const lock = {
+    ...VALID_V3,
+    providers: {
+      bad: {
+        install_strategy: 'npx',
+        install_cmd: 'npx claudekit',
+        version: 'latest',  // semver 가 아님
+        verified_at: '2026-04-28',
+      },
+    },
+  };
+  assert.throws(
+    () => parseLockV3(JSON.stringify(lock)),
+    (e: unknown) => e instanceof LockError && e.code === 'SCHEMA' && /semver/.test(e.message),
+  );
+});
+
+test('v3: prerelease semver 도 허용 (1.2.3-beta.1)', () => {
+  const lock: HarnessLockV3 = {
+    ...VALID_V3,
+    providers: {
+      ckit: {
+        install_strategy: 'npx',
+        install_cmd: 'npx claudekit@1.2.3-beta.1',
+        version: '1.2.3-beta.1',
+        verified_at: '2026-04-28',
+      },
+    },
+  };
+  const parsed = parseLockV3(JSON.stringify(lock));
+  const ck = parsed.providers['ckit'];
+  if (ck?.install_strategy === 'npx') {
+    assert.equal(ck.version, '1.2.3-beta.1');
+  } else {
+    assert.fail('expected npx strategy');
+  }
+});
+

@@ -572,3 +572,129 @@ test('renderDoctor output mentions capability area for v3 issues', () => {
     ws.cleanup();
   }
 });
+
+// v0.9.3: npm version drift detection
+function v3LockWithNpmVersion(version: string): string {
+  return JSON.stringify({
+    schema_version: 3,
+    acorn_version: '0.9.3',
+    capabilities: { hooks: { providers: ['claudekit'] } },
+    providers: {
+      claudekit: {
+        install_strategy: 'npx',
+        install_cmd: 'npx claudekit@latest',
+        version,
+        verified_at: '2026-04-28',
+      },
+    },
+    guard: { mode: 'block', patterns: 'strict' },
+  });
+}
+
+test('v0.9.3 npm version drift: lock 와 latest 일치 → no version issue', () => {
+  const ws = makeWS(v3LockWithNpmVersion('1.2.3'));
+  try {
+    const r = runDoctor({
+      harnessRoot: ws.harnessRoot,
+      claudeRoot: ws.claudeRoot,
+      lockPath: ws.lockPath,
+      settingsPath: ws.settingsPath,
+      git: noopGit(),
+      detectEnv: fakeDetect(['claudekit'], ws.harnessRoot),
+      npm: { latestVersion: () => '1.2.3' },
+    });
+    const versionIssues = r.issues.filter(
+      (i) => i.subject === 'claudekit' && /버전 drift/.test(i.message),
+    );
+    assert.equal(versionIssues.length, 0, '일치할 때 version issue 가 없어야 함');
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('v0.9.3 npm version drift: lock 와 latest 다름 → info issue + 양쪽 표시', () => {
+  const ws = makeWS(v3LockWithNpmVersion('1.2.3'));
+  try {
+    const r = runDoctor({
+      harnessRoot: ws.harnessRoot,
+      claudeRoot: ws.claudeRoot,
+      lockPath: ws.lockPath,
+      settingsPath: ws.settingsPath,
+      git: noopGit(),
+      detectEnv: fakeDetect(['claudekit'], ws.harnessRoot),
+      npm: { latestVersion: () => '1.5.0' },
+    });
+    const versionIssue = r.issues.find(
+      (i) => i.subject === 'claudekit' && /버전 drift/.test(i.message),
+    );
+    assert.ok(versionIssue, 'drift 시 issue 가 있어야 함');
+    assert.equal(versionIssue?.severity, 'info');
+    assert.ok(/1\.2\.3/.test(versionIssue?.message ?? ''));
+    assert.ok(/1\.5\.0/.test(versionIssue?.message ?? ''));
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('v0.9.3 npm version drift: latest=null (네트워크 실패) → silent', () => {
+  const ws = makeWS(v3LockWithNpmVersion('1.2.3'));
+  try {
+    const r = runDoctor({
+      harnessRoot: ws.harnessRoot,
+      claudeRoot: ws.claudeRoot,
+      lockPath: ws.lockPath,
+      settingsPath: ws.settingsPath,
+      git: noopGit(),
+      detectEnv: fakeDetect(['claudekit'], ws.harnessRoot),
+      npm: { latestVersion: () => null },
+    });
+    const versionIssues = r.issues.filter(
+      (i) => i.subject === 'claudekit' && /버전 drift/.test(i.message),
+    );
+    assert.equal(versionIssues.length, 0, 'latest=null 일 때 silent 여야 함 (graceful skip)');
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('v0.9.3 npm version drift: --skip-npm-version-check 등가 옵션 → 비교 자체 스킵', () => {
+  const ws = makeWS(v3LockWithNpmVersion('1.2.3'));
+  let called = 0;
+  try {
+    const r = runDoctor({
+      harnessRoot: ws.harnessRoot,
+      claudeRoot: ws.claudeRoot,
+      lockPath: ws.lockPath,
+      settingsPath: ws.settingsPath,
+      git: noopGit(),
+      detectEnv: fakeDetect(['claudekit'], ws.harnessRoot),
+      npm: { latestVersion: () => { called++; return '9.9.9'; } },
+      skipNpmVersionCheck: true,
+    });
+    assert.equal(called, 0, 'skipNpmVersionCheck=true 일 때 npm runner 호출 없음');
+    const versionIssues = r.issues.filter((i) => /버전 drift/.test(i.message));
+    assert.equal(versionIssues.length, 0);
+  } finally {
+    ws.cleanup();
+  }
+});
+
+test('v0.9.3 npm version drift: lock 에 version 없으면 비교 스킵', () => {
+  // 기존 v3Lock() — version 필드 없음
+  const ws = makeWS(v3Lock());
+  let called = 0;
+  try {
+    runDoctor({
+      harnessRoot: ws.harnessRoot,
+      claudeRoot: ws.claudeRoot,
+      lockPath: ws.lockPath,
+      settingsPath: ws.settingsPath,
+      git: noopGit(),
+      detectEnv: fakeDetect(['claudekit', 'gsd'], ws.harnessRoot),
+      npm: { latestVersion: () => { called++; return '9.9.9'; } },
+    });
+    assert.equal(called, 0, 'version 없으면 npm runner 호출 안 함');
+  } finally {
+    ws.cleanup();
+  }
+});

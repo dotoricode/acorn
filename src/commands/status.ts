@@ -67,6 +67,10 @@ export interface V3ProviderLockEntry {
   readonly provider: string;
   readonly installStrategy: string;
   readonly commit?: string;
+  /** v0.9.3+: npm/npx provider 의 lock semver (선택). doctor 가 npm 비교용. */
+  readonly version?: string;
+  /** v0.9.3+: npm/npx provider 의 install 명령 — npm 패키지 추출용. */
+  readonly installCmd?: string;
 }
 
 export interface V3StatusSection {
@@ -169,7 +173,16 @@ function buildV3Section(lock3: HarnessLockV3, harnessRoot: string, dEnv: DetectE
     if (entry.install_strategy === 'git-clone') {
       return { provider: name, installStrategy: entry.install_strategy, commit: entry.commit };
     }
-    return { provider: name, installStrategy: entry.install_strategy };
+    if (entry.install_strategy === 'plugin-marketplace') {
+      return { provider: name, installStrategy: entry.install_strategy };
+    }
+    // npm | npx
+    return {
+      provider: name,
+      installStrategy: entry.install_strategy,
+      installCmd: entry.install_cmd,
+      ...(entry.version !== undefined ? { version: entry.version } : {}),
+    };
   });
 
   const preset = readPreset(harnessRoot);
