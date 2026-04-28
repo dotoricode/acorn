@@ -70,6 +70,7 @@ import {
 } from '../core/gstack-marker.ts';
 import { seedPhaseDefault, readPhase } from '../core/phase.ts';
 import { applyClaudeMdUpdate, defaultClaudeMdPath } from '../core/claude-md.ts';
+import { AcornError } from '../core/errors.ts';
 
 export type InstallErrorCode =
   | 'IN_PROGRESS'
@@ -82,16 +83,18 @@ export type InstallErrorCode =
   | 'SETTINGS_WRITE'
   | 'LOCK_SEEDED';
 
-export class InstallError extends Error {
-  readonly code: InstallErrorCode;
-  readonly cause?: unknown;
-  readonly hint?: string;
-  constructor(message: string, code: InstallErrorCode, cause?: unknown, hint?: string) {
-    super(message);
+export class InstallError extends AcornError<InstallErrorCode> {
+  // v0.9.4+: AcornError 상속. positional 시그니처 (message, code, cause?, hint?) 보존.
+  // v0.9.4 신규 5번째 매개변수 docsUrl 추가 — 호출 측이 문서 anchor 를 첨부할 수 있다.
+  constructor(
+    message: string,
+    code: InstallErrorCode,
+    cause?: unknown,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'install', code, hint, docsUrl, cause });
     this.name = 'InstallError';
-    this.code = code;
-    this.cause = cause;
-    if (hint !== undefined) this.hint = hint;
   }
 }
 

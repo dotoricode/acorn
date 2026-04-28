@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultHarnessRoot } from './env.ts';
 import { stripBom } from './bom.ts';
+import { AcornError } from './errors.ts';
 
 // ── v2 constants & types ────────────────────────────────────────────────────
 
@@ -121,12 +122,17 @@ export type AnyHarnessLock = HarnessLock | HarnessLockV3;
 
 export type LockErrorCode = 'NOT_FOUND' | 'PARSE' | 'SCHEMA' | 'IO';
 
-export class LockError extends Error {
-  readonly code: LockErrorCode;
-  constructor(message: string, code: LockErrorCode) {
-    super(message);
+export class LockError extends AcornError<LockErrorCode> {
+  // v0.9.4+: AcornError 상속. positional 시그니처 (message, code) 보존.
+  // 선택적 hint/docsUrl 추가 — 호출 측이 적절한 복구 안내를 붙일 수 있다.
+  constructor(
+    message: string,
+    code: LockErrorCode,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'lock', code, hint, docsUrl });
     this.name = 'LockError';
-    this.code = code;
   }
 }
 
@@ -519,14 +525,22 @@ export function parseLock(raw: string): AnyHarnessLock {
 export function readLock(lockPath?: string): AnyHarnessLock {
   const path = lockPath ?? defaultLockPath();
   if (!existsSync(path)) {
-    throw new LockError(`harness.lock 없음: ${path}`, 'NOT_FOUND');
+    throw new LockError(
+      `harness.lock 없음: ${path}`,
+      'NOT_FOUND',
+      `acorn install 을 처음 실행하면 템플릿이 자동 시드됩니다 — 그 뒤 SHA 를 채우고 재실행하세요.`,
+    );
   }
   let raw: string;
   try {
     raw = readFileSync(path, 'utf8');
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    throw new LockError(`읽기 실패: ${path} (${msg})`, 'IO');
+    throw new LockError(
+      `읽기 실패: ${path} (${msg})`,
+      'IO',
+      `파일 권한과 디스크 공간을 확인하세요.`,
+    );
   }
   return parseLock(raw);
 }

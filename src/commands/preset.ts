@@ -11,17 +11,19 @@ import {
   type PresetStatus,
 } from '../core/preset.ts';
 import { type ConfirmFn } from './config.ts';
+import { AcornError } from '../core/errors.ts';
 
 export type PresetErrorCode = 'INVALID_VALUE' | 'IO' | 'CONFIRM_REQUIRED';
 
-export class PresetError extends Error {
-  readonly code: PresetErrorCode;
-  readonly hint?: string;
-  constructor(message: string, code: PresetErrorCode, hint?: string) {
-    super(message);
+export class PresetError extends AcornError<PresetErrorCode> {
+  constructor(
+    message: string,
+    code: PresetErrorCode,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'preset', code, hint, docsUrl });
     this.name = 'PresetError';
-    this.code = code;
-    if (hint !== undefined) this.hint = hint;
   }
 }
 

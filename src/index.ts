@@ -5,11 +5,10 @@ import {
   runInstall,
   runGuidedInstall,
   renderGuidedReport,
-  InstallError,
   defaultGstackSetup,
   type InstallMode,
 } from './commands/install.ts';
-import { runUninstall, UninstallError } from './commands/uninstall.ts';
+import { runUninstall } from './commands/uninstall.ts';
 import {
   collectStatus,
   renderStatus,
@@ -30,18 +29,16 @@ import {
 import { readSync, readFileSync } from 'node:fs';
 import { dirname, join as pathJoin } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LockError, readLock, type HarnessLock } from './core/lock.ts';
+import { readLock, type HarnessLock } from './core/lock.ts';
 import {
   runConfig,
   renderConfigAction,
-  ConfigError,
   type ConfirmFn,
 } from './commands/config.ts';
-import { runPhase, renderPhaseAction, PhaseError } from './commands/phase.ts';
-import { runPreset, renderPresetAction, PresetError } from './commands/preset.ts';
+import { runPhase, renderPhaseAction } from './commands/phase.ts';
+import { runPreset, renderPresetAction } from './commands/preset.ts';
 import { VendorError } from './core/vendors.ts';
-import { SettingsError } from './core/settings.ts';
-import { SymlinkError } from './core/symlink.ts';
+import { AcornError, formatAcornError } from './core/errors.ts';
 
 /**
  * §15 v0.6.0: VERSION 을 package.json 에서 런타임 로드.
@@ -185,58 +182,52 @@ function parseArgs(args: readonly string[]): ParsedArgs {
   return { flags, positional, values };
 }
 
+/**
+ * v0.9.4+: 모든 명시적 acorn 에러는 AcornError 베이스를 상속하므로
+ * 단일 분기로 [namespace/CODE] 헤더 + Hint:/See: 라인을 생성한다.
+ * VendorError 처럼 namespace 외 추가 식별자(tool)가 있는 경우만 별도 분기.
+ */
 function formatError(e: unknown): string {
-  if (e instanceof InstallError) {
-    const head = `[install/${e.code}] ${e.message}`;
-    return e.hint ? `${head}\n   → ${e.hint}` : head;
+  if (e instanceof VendorError) {
+    // 헤더에 tool 을 포함시켜 기존 출력 형식 유지: [vendor/CODE/tool]
+    const head = `[vendor/${e.code}/${e.tool}] ${e.message}`;
+    const lines: string[] = [head];
+    if (e.hint) lines.push(`   Hint: ${e.hint}`);
+    if (e.docsUrl) lines.push(`   See:  ${e.docsUrl}`);
+    return lines.join('\n');
   }
-  if (e instanceof UninstallError) {
-    const head = `[uninstall/${e.code}] ${e.message}`;
-    return e.hint ? `${head}\n   → ${e.hint}` : head;
-  }
-  if (e instanceof ConfigError) {
-    const head = `[config/${e.code}] ${e.message}`;
-    return e.hint ? `${head}\n   → ${e.hint}` : head;
-  }
-  if (e instanceof PhaseError) {
-    const head = `[phase/${e.code}] ${e.message}`;
-    return e.hint ? `${head}\n   → ${e.hint}` : head;
-  }
-  if (e instanceof PresetError) {
-    const head = `[preset/${e.code}] ${e.message}`;
-    return e.hint ? `${head}\n   → ${e.hint}` : head;
-  }
-  if (e instanceof LockError) return `[lock/${e.code}] ${e.message}`;
-  if (e instanceof VendorError) return `[vendor/${e.code}/${e.tool}] ${e.message}`;
-  if (e instanceof SettingsError) return `[settings/${e.code}] ${e.message}`;
-  if (e instanceof SymlinkError) return `[symlink/${e.code}] ${e.message}`;
+  if (e instanceof AcornError) return formatAcornError(e);
   if (e instanceof Error) return e.message;
   return String(e);
 }
 
+/**
+ * v0.9.4+: AcornError 의 namespace+code 조합으로 exit code 매핑.
+ * 매핑은 한 곳에 모아 두기 — 새 namespace/code 가 생기면 여기만 갱신.
+ *
+ * §15 v0.4.3 Round 3 F1: lock SCHEMA/PARSE 는 CONFIG (파일 손상은 사용자 config 문제).
+ * NOT_FOUND/IO 는 인프라 이슈로 FAILURE 유지.
+ */
 function exitFor(e: unknown): number {
-  if (e instanceof InstallError) {
-    if (e.code === 'IN_PROGRESS') return EXIT.IN_PROGRESS;
-    if (e.code === 'SETTINGS_CONFLICT') return EXIT.CONFIG;
+  if (!(e instanceof AcornError)) return EXIT.FAILURE;
+  const ns = e.namespace;
+  const c = e.code;
+  if (ns === 'install') {
+    if (c === 'IN_PROGRESS') return EXIT.IN_PROGRESS;
+    if (c === 'SETTINGS_CONFLICT') return EXIT.CONFIG;
   }
-  // §15 v0.4.3 Round 3 F1: PARSE 도 CONFIG — 파일 손상은 사용자의 config 문제.
-  // 이전엔 SCHEMA 만 CONFIG(78), PARSE 는 FAILURE(1) 로 새어 CI 게이트 일관성이
-  // 깨졌다 (lock validate 가 같은 "lock 파일이 잘못됐다" 를 두 exit 로 보고).
-  // NOT_FOUND/IO 는 인프라 이슈 (파일 부재/권한) 라 FAILURE 로 유지.
-  if (e instanceof LockError && (e.code === 'SCHEMA' || e.code === 'PARSE')) {
-    return EXIT.CONFIG;
+  if (ns === 'lock' && (c === 'SCHEMA' || c === 'PARSE')) return EXIT.CONFIG;
+  if (ns === 'config') {
+    if (c === 'SCHEMA' || c === 'UNKNOWN_KEY') return EXIT.CONFIG;
+    if (c === 'CONFIRM_REQUIRED') return EXIT.USAGE;
   }
-  if (e instanceof ConfigError) {
-    if (e.code === 'SCHEMA' || e.code === 'UNKNOWN_KEY') return EXIT.CONFIG;
-    if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
+  if (ns === 'phase') {
+    if (c === 'INVALID_VALUE') return EXIT.CONFIG;
+    if (c === 'CONFIRM_REQUIRED') return EXIT.USAGE;
   }
-  if (e instanceof PhaseError) {
-    if (e.code === 'INVALID_VALUE') return EXIT.CONFIG;
-    if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
-  }
-  if (e instanceof PresetError) {
-    if (e.code === 'INVALID_VALUE') return EXIT.CONFIG;
-    if (e.code === 'CONFIRM_REQUIRED') return EXIT.USAGE;
+  if (ns === 'preset') {
+    if (c === 'INVALID_VALUE') return EXIT.CONFIG;
+    if (c === 'CONFIRM_REQUIRED') return EXIT.USAGE;
   }
   return EXIT.FAILURE;
 }

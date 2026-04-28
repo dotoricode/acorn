@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-28 (Mac / **v0.9.3 — npm/npx provider version drift 감지**)
+> 마지막 갱신: 2026-04-28 (Mac / **v0.9.4 — AcornError 통합 + 복구 hint 표준화**)
 
 ---
 
@@ -10,9 +10,9 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` |
-| 진행 중 작업 | **v0.9.3 완료**: npm/npx provider 에 optional `version` 필드 (semver) + `compareNpmVersion` 헬퍼 + `extractNpmPackage` 추출 · `acorn doctor` 가 `npm view <pkg> version` 결과를 lock 와 비교해 info-level drift 보고 · `--skip-npm-version-check` 플래그 추가 · `acorn list` 가 npm provider lock 버전 (vX.Y.Z) 노출. |
-| 다음 작업 | **v0.9.4**: AcornError 통합 + 복구 hint 표준화 (errors.ts 신규, 기존 InstallError/LockError/ConfigError/PresetError 마이그레이션). |
-| 테스트 | Mac: **607/607** (0 실패, v0.9.2 기준 590 + npm helpers 7 + lock semver 4 + doctor drift 5 + 기타 1). CI 3-OS matrix 모두 success. |
+| 진행 중 작업 | **v0.9.4 완료**: `src/core/errors.ts` 신규 — `AcornError<TCode>` 베이스 + `formatAcornError` + `isAcornError` + `docsUrl()` 헬퍼. 기존 11 개 에러 클래스 (Install/Lock/Config/Preset/Phase/Uninstall/Vendor/Settings/Symlink/Hooks/ClaudeMd) 가 모두 AcornError 를 상속하도록 마이그레이션 — public 시그니처 (positional args, `.code`, `.name`, 고유 필드) 100% 보존. CLI 에러 렌더링이 `formatAcornError` 단일 진입점으로 통합되어 `[namespace/CODE] message` + `Hint:` / `See:` 라인을 자동 생성. lock NOT_FOUND/IO 에 복구 hint 추가. |
+| 다음 작업 | **v0.9.5**: 사용자 정의 Provider 레지스트리 (`~/.claude/skills/harness/providers/*.json`). |
+| 테스트 | Mac: **627/627** (0 실패, v0.9.3 기준 607 + errors.test.ts 20). CI 3-OS matrix v0.9.3 까지 success. |
 | 로드맵 | `~/.claude-personal/plans/tingly-sprouting-sun.md` — v0.9.1 ~ v0.9.9, v1.0.0 publish 보류 |
 | 릴리스 커밋 체인 | v0.1.0 → … → v0.7.0 → v0.7.1 → v0.7.2 → v0.8.0 → **v0.9.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |

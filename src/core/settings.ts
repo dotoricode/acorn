@@ -17,20 +17,22 @@ import {
 } from './env.ts';
 import { stripBom } from './bom.ts';
 import { backupDirTs } from './time.ts';
+import { AcornError } from './errors.ts';
 
 export type SettingsErrorCode = 'PARSE' | 'CONFLICT' | 'IO';
 
-export class SettingsError extends Error {
-  readonly code: SettingsErrorCode;
+export class SettingsError extends AcornError<SettingsErrorCode> {
+  // v0.9.4+: AcornError 상속. 고유 필드 `conflicts` 보존.
   readonly conflicts?: readonly EnvConflict[] | undefined;
   constructor(
     message: string,
     code: SettingsErrorCode,
     conflicts?: readonly EnvConflict[],
+    hint?: string,
+    docsUrl?: string,
   ) {
-    super(message);
+    super(message, { namespace: 'settings', code, hint, docsUrl });
     this.name = 'SettingsError';
-    this.code = code;
     this.conflicts = conflicts;
   }
 }

@@ -28,6 +28,7 @@ import { defaultHarnessRoot } from '../core/env.ts';
 import { stripBom } from '../core/bom.ts';
 import { backupDirTs } from '../core/time.ts';
 import { beginTx } from '../core/tx.ts';
+import { AcornError } from '../core/errors.ts';
 
 /**
  * §15 v0.3.0 S3 — acorn config 오케스트레이터.
@@ -41,14 +42,16 @@ export type ConfigErrorCode =
   | 'IO'
   | 'CONFIRM_REQUIRED';
 
-export class ConfigError extends Error {
-  readonly code: ConfigErrorCode;
-  readonly hint?: string;
-  constructor(message: string, code: ConfigErrorCode, hint?: string) {
-    super(message);
+export class ConfigError extends AcornError<ConfigErrorCode> {
+  // v0.9.4+: AcornError 상속. positional 시그니처 (message, code, hint?) 보존.
+  constructor(
+    message: string,
+    code: ConfigErrorCode,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'config', code, hint, docsUrl });
     this.name = 'ConfigError';
-    this.code = code;
-    if (hint !== undefined) this.hint = hint;
   }
 }
 

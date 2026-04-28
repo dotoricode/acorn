@@ -12,16 +12,21 @@ import { platform } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { defaultClaudeRoot, defaultHarnessRoot } from './env.ts';
 import { backupDirTs } from './time.ts';
+import { AcornError } from './errors.ts';
 
 export type SymlinkErrorCode = 'NOT_SYMLINK' | 'SOURCE_MISSING' | 'IO';
 
-export class SymlinkError extends Error {
-  readonly code: SymlinkErrorCode;
+export class SymlinkError extends AcornError<SymlinkErrorCode> {
   readonly target: string;
-  constructor(message: string, code: SymlinkErrorCode, target: string) {
-    super(message);
+  constructor(
+    message: string,
+    code: SymlinkErrorCode,
+    target: string,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'symlink', code, hint, docsUrl });
     this.name = 'SymlinkError';
-    this.code = code;
     this.target = target;
   }
 }

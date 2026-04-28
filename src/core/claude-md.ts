@@ -11,18 +11,22 @@ import { dirname, join } from 'node:path';
 import { defaultClaudeRoot, defaultHarnessRoot } from './env.ts';
 import { backupDirTs } from './time.ts';
 import { type Phase } from './phase.ts';
+import { AcornError } from './errors.ts';
 
 export const PHASE_MARKER_START = '<!-- ACORN:PHASE:START -->';
 export const PHASE_MARKER_END = '<!-- ACORN:PHASE:END -->';
 
 export type ClaudeMdErrorCode = 'PARSE' | 'IO' | 'MARKER_CORRUPT';
 
-export class ClaudeMdError extends Error {
-  readonly code: ClaudeMdErrorCode;
-  constructor(message: string, code: ClaudeMdErrorCode) {
-    super(message);
+export class ClaudeMdError extends AcornError<ClaudeMdErrorCode> {
+  constructor(
+    message: string,
+    code: ClaudeMdErrorCode,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'claude-md', code, hint, docsUrl });
     this.name = 'ClaudeMdError';
-    this.code = code;
   }
 }
 

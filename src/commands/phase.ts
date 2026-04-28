@@ -15,17 +15,19 @@ import {
 import { beginTx } from '../core/tx.ts';
 import { backupDirTs } from '../core/time.ts';
 import { type ConfirmFn } from './config.ts';
+import { AcornError } from '../core/errors.ts';
 
 export type PhaseErrorCode = 'INVALID_VALUE' | 'IO' | 'CONFIRM_REQUIRED' | 'CLAUDE_MD';
 
-export class PhaseError extends Error {
-  readonly code: PhaseErrorCode;
-  readonly hint?: string;
-  constructor(message: string, code: PhaseErrorCode, hint?: string) {
-    super(message);
+export class PhaseError extends AcornError<PhaseErrorCode> {
+  constructor(
+    message: string,
+    code: PhaseErrorCode,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'phase', code, hint, docsUrl });
     this.name = 'PhaseError';
-    this.code = code;
-    if (hint !== undefined) this.hint = hint;
   }
 }
 

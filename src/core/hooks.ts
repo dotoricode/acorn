@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { backupDirTs } from './time.ts';
 import { type AnyHarnessLock } from './lock.ts';
+import { AcornError } from './errors.ts';
 
 // ── hooks capability status (v3) ──────────────────────────────────────────────
 
@@ -42,12 +43,15 @@ export function hooksCapabilityStatus(lock: AnyHarnessLock): HooksCapabilityStat
 
 export type HooksErrorCode = 'SOURCE_MISSING' | 'IO';
 
-export class HooksError extends Error {
-  readonly code: HooksErrorCode;
-  constructor(message: string, code: HooksErrorCode) {
-    super(message);
+export class HooksError extends AcornError<HooksErrorCode> {
+  constructor(
+    message: string,
+    code: HooksErrorCode,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'hooks', code, hint, docsUrl });
     this.name = 'HooksError';
-    this.code = code;
   }
 }
 

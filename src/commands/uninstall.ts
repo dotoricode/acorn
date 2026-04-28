@@ -15,17 +15,19 @@ import {
 } from '../core/claude-md.ts';
 import { phaseFilePath } from '../core/env.ts';
 import { backupDirTs } from '../core/time.ts';
+import { AcornError } from '../core/errors.ts';
 
 export type UninstallErrorCode = 'IO';
 
-export class UninstallError extends Error {
-  readonly code: UninstallErrorCode;
-  readonly hint?: string;
-  constructor(message: string, code: UninstallErrorCode, hint?: string) {
-    super(message);
+export class UninstallError extends AcornError<UninstallErrorCode> {
+  constructor(
+    message: string,
+    code: UninstallErrorCode,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'uninstall', code, hint, docsUrl });
     this.name = 'UninstallError';
-    this.code = code;
-    if (hint !== undefined) this.hint = hint;
   }
 }
 

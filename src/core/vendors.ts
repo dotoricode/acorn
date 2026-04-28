@@ -3,6 +3,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultHarnessRoot } from './env.ts';
 import { preAdoptMove } from './adopt.ts';
+import { AcornError } from './errors.ts';
 
 export type VendorErrorCode =
   | 'GIT_MISSING'
@@ -30,13 +31,20 @@ export function isValidToolName(tool: string): boolean {
   return typeof tool === 'string' && TOOL_NAME_RE.test(tool);
 }
 
-export class VendorError extends Error {
-  readonly code: VendorErrorCode;
+export class VendorError extends AcornError<VendorErrorCode> {
+  // v0.9.4+: AcornError 상속. 고유 필드 `tool` 보존.
+  // 헤더는 baseclass 가 `[vendor/CODE]` 로 만들고, 호출 측 (src/index.ts)
+  // 이 tool 정보를 메시지에 합쳐 표시한다.
   readonly tool: string;
-  constructor(message: string, code: VendorErrorCode, tool: string) {
-    super(message);
+  constructor(
+    message: string,
+    code: VendorErrorCode,
+    tool: string,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'vendor', code, hint, docsUrl });
     this.name = 'VendorError';
-    this.code = code;
     this.tool = tool;
   }
 }
