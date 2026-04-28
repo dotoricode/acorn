@@ -1,12 +1,20 @@
 # acorn 사용법
 
-일상적으로 acorn 을 어떻게 꺼내 쓰는지 정리한 치트시트.
+일상적으로 acorn 을 어떻게 꺼내 쓰는지 정리한 치트시트. (v0.9.0+ capability 모델)
 
 > **큰 그림**
-> acorn 은 "설치·검증 도구". 실제 Claude Code 세션에서 OMC / gstack / ECC 스킬을
-> **사용하는 것** 은 Claude Code 자체이지 acorn 이 아니다.
-> acorn 은 **인프라가 흔들릴 때** 꺼내 쓰는 계측·복구 장비다.
+> acorn 은 "capability orchestrator". 실제 Claude Code 세션에서 provider
+> (gstack / superpowers / gsd / claudekit / 사용자 정의) 기능을 **사용하는 것**
+> 은 Claude Code 자체이지 acorn 이 아니다.
+> acorn 은 **선언된 capability ↔ 검증된 provider 매핑** 을 lock 으로 고정하고,
+> drift 가 생겼을 때 꺼내 쓰는 계측·복구 장비다.
 > 하루 5분도 안 쓰는 게 정상이다.
+
+**용어 빠른 정리**
+- **capability**: 원하는 기능 (`hooks`, `planning`, `tdd`, `review`, `qa_ui`, `qa_headless`, `memory`)
+- **provider**: 그 기능을 제공하는 도구 (gstack, superpowers, gsd, claudekit ...)
+- **preset**: capability 묶음 (starter / builder / frontend / backend)
+  - legacy `prototype/dev/production` phase 는 alias 로 자동 매핑됨
 
 ---
 
@@ -330,6 +338,13 @@ acorn install --adopt --yes        # non-TTY/CI
 | `acorn install --adopt` | 기존 수동 설치 흡수 + rename 보존 | 이관 | v0.3.0 |
 | `acorn install --follow-symlink` | 심링크 vendor target HEAD 검증 | dev 환경 | v0.3.0 |
 | `acorn install --yes` | destructive 프롬프트 스킵 | CI | v0.3.1 |
+| `acorn install --mode=guided` | 추천 + plan 만 출력, 변경 없음 | 초기 검토 | v0.9.0 |
+| `acorn install --mode=detect-only` | 설치 상태 감지만 | 트러블슈트 | v0.9.0 |
+| `acorn list` | tool/SHA/상태 간결 나열 | CI | v0.6.0 |
+| `acorn list --json` | 기계 판독용 JSON | jq 파이프 | v0.6.0 |
+| `acorn preset` | 현재 preset 조회 | 수시 | v0.9.0 |
+| `acorn preset list` | 4종 preset 정의 출력 | 처음 | v0.9.0 |
+| `acorn preset <name> [--yes]` | preset 전환 (legacy alias 도 받음) | 작업 단계 변경 | v0.9.0 |
 | `acorn lock validate [path]` | harness.lock schema 검증 | CI gate | v0.2.0 |
 | `acorn config` | guard 현재 설정 요약 | 수시 | v0.3.0 |
 | `acorn config guard.mode <v>` | `block\|warn\|log` 전환 | 개발 중 | v0.3.0 |
@@ -348,14 +363,15 @@ acorn install --adopt --yes        # non-TTY/CI
 
 ## 🎯 Claude Code 세션 안에서는
 
-여기서는 **`acorn` 을 거의 안 친다**. 대신:
+여기서는 **`acorn` 을 거의 안 친다**. 대신 **활성화된 capability ↔ provider** 가 제공하는 스킬·에이전트를 쓴다:
 
-- **gstack 스킬**: `/office-hours` / `/plan-ceo-review` / `/review` / `/ship` / `/qa` ...
-- **OMC 스킬**: `ultrawork` / `ralph` / `autopilot` ...
-- **ECC 에이전트**: `code-reviewer` / `architect` / `tdd-guide` / `security-reviewer` ...
+- **gstack provider** (`planning` / `review` / 일부 `qa_ui`): `/office-hours` / `/plan-ceo-review` / `/review` / `/ship` / `/qa` ...
+- **superpowers provider** (`spec` / `tdd` / `review`): plugin marketplace 로 설치된 명령
+- **gsd provider** (`planning` / `spec`): `npx get-shit-done@latest`
+- **claudekit provider** (`hooks`): `npx claudekit@latest setup --hooks <name>`
+- legacy v2 사용자: **OMC** / **ECC** 도 acorn 이 v0.8 이하 lock 을 계속 인식
 
-이 스킬들이 `~/.claude-personal/skills/*` 심링크로 **이미 연결돼 있어서**
-Claude Code 가 자동 인식한다. acorn 은 그 연결을 만들고 감시하는 역할이다.
+provider 별 자산은 `~/.claude/skills/*` 심링크 또는 `~/.claude/plugins/*` 으로 **이미 연결돼 있어서** Claude Code 가 자동 인식한다. acorn 은 그 연결을 만들고 감시하는 역할이다.
 
 ---
 

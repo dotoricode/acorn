@@ -243,14 +243,19 @@ function exitFor(e: unknown): number {
 
 function cmdInstall(parsed: ParsedArgs, io: CliIO): number {
   try {
-    const modeArg = parsed.values.get('mode') as InstallMode | undefined;
+    const rawModeArg = parsed.values.get('mode');
+    // v0.9.1+: `normal` → `auto` 리네임. 호환성 위해 둘 다 받음.
+    if (rawModeArg === 'normal') {
+      io.stderr(`[install] --mode normal 은 deprecated 입니다. --mode auto 를 사용하세요.`);
+    }
+    const modeArg = rawModeArg === 'normal' ? 'auto' : (rawModeArg as InstallMode | undefined);
     if (modeArg === 'guided' || modeArg === 'detect-only') {
       const report = runGuidedInstall({ mode: modeArg });
       io.stdout(renderGuidedReport(report));
       return EXIT.OK;
     }
-    if (modeArg !== undefined && modeArg !== 'normal') {
-      io.stderr(`[install/ARGS] --mode 값이 잘못되었습니다: "${modeArg}". 허용값: normal, guided, detect-only`);
+    if (modeArg !== undefined && modeArg !== 'auto') {
+      io.stderr(`[install/ARGS] --mode 값이 잘못되었습니다: "${rawModeArg}". 허용값: auto, guided, detect-only`);
       return EXIT.USAGE;
     }
 

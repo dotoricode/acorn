@@ -631,7 +631,11 @@ function runInstallInner(ctx: InnerContext): InstallResult {
 
 // ── guided install (Sprint 04) ────────────────────────────────────────────────
 
-export type InstallMode = 'normal' | 'guided' | 'detect-only';
+/**
+ * v0.9.1+: `auto` 가 기본 (이전 `normal` 의 새 이름).
+ * `normal` 은 deprecated alias 로 cmdInstall 에서 호환 처리됨.
+ */
+export type InstallMode = 'auto' | 'guided' | 'detect-only';
 
 export interface GuidedInstallOptions {
   readonly lockPath?: string;

@@ -195,3 +195,33 @@ test('§15 B3 regression: install --adopt + non-TTY + no --yes → USAGE 차단'
     'ARGS 에러 메시지에 adopt 언급',
   );
 });
+
+// v0.9.1: install --mode 'normal' → 'auto' 리네임 + 호환 alias.
+// parseArgs 는 `--key=value` 형식만 지원 (CLI 일관성).
+test('runCli: install --mode=알수없음 → USAGE + 새 enum 안내 (auto 명시)', () => {
+  const c = capture();
+  const code = runCli(['install', '--mode=bogus'], c.io);
+  assert.equal(code, EXIT.USAGE);
+  assert.ok(
+    c.err.some((l) => /install\/ARGS/.test(l) && /auto, guided, detect-only/.test(l)),
+    '에러 메시지가 새 허용값 (auto, guided, detect-only) 을 안내해야 함',
+  );
+});
+
+test('runCli: install --mode=normal → deprecation 경고 stderr 1줄', () => {
+  // `normal` 은 v0.9.1 부터 deprecated alias. 동작은 auto 와 동일하게 진행되되
+  // stderr 에 "deprecated" 안내가 출력되어야 함. lock 이 없는 환경이라
+  // LOCK_SEEDED 등으로 실패해도 우리는 "deprecation 경고" 한 줄만 검증.
+  const c = capture();
+  process.env['ACORN_HARNESS_ROOT'] = mkdtempSync(join(tmpdir(), 'acorn-mode-alias-'));
+  try {
+    runCli(['install', '--mode=normal'], c.io);
+  } finally {
+    rmSync(process.env['ACORN_HARNESS_ROOT']!, { recursive: true, force: true });
+    delete process.env['ACORN_HARNESS_ROOT'];
+  }
+  assert.ok(
+    c.err.some((l) => /deprecated/.test(l) && /--mode auto/.test(l)),
+    'normal alias 사용 시 deprecation 경고가 stderr 에 노출되어야 함',
+  );
+});

@@ -100,8 +100,13 @@ npm link       # 이후 어디서든 `acorn` 호출 가능
 npm run shim:windows   # .cmd + bash shim 을 $APPDATA/npm/ 에 생성 (junction 없이)
 
 # 3. 일상 사용
-acorn install                     # harness.lock 기준 설치
+acorn install                     # harness.lock 기준 설치 (= --mode=auto)
+acorn install --mode=guided       # 추천 + plan 출력만 (변경 없음, v0.9.0+)
+acorn install --mode=detect-only  # 설치 상태 감지만 (v0.9.0+)
 acorn install --run-gstack-setup  # + gstack setup --host auto 자동 실행
+acorn preset                      # 현재 preset 조회 (v0.9.0+)
+acorn preset list                 # starter/builder/frontend/backend 목록 (v0.9.0+)
+acorn preset builder --yes        # preset 전환 (v0.9.0+)
 acorn status                      # 3툴 + guard + env 요약
 acorn list                        # tool/SHA/상태 간결 나열 (v0.6.0+)
 acorn list --json                 # CI 용 JSON
@@ -123,12 +128,23 @@ acorn config env.reset --yes             # settings.json 에서 env 3키 제거 
 - 각 tool 의 `commit` 을 실제 SHA 로 바꾼 뒤 `acorn install` 을 다시 실행
 
 **install 플래그**
+- `--mode=auto|guided|detect-only` — install 동작 모드 (v0.9.0+, v0.9.1 에서 `normal` → `auto` 리네임)
+  - `auto` (기본): 실제 설치 실행 (provider clone/npx)
+  - `guided`: project profile + recommendation + install plan 출력만, 변경 없음
+  - `detect-only`: 현재 설치 상태 감지 결과만 출력
+  - `normal` 은 v0.9.1+ deprecated alias (auto 로 매핑되며 stderr 안내)
 - `--force` — 이전 `tx.log in_progress` 우회 (수동 검사 후 사용)
 - `--skip-gstack-setup` — gstack setup 콜백 생략
 - `--run-gstack-setup` — `<vendors/gstack>/setup --host auto` 자동 실행 (v0.1.1+) · `--skip` 과 상호 배타
 - `--adopt` — 기존 수동 설치된 vendors/settings 을 비파괴 흡수 (v0.3.0+). non-git 디렉토리는 `<path>.pre-adopt-<ts>/` 로 이동 후 clone, settings 충돌 키는 `env.<key>.pre-adopt-<ts>` 로 이동 후 기대값 덮어쓰기. **v0.3.1+ B3**: destructive rename 이므로 TTY 에선 Y/n 프롬프트, non-TTY + `--yes` 미지정 시 `[install/ARGS]` USAGE 에러로 차단
 - `--follow-symlink` — vendor 경로가 심링크면 target 의 HEAD 를 lock SHA 와 비교 (v0.3.0+). **v0.3.1+ B1**: 미지정 시 심링크를 만나면 `NOT_A_REPO` 로 fail-close (이전 v0.3.0 의 silent preserve 는 lock-as-truth 계약 위반이라 제거됨)
 - `--yes` — destructive 플래그용 확인 프롬프트 스킵 (v0.3.1+, `--adopt` / `config` set 시 non-TTY/CI 에서 필수)
+
+**preset 서브커맨드 (v0.9.0+)**
+- `acorn preset` — 현재 preset 조회 (legacy phase 도 alias 로 자동 해석)
+- `acorn preset list` — 4종 preset 정의 (starter/builder/frontend/backend) 와 capability 매핑 출력
+- `acorn preset <name> [--yes]` — preset 전환. legacy alias 도 받음 (`prototype` → `starter`, `dev` → `builder`, `production` → `builder` + strict guard)
+- preset 변경은 capability 활성화 집합과 phase.txt 를 함께 갱신 (CLAUDE.md 마커도 동기화)
 
 **config 서브커맨드 (v0.3.0+)**
 - `acorn config` — 현재 guard 설정 요약 (mode / patterns)
