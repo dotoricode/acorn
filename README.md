@@ -4,8 +4,9 @@ Claude Code 하네스 CLI — **capability-first** 모델.
 
 원하는 기능(capability)을 선언하면 acorn 이 적합한 제공자(provider)를 격리 설치한다.
 
-> **Status**: **v0.9.5** — capability/provider/preset 모델 (schema v3). `acorn uninstall` (v0.9.0+),
-> 사용자 정의 Provider 레지스트리 + `acorn provider list/add` (v0.9.5+).
+> **Status**: **v0.9.6** — capability/provider/preset 모델 (schema v3). `acorn uninstall` (v0.9.0+),
+> 사용자 정의 Provider 레지스트리 + `acorn provider list/add` (v0.9.5+),
+> v2 → v3 자동 마이그레이션 `acorn migrate` (v0.9.6+).
 >
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
@@ -89,9 +90,28 @@ acorn config provider.allow-custom true --yes
 ## 기존 사용자 마이그레이션 (v0.8 → v0.9)
 
 v0.8 이하 (`schema_version 2`, `prototype/dev/production` phase) 사용자는 **당장 깨지지 않는다.**
-acorn 은 v2 lock 을 계속 파싱하고 설치한다.
+acorn 은 v2 lock 을 계속 파싱하고 설치한다 (deprecation warning 한 줄 출력, v0.9.6+).
 
-새 모델(v3)로 이전하려면:
+**v0.9.6+ 자동 마이그레이션 (권장):**
+
+```bash
+acorn migrate                  # plan 출력 (dry-run, 디스크 변경 없음)
+acorn migrate --auto --yes     # backup → v3 으로 atomic 쓰기 + log 기록
+```
+
+자동 처리되는 것:
+- `gstack` (v2 required) → v3 `gstack` provider (git-clone, commit/repo 보존)
+- `superpowers` (v2 optional) → v3 `superpowers` provider (이전 lock 에 있을 때만)
+- guard mode/patterns 1:1 보존
+- backup: `<harnessRoot>/backup/<ts>/migrate/harness.lock.v2.bak`
+- log: `<harnessRoot>/migrations/v2-to-v3-<ts>.log` (JSON)
+
+자동 처리되지 **않는** 것 (drop + warning):
+- `omc` → Claude Code 내부 plugin marketplace 로 옮겨짐. 필요 시 `/plugin install ...`
+- `ecc` → v3 provider 없음. `vendors/ecc` 디렉토리는 수동 정리.
+- `claude-mem` → memory provider 미안정 (experimental).
+
+**수동 마이그레이션 (대안):**
 
 ```bash
 # 1. harness.lock 을 v3 템플릿으로 교체
@@ -154,6 +174,8 @@ acorn config guard.patterns minimal --yes # 패턴 레벨 변경
 acorn config provider.allow-custom true --yes # 사용자 정의 provider 의 install_cmd 실행 허용 (v0.9.5+)
 acorn provider list               # builtin + 사용자 정의 provider 목록 (v0.9.5+)
 acorn provider add ./my-tool.json # 사용자 정의 provider 등록 (v0.9.5+)
+acorn migrate                     # v2 lock → v3 plan dry-run (v0.9.6+)
+acorn migrate --auto --yes        # backup 후 v3 으로 atomic 쓰기 (v0.9.6+)
 acorn config env.reset --yes             # settings.json 에서 env 3키 제거 (수동 재설치 전 정리)
 ```
 

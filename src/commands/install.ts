@@ -345,6 +345,15 @@ function runInstallInner(ctx: InnerContext): InstallResult {
   const anyLock = readLock(lockPath);
   const isV3 = anyLock.schema_version === 3;
   const lock = isV3 ? null : (anyLock as HarnessLock);
+  // v0.9.6+: v2 lock 은 여전히 동작하지만 deprecation warning 으로 마이그레이션 권장.
+  // 하드 halt 는 사용자 약속 (README 마이그레이션 섹션) 위반이라 escape hatch 로 두고
+  // 침묵하지 않고 한 줄 안내만 출력. 진짜 차단은 v1.0.0 에서 검토.
+  if (!isV3) {
+    log(
+      `      ⚠️  v2 lock (schema_version=${anyLock.schema_version}) 감지 — ` +
+        `v3 마이그레이션 권장: \`acorn migrate --auto --yes\``,
+    );
+  }
 
   // 2. env 계산
   log(`[2/9] env 계산`);

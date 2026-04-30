@@ -42,6 +42,7 @@ import {
   runProviderAdd,
   renderProviderAction,
 } from './commands/provider.ts';
+import { runMigrate, renderMigrateAction } from './commands/migrate.ts';
 import { VendorError } from './core/vendors.ts';
 import { AcornError, formatAcornError } from './core/errors.ts';
 
@@ -100,6 +101,7 @@ Commands:
   phase          현재 phase 조회 / 변경 (prototype|dev|production) (v0.7.0+)
   preset         현재 preset 조회 / 변경 (starter|builder|frontend|backend) (v0.10.0+)
   provider       사용자 정의 provider 레지스트리 (list / add) (v0.9.5+)
+  migrate        v2 → v3 lock 자동 마이그레이션 (--auto / --yes) (v0.9.6+)
 
 Global flags:
   -h, --help      도움말
@@ -141,6 +143,11 @@ provider 서브커맨드 (v0.9.5+):
   acorn provider add <path>           <path> 의 *.json 을 검증 후
                                       <harnessRoot>/providers/<name>.json 으로 복사
   acorn provider add <path> --force   같은 이름이 이미 있으면 덮어쓰기
+
+migrate 플래그 (v0.9.6+):
+  acorn migrate                       v2 → v3 plan 출력 (dry-run, 변경 없음)
+  acorn migrate --auto --yes          backup 후 v3 으로 atomic 쓰기 + log 기록
+                                      log: <harnessRoot>/migrations/v2-to-v3-<ts>.log
 
 config provider 키 (v0.9.5+):
   acorn config provider.allow-custom              현재 정책 조회
@@ -250,6 +257,12 @@ function exitFor(e: unknown): number {
     // v0.9.5+: PARSE/SCHEMA = lock-style → CONFIG, IO = 사용자 환경/입력 → USAGE,
     // CUSTOM_BLOCKED = 정책 위반 → CONFIG (의도적 거부)
     if (c === 'PARSE' || c === 'SCHEMA' || c === 'CUSTOM_BLOCKED') return EXIT.CONFIG;
+    if (c === 'IO') return EXIT.USAGE;
+  }
+  if (ns === 'migrate') {
+    // v0.9.6+: NOT_V2 = 이미 v3 (정상 no-op 가 별도 케이스라 사실상 도달 안 함),
+    // SCHEMA = 손상 lock → CONFIG, IO = 사용자 환경 (TTY 부재 / 경로 누락) → USAGE.
+    if (c === 'SCHEMA' || c === 'NOT_V2') return EXIT.CONFIG;
     if (c === 'IO') return EXIT.USAGE;
   }
   return EXIT.FAILURE;
@@ -486,6 +499,8 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
       return cmdPreset(rest, io);
     case 'provider':
       return cmdProvider(rest, io);
+    case 'migrate':
+      return cmdMigrate(rest, io);
     default:
       io.stderr(`알 수 없는 커맨드: ${head}`);
       io.stderr('');
@@ -556,6 +571,48 @@ function cmdPhase(rest: readonly string[], io: CliIO): number {
     };
     const action = runPhase(value, isTty ? { yes, confirm: confirmFn } : { yes });
     io.stdout(renderPhaseAction(action));
+    return EXIT.OK;
+  } catch (e) {
+    io.stderr(formatError(e));
+    return exitFor(e);
+  }
+}
+
+/**
+ * v0.9.6+: `acorn migrate [--auto] [--yes] [--lock-path PATH]`.
+ * 기본은 dry-run — plan 만 출력. --auto 면 backup → atomic write → log.
+ */
+function cmdMigrate(rest: readonly string[], io: CliIO): number {
+  const parsed = parseArgs(rest);
+  if (parsed.flags.has('h') || parsed.flags.has('help')) {
+    io.stdout('사용법: acorn migrate [--auto] [--yes] [--lock-path PATH]');
+    io.stdout('');
+    io.stdout('  (기본) dry-run: v2 → v3 plan 만 출력, 디스크 변경 없음');
+    io.stdout('  --auto       backup 후 v3 으로 atomic 쓰기 + migrations log');
+    io.stdout('  --yes        Y/n 확인 프롬프트 스킵 (non-TTY/CI 에서 필수)');
+    return EXIT.OK;
+  }
+  try {
+    const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+    const confirmFn: ConfirmFn = (prompt) => {
+      io.stdout(`${prompt} [Y/n]`);
+      const buf = Buffer.alloc(8);
+      try {
+        const n = readSync(0, buf, 0, buf.length, null);
+        const input = buf.slice(0, n).toString('utf8').trim().toLowerCase();
+        return input === '' || input.startsWith('y');
+      } catch {
+        return false;
+      }
+    };
+    const lockPath = parsed.values.get('lock-path');
+    const action = runMigrate({
+      auto: parsed.flags.has('auto'),
+      yes: parsed.flags.has('yes'),
+      ...(lockPath !== undefined ? { lockPath } : {}),
+      ...(isTty ? { confirm: confirmFn } : {}),
+    });
+    io.stdout(renderMigrateAction(action));
     return EXIT.OK;
   } catch (e) {
     io.stderr(formatError(e));
