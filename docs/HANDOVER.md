@@ -1,7 +1,7 @@
 # 작업 인계 (Mac ↔ Windows)
 
 > Mac(회사) 또는 Windows(집)에서 작업을 이어갈 때 참고하는 체크리스트.
-> 마지막 갱신: 2026-04-30 (Mac / **v0.9.6 — v2 → v3 Lock 자동 마이그레이션**)
+> 마지막 갱신: 2026-04-30 (Mac / **v0.9.7 — drift 자동 복구 `doctor --fix`**)
 
 ---
 
@@ -10,9 +10,9 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | `main` |
-| 진행 중 작업 | **v0.9.6 완료**: v2 → v3 Lock 자동 마이그레이션. 신규 `src/core/lock-migrate.ts` 가 v2 의 `gstack`/`superpowers` 를 v3 git-clone provider 로 매핑하고 (commit/repo/verified_at 보존, primary capability 만 활성화), `omc`/`ecc`/`claude-mem` 은 drop + 사용자 친화 reason 으로 warning 출력. 신규 `src/commands/migrate.ts` + `acorn migrate` (기본 dry-run) / `--auto --yes` (backup → atomic write → JSON log 기록). backup 경로 `<harnessRoot>/backup/<ts>/migrate/`, log 경로 `<harnessRoot>/migrations/v2-to-v3-<ts>.log`. tx.log 로 감싸 부분 실패 시 abort. install 진입부에 v2 deprecation warning 1 줄 (하드 halt 는 v1.0.0 에서 검토). CLI exitFor 에 `migrate/*` 매핑 추가. |
-| 다음 작업 | **v0.9.7**: drift 자동 복구 (`acorn doctor --fix`). |
-| 테스트 | Mac: **678/678** (v0.9.5 659 + lock-migrate 19). CI 3-OS matrix v0.9.5 통과. |
+| 진행 중 작업 | **v0.9.7 완료**: drift 자동 복구. 신규 `src/core/recovery.ts` 가 `DoctorIssue` 를 3-tier (safe / interactive / refuse) 로 분류 (`classifyIssue`) + 그룹 실행 (`runRecovery`). safe 다수 → `acorn install` 1 회 호출로 그룹 처리. `refuse` 는 사용자 결정 영역 (vendor dirty / tx 미완료 / ACORN_GUARD_BYPASS / phase.txt 누락 / CLAUDE.md 손상 / npm 버전 drift / Claude Code runtime env). install 의존성은 `reinstall` 콜백 주입으로 순환 import 회피. forensic 은 install tx.log 와 분리된 `<harnessRoot>/recovery.jsonl` (classify/execute/success/failed 마커). `doctor --fix` / `--fix --safe-only` / `--fix --yes` / `--fix --json` 추가. CLI exitFor 에 `recovery/*` 매핑. |
+| 다음 작업 | **v0.9.8**: 로컬 telemetry + `acorn stats` (opt-in, 외부 전송 없음). |
+| 테스트 | Mac: **707/707** (v0.9.6 678 + recovery 29). CI 3-OS matrix v0.9.6 통과. |
 | 로드맵 | `~/.claude-personal/plans/tingly-sprouting-sun.md` — v0.9.1 ~ v0.9.9, v1.0.0 publish 보류 |
 | 릴리스 커밋 체인 | v0.1.0 → … → v0.7.0 → v0.7.1 → v0.7.2 → v0.8.0 → **v0.9.0** |
 | v0.3.1 본문 | `395ec96` CRIT-1 · `4d6a553` B1 · `f46ae42` B2 · `16d6fb4` B3 · `b159bcc` release |

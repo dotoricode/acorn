@@ -4,9 +4,10 @@ Claude Code 하네스 CLI — **capability-first** 모델.
 
 원하는 기능(capability)을 선언하면 acorn 이 적합한 제공자(provider)를 격리 설치한다.
 
-> **Status**: **v0.9.6** — capability/provider/preset 모델 (schema v3). `acorn uninstall` (v0.9.0+),
+> **Status**: **v0.9.7** — capability/provider/preset 모델 (schema v3). `acorn uninstall` (v0.9.0+),
 > 사용자 정의 Provider 레지스트리 + `acorn provider list/add` (v0.9.5+),
-> v2 → v3 자동 마이그레이션 `acorn migrate` (v0.9.6+).
+> v2 → v3 자동 마이그레이션 `acorn migrate` (v0.9.6+),
+> drift 자동 복구 `acorn doctor --fix` (v0.9.7+).
 >
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
@@ -176,6 +177,8 @@ acorn provider list               # builtin + 사용자 정의 provider 목록 (
 acorn provider add ./my-tool.json # 사용자 정의 provider 등록 (v0.9.5+)
 acorn migrate                     # v2 lock → v3 plan dry-run (v0.9.6+)
 acorn migrate --auto --yes        # backup 후 v3 으로 atomic 쓰기 (v0.9.6+)
+acorn doctor --fix                # safe drift 자동 복구 (acorn install 재실행) (v0.9.7+)
+acorn doctor --fix --safe-only    # interactive tier 도 skip (v0.9.7+)
 acorn config env.reset --yes             # settings.json 에서 env 3키 제거 (수동 재설치 전 정리)
 ```
 

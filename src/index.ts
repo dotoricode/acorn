@@ -19,6 +19,8 @@ import {
   runDoctor,
   renderDoctor,
   renderDoctorJson,
+  runDoctorFix,
+  renderDoctorFix,
 } from './commands/doctor.ts';
 import {
   collectList,
@@ -149,6 +151,14 @@ migrate 플래그 (v0.9.6+):
   acorn migrate --auto --yes          backup 후 v3 으로 atomic 쓰기 + log 기록
                                       log: <harnessRoot>/migrations/v2-to-v3-<ts>.log
 
+doctor 플래그 (v0.9.7+):
+  acorn doctor                        진단 + 수동 복구 힌트 (read-only, 기존 동작)
+  acorn doctor --fix                  자동 복구 — safe drift 는 acorn install 재실행으로
+                                      처리, refuse 는 수동 안내 유지
+  acorn doctor --fix --safe-only      interactive tier 도 skip
+  acorn doctor --fix --yes            interactive 도 자동 승인
+  acorn doctor --skip-npm-version-check  npm registry 비교 끔 (오프라인/속도)
+
 config provider 키 (v0.9.5+):
   acorn config provider.allow-custom              현재 정책 조회
   acorn config provider.allow-custom <true|false> 사용자 정의 provider 의
@@ -264,6 +274,12 @@ function exitFor(e: unknown): number {
     // SCHEMA = 손상 lock → CONFIG, IO = 사용자 환경 (TTY 부재 / 경로 누락) → USAGE.
     if (c === 'SCHEMA' || c === 'NOT_V2') return EXIT.CONFIG;
     if (c === 'IO') return EXIT.USAGE;
+  }
+  if (ns === 'recovery') {
+    // v0.9.7+: NO_REINSTALL = caller 미주입 (프로그래밍 에러) → FAILURE.
+    // IO = 환경 설정 미충족 → USAGE.
+    if (c === 'IO') return EXIT.USAGE;
+    if (c === 'NO_REINSTALL') return EXIT.FAILURE;
   }
   return EXIT.FAILURE;
 }
@@ -447,9 +463,60 @@ function cmdDoctor(parsed: ParsedArgs, io: CliIO): number {
   try {
     // §15 M3: doctor 도 runtime env check 활성.
     // v0.9.3+: --skip-npm-version-check 로 npm 비교를 끌 수 있음 (오프라인 / CI 속도).
+    // v0.9.7+: --fix 로 자동 복구 (recovery 모듈 — safe drift 만 자동, refuse 는 안내).
+    const skipNpm = parsed.flags.has('skip-npm-version-check');
+    if (parsed.flags.has('fix')) {
+      const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+      const confirmFn: ConfirmFn = (prompt) => {
+        io.stdout(`${prompt} [Y/n]`);
+        const buf = Buffer.alloc(8);
+        try {
+          const n = readSync(0, buf, 0, buf.length, null);
+          const input = buf.slice(0, n).toString('utf8').trim().toLowerCase();
+          return input === '' || input.startsWith('y');
+        } catch {
+          return false;
+        }
+      };
+      const fixReport = runDoctorFix({
+        runtimeEnv: process.env,
+        skipNpmVersionCheck: skipNpm,
+        safeOnly: parsed.flags.has('safe-only'),
+        yes: parsed.flags.has('yes'),
+        ...(isTty ? { confirm: confirmFn } : {}),
+        logger: (l) => io.stdout(l),
+        // v0.9.7+: install 의존성 주입 — 순환 import 회피.
+        reinstall: () => {
+          runInstall({ logger: (l) => io.stdout(l) });
+        },
+      });
+      if (parsed.flags.has('json')) {
+        io.stdout(
+          JSON.stringify(
+            {
+              initial: { ok: fixReport.initial.ok, summary: fixReport.initial.summary },
+              recovery: {
+                fixed: fixReport.recovery.fixed,
+                skipped: fixReport.recovery.skipped,
+                refused: fixReport.recovery.refused,
+                failed: fixReport.recovery.failed,
+                remaining: fixReport.recovery.remaining,
+                outcomes: fixReport.recovery.outcomes,
+              },
+              after: { ok: fixReport.after.ok, summary: fixReport.after.summary },
+            },
+            null,
+            2,
+          ),
+        );
+      } else {
+        io.stdout(renderDoctorFix(fixReport));
+      }
+      return fixReport.after.ok ? EXIT.OK : EXIT.FAILURE;
+    }
     const r = runDoctor({
       runtimeEnv: process.env,
-      skipNpmVersionCheck: parsed.flags.has('skip-npm-version-check'),
+      skipNpmVersionCheck: skipNpm,
     });
     if (parsed.flags.has('json')) {
       io.stdout(renderDoctorJson(r));

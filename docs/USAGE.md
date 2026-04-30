@@ -355,6 +355,9 @@ acorn install --adopt --yes        # non-TTY/CI
 | `acorn provider add <path> [--force]` | *.json 검증 후 providers/ 로 복사 | 사용자 정의 등록 | v0.9.5 |
 | `acorn migrate` | v2 → v3 plan dry-run | v2 → v3 이전 시 1 회 | v0.9.6 |
 | `acorn migrate --auto --yes` | backup → v3 atomic 쓰기 + log | v2 → v3 이전 시 1 회 | v0.9.6 |
+| `acorn doctor --fix` | safe drift 자동 복구 (install 재실행) | drift 발견 시 | v0.9.7 |
+| `acorn doctor --fix --safe-only` | interactive 도 skip | 자동화 환경 | v0.9.7 |
+| `acorn doctor --fix --json` | initial+recovery+after JSON | CI 모니터링 | v0.9.7 |
 | `acorn phase` | 현재 phase 확인 | 수시 | v0.7.0 |
 | `acorn phase <v> [--yes]` | `prototype\|dev\|production` 전환 | 작업 단계 변경 시 | v0.7.0 |
 | `acorn uninstall --yes` | 전체 언인스톨 (7단계) | 제거 시 | v0.9.0 |

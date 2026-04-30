@@ -21,6 +21,12 @@ import {
   extractNpmPackage,
   type NpmRunner,
 } from '../core/provider-detect.ts';
+import {
+  runRecovery,
+  renderRecoveryReport,
+  type RecoveryReport,
+  type RecoveryRunOptions,
+} from '../core/recovery.ts';
 
 export type DoctorSeverity = 'critical' | 'warning' | 'info';
 export type DoctorArea =
@@ -540,6 +546,60 @@ export function renderDoctor(r: DoctorReport): string {
     lines.push('');
   }
   return lines.join('\n').trimEnd();
+}
+
+// ── --fix 통합 (v0.9.7+) ─────────────────────────────────────────────────────
+
+/**
+ * v0.9.7+: doctor 결과 + recovery 한 묶음. CLI 가 두 번 호출하지 않도록.
+ * recovery 가 install 을 실행한 뒤에는 두번째 doctor pass 를 돌려 잔여 이슈를
+ * 같이 보여준다 — 사용자가 fix 결과를 즉시 확인.
+ */
+export interface DoctorFixReport {
+  readonly initial: DoctorReport;
+  readonly recovery: RecoveryReport;
+  readonly after: DoctorReport;
+}
+
+export interface RunDoctorFixOptions extends DoctorOptions {
+  readonly safeOnly?: boolean;
+  readonly yes?: boolean;
+  readonly confirm?: RecoveryRunOptions['confirm'];
+  readonly logger?: RecoveryRunOptions['logger'];
+  /** install 콜백 — 순환 import 회피. CLI 가 runInstall 을 그대로 전달. */
+  readonly reinstall: RecoveryRunOptions['reinstall'];
+}
+
+export function runDoctorFix(opts: RunDoctorFixOptions): DoctorFixReport {
+  const initial = runDoctor(opts);
+  const recovery = runRecovery({
+    issues: initial.issues,
+    ...(opts.harnessRoot !== undefined ? { harnessRoot: opts.harnessRoot } : {}),
+    ...(opts.safeOnly !== undefined ? { safeOnly: opts.safeOnly } : {}),
+    ...(opts.yes !== undefined ? { yes: opts.yes } : {}),
+    ...(opts.confirm !== undefined ? { confirm: opts.confirm } : {}),
+    ...(opts.logger !== undefined ? { logger: opts.logger } : {}),
+    ...(opts.reinstall !== undefined ? { reinstall: opts.reinstall } : {}),
+  });
+  // recovery 가 install 을 실제로 돌렸을 때만 after pass 가 의미 있음.
+  // 모두 refused/skipped 면 after = initial (다시 검사해도 같음, 비용 절약).
+  const after = recovery.fixed > 0 ? runDoctor(opts) : initial;
+  return { initial, recovery, after };
+}
+
+export function renderDoctorFix(r: DoctorFixReport): string {
+  const lines: string[] = [];
+  lines.push('=== doctor (initial) ===');
+  lines.push(renderDoctor(r.initial));
+  lines.push('');
+  lines.push('=== recovery ===');
+  lines.push(renderRecoveryReport(r.recovery));
+  if (r.after !== r.initial) {
+    lines.push('');
+    lines.push('=== doctor (after fix) ===');
+    lines.push(renderDoctor(r.after));
+  }
+  return lines.join('\n');
 }
 
 export function renderDoctorJson(r: DoctorReport): string {

@@ -25,7 +25,8 @@ src/
 │               qa-headless (v0.9+),
 │               provider-loader (v0.9.5+) — 사용자 정의 provider 병합 + 정책,
 │               errors (v0.9.4+) — AcornError 베이스,
-│               lock-migrate (v0.9.6+) — v2 → v3 자동 마이그레이션
+│               lock-migrate (v0.9.6+) — v2 → v3 자동 마이그레이션,
+│               recovery (v0.9.7+) — drift 분류 + acorn install 재실행 그룹
 │               (registry 는 v1.1+ 연기, 별도 core/guard 모듈 없음 —
 │                guard 정책은 harness.lock + hooks/guard-check.sh 에 존재)
 └── dev/        dotori 전용 커맨드 (check, lock, validate, release) —
@@ -85,6 +86,7 @@ CLAUDE.md:      D:\.claude\CLAUDE.md (ACORN:PHASE 마커 주입, ADR-023)
 providers/:     D:\.claude\skills\harness\providers\<name>.json (v0.9.5+, 사용자 정의 provider)
 config.json:    D:\.claude\skills\harness\config.json (v0.9.5+, provider.allow_custom 등)
 migrations/:    D:\.claude\skills\harness\migrations\v2-to-v3-{ts}.log (v0.9.6+, JSON 마이그 로그)
+recovery.jsonl: D:\.claude\skills\harness\recovery.jsonl (v0.9.7+, doctor --fix forensic JSONL)
 (registry.json 은 §15 M1 로 v1.1+ 연기 — 현재 코드가 read/write 하지 않음)
 
 ## 환경변수 (guard 우선순위)
@@ -147,6 +149,7 @@ acorn provider list                                v0.9.5+: builtin + 사용자 
 acorn provider add <path> [--force]                v0.9.5+: *.json 검증 후 providers/ 로 복사
 acorn migrate                                      v0.9.6+: v2 → v3 plan dry-run
 acorn migrate --auto --yes                         v0.9.6+: backup 후 v3 으로 atomic 쓰기 + log
+acorn doctor --fix [--safe-only|--yes|--json]      v0.9.7+: safe drift 자동 복구 (install 재실행)
 acorn phase                                        v0.7.0+: 현재 phase 조회
 acorn phase <prototype|dev|production> [--yes]     v0.7.0+: phase 전환 + CLAUDE.md 동기화
 acorn uninstall [--yes]                            v0.9.0+: 전체 언인스톨 (7단계)
