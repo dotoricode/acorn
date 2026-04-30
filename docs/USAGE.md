@@ -350,6 +350,9 @@ acorn install --adopt --yes        # non-TTY/CI
 | `acorn config guard.mode <v>` | `block\|warn\|log` 전환 | 개발 중 | v0.3.0 |
 | `acorn config guard.patterns <v>` | `strict\|moderate\|minimal` 전환 | 개발 중 | v0.3.0 |
 | `acorn config env.reset` | env 3키 제거 (다른 키 보존) | 드물게 | v0.3.0 |
+| `acorn config provider.allow-custom <true\|false>` | 사용자 정의 provider 의 install_cmd 실행 허용 | 사용자 정의 등록 시 | v0.9.5 |
+| `acorn provider list` | builtin + 사용자 정의 통합 목록 | 등록 후 검증 | v0.9.5 |
+| `acorn provider add <path> [--force]` | *.json 검증 후 providers/ 로 복사 | 사용자 정의 등록 | v0.9.5 |
 | `acorn phase` | 현재 phase 확인 | 수시 | v0.7.0 |
 | `acorn phase <v> [--yes]` | `prototype\|dev\|production` 전환 | 작업 단계 변경 시 | v0.7.0 |
 | `acorn uninstall --yes` | 전체 언인스톨 (7단계) | 제거 시 | v0.9.0 |

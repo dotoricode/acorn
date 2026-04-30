@@ -23,6 +23,7 @@ import {
   executeV3Providers,
   collectActiveProviders,
   defaultNpxRunner,
+  ProviderExecuteError,
   type NpxRunner,
   type ProviderExecResult,
 } from '../core/provider-execute.ts';
@@ -398,6 +399,9 @@ function runInstallInner(ctx: InnerContext): InstallResult {
         log,
       });
     } catch (e) {
+      // v0.9.5+: custom-provider 차단은 정책 위반(ConfigError 성격) — 그대로 노출.
+      // 그 외 실패만 InstallError/VENDOR 로 wrap.
+      if (e instanceof ProviderExecuteError) throw e;
       throw new InstallError(
         `v3 provider 설치 실패: ${e instanceof Error ? e.message : String(e)}`,
         'VENDOR',

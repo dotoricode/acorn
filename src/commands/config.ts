@@ -29,6 +29,11 @@ import { stripBom } from '../core/bom.ts';
 import { backupDirTs } from '../core/time.ts';
 import { beginTx } from '../core/tx.ts';
 import { AcornError } from '../core/errors.ts';
+import {
+  readProviderPolicy,
+  writeProviderPolicy,
+  defaultAcornConfigPath,
+} from '../core/provider-loader.ts';
 
 /**
  * §15 v0.3.0 S3 — acorn config 오케스트레이터.
@@ -66,7 +71,11 @@ export type ConfigAction =
       backup: string | null;
     }
   | { kind: 'cancelled'; key: string; from?: string; to?: string }
-  | { kind: 'summary'; lock: { guardMode: GuardMode; guardPatterns: GuardPatterns } };
+  | {
+      kind: 'summary';
+      lock: { guardMode: GuardMode; guardPatterns: GuardPatterns };
+      provider: { allowCustom: boolean };
+    };
 
 export type ConfirmFn = (prompt: string) => boolean;
 
@@ -285,10 +294,60 @@ function resetEnv(opts: ConfigOptions): ConfigAction {
 
 function summary(opts: ConfigOptions): ConfigAction {
   const lockPath = opts.lockPath ?? defaultLockPath();
+  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
   const lock = readLock(lockPath);
+  const policy = readProviderPolicy(harnessRoot);
   return {
     kind: 'summary',
     lock: { guardMode: lock.guard.mode, guardPatterns: lock.guard.patterns },
+    provider: { allowCustom: policy.allowCustomProviders },
+  };
+}
+
+// ── provider.allow-custom ────────────────────────────────────────────────────
+
+function getProviderAllowCustom(opts: ConfigOptions): ConfigAction {
+  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
+  const policy = readProviderPolicy(harnessRoot);
+  return {
+    kind: 'get',
+    key: 'provider.allow-custom',
+    value: policy.allowCustomProviders ? 'true' : 'false',
+  };
+}
+
+function setProviderAllowCustom(value: string, opts: ConfigOptions): ConfigAction {
+  if (value !== 'true' && value !== 'false') {
+    throw new ConfigError(
+      `provider.allow-custom: true|false 중 하나여야 합니다 (입력="${value}")`,
+      'SCHEMA',
+    );
+  }
+  const next = value === 'true';
+  const harnessRoot = opts.harnessRoot ?? defaultHarnessRoot();
+  const current = readProviderPolicy(harnessRoot).allowCustomProviders;
+  if (current === next) {
+    return { kind: 'noop', key: 'provider.allow-custom', value };
+  }
+  const prompt = next
+    ? `provider.allow-custom: false → true 변경 — 사용자 정의 provider 의 ` +
+      `install_cmd (임의 shell 명령) 실행이 허용됩니다. 계속하시겠습니까?`
+    : `provider.allow-custom: true → false 변경하시겠습니까?`;
+  if (!requireConfirm(prompt, opts)) {
+    return {
+      kind: 'cancelled',
+      key: 'provider.allow-custom',
+      from: current ? 'true' : 'false',
+      to: value,
+    };
+  }
+  writeProviderPolicy({ allowCustomProviders: next }, harnessRoot);
+  return {
+    kind: 'set',
+    key: 'provider.allow-custom',
+    from: current ? 'true' : 'false',
+    to: value,
+    backup: null,
   };
 }
 
@@ -342,8 +401,15 @@ export function runConfig(
     // env.reset 은 action — value 무시
     return runMutation('config-env.reset', opts, () => resetEnv(opts));
   }
+  if (key === 'provider.allow-custom') {
+    if (value === undefined) return getProviderAllowCustom(opts);
+    return runMutation('config-provider.allow-custom', opts, () =>
+      setProviderAllowCustom(value, opts),
+    );
+  }
   throw new ConfigError(
-    `알 수 없는 config key: "${key}". 지원: guard.mode / guard.patterns / env.reset`,
+    `알 수 없는 config key: "${key}". ` +
+      `지원: guard.mode / guard.patterns / env.reset / provider.allow-custom`,
     'UNKNOWN_KEY',
   );
 }
@@ -371,8 +437,12 @@ export function renderConfigAction(a: ConfigAction): string {
       return `취소됨: ${a.key}${a.from && a.to ? ` (${a.from} → ${a.to})` : ''}`;
     case 'summary':
       return (
-        `guard.mode:     ${a.lock.guardMode}\n` +
-        `guard.patterns: ${a.lock.guardPatterns}`
+        `guard.mode:            ${a.lock.guardMode}\n` +
+        `guard.patterns:        ${a.lock.guardPatterns}\n` +
+        `provider.allow-custom: ${a.provider.allowCustom ? 'true' : 'false'}`
       );
   }
 }
+
+// re-export for convenience (다른 모듈이 acornConfigPath() 를 참조할 때)
+export { defaultAcornConfigPath };

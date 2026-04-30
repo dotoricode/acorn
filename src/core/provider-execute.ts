@@ -2,6 +2,23 @@ import { spawnSync } from 'node:child_process';
 import { installVendor, type GitRunner } from './vendors.ts';
 import { vendorsRoot } from './env.ts';
 import type { HarnessLockV3 } from './lock.ts';
+import { isCustomProvider, getProviderSource } from './providers.ts';
+import { readProviderPolicy } from './provider-loader.ts';
+import { AcornError } from './errors.ts';
+
+export type ProviderExecuteErrorCode = 'CUSTOM_BLOCKED';
+
+export class ProviderExecuteError extends AcornError<ProviderExecuteErrorCode> {
+  constructor(
+    message: string,
+    code: ProviderExecuteErrorCode,
+    hint?: string,
+    docsUrl?: string,
+  ) {
+    super(message, { namespace: 'provider', code, hint, docsUrl });
+    this.name = 'ProviderExecuteError';
+  }
+}
 
 const PLACEHOLDER_SHA = '0'.repeat(40);
 
@@ -55,6 +72,12 @@ export interface ExecuteV3ProvidersOptions {
   readonly followSymlink?: boolean;
   readonly npxRunner?: NpxRunner;
   readonly log: (line: string) => void;
+  /**
+   * v0.9.5+: 사용자 정의 provider (env / user-file 출처) 의 install_cmd 실행 허용 여부.
+   * 미지정 시 `<harnessRoot>/config.json` 의 `provider.allow_custom` 을 읽어 결정.
+   * 기본값은 false — 차단 시 ProviderExecuteError/CUSTOM_BLOCKED throw.
+   */
+  readonly allowCustomProviders?: boolean;
 }
 
 export function executeV3Providers(
@@ -65,6 +88,11 @@ export function executeV3Providers(
   const npx = opts.npxRunner ?? defaultNpxRunner();
   const vRoot = vendorsRoot(opts.harnessRoot);
   const results: ProviderExecResult[] = [];
+
+  // v0.9.5+: 사용자 정의 provider 의 install_cmd 차단 정책. opts 로 명시되면
+  // 그 값을 우선, 아니면 디스크 정책 파일 (`<harnessRoot>/config.json`) 을 읽는다.
+  const allowCustom =
+    opts.allowCustomProviders ?? readProviderPolicy(opts.harnessRoot).allowCustomProviders;
 
   for (const [name, entry] of Object.entries(lock.providers)) {
     if (!active.has(name)) {
@@ -98,6 +126,19 @@ export function executeV3Providers(
       results.push({ provider: name, action: 'plugin-guidance', detail });
       opts.log(`  ${name}: plugin marketplace — ${detail}`);
     } else {
+      // v0.9.5+: 사용자 정의 provider (env / user-file) 의 install_cmd 는 명시
+      // opt-in 이 없으면 차단. lock 의 install_cmd 는 임의 shell 명령으로 실행
+      // 되므로 신뢰할 수 없는 정의를 자동 실행하지 않는다.
+      if (isCustomProvider(name) && !allowCustom) {
+        const source = getProviderSource(name) ?? 'user-file';
+        throw new ProviderExecuteError(
+          `사용자 정의 provider "${name}" (출처: ${source}) 의 install_cmd 가 ` +
+            `정책 (provider.allow_custom=false) 에 의해 차단되었습니다.`,
+          'CUSTOM_BLOCKED',
+          'acorn config provider.allow-custom true --yes 로 명시 opt-in 후 재실행. ' +
+            'install_cmd 가 임의 shell 명령이므로 정의 출처를 검토하세요.',
+        );
+      }
       const cmd = entry.install_cmd;
       try {
         npx.run(cmd);

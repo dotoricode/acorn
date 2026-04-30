@@ -22,7 +22,9 @@ src/
 │               tx, hooks, gstack-marker, sha-display, adopt (v0.3.0+),
 │               phase (v0.7.0+), claude-md (v0.7.0+),
 │               providers, preset, provider-detect, provider-install (v0.9+),
-│               qa-headless (v0.9+)
+│               qa-headless (v0.9+),
+│               provider-loader (v0.9.5+) — 사용자 정의 provider 병합 + 정책,
+│               errors (v0.9.4+) — AcornError 베이스
 │               (registry 는 v1.1+ 연기, 별도 core/guard 모듈 없음 —
 │                guard 정책은 harness.lock + hooks/guard-check.sh 에 존재)
 └── dev/        dotori 전용 커맨드 (check, lock, validate, release) —
@@ -79,6 +81,8 @@ gstack 심링크:  D:\.claude\skills\gstack\ -> vendors\gstack\
 gstack marker:  D:\.claude\skills\harness\.gstack-setup.sha (v0.1.3+ / §15 C3)
 backup:         D:\.claude\skills\harness\backup\{ISO8601}\ (settings / hooks / symlinks / claude-md)
 CLAUDE.md:      D:\.claude\CLAUDE.md (ACORN:PHASE 마커 주입, ADR-023)
+providers/:     D:\.claude\skills\harness\providers\<name>.json (v0.9.5+, 사용자 정의 provider)
+config.json:    D:\.claude\skills\harness\config.json (v0.9.5+, provider.allow_custom 등)
 (registry.json 은 §15 M1 로 v1.1+ 연기 — 현재 코드가 read/write 하지 않음)
 
 ## 환경변수 (guard 우선순위)
@@ -88,6 +92,7 @@ ACORN_PHASE_OVERRIDE=<phase>  phase.txt 무시하고 강제 phase (v0.7.0+)
 ACORN_GUARD_PATTERNS=<level>  phase 유래 patterns 덮어쓰기 (v0.7.0+)
 ACORN_GUARD_MODE=<mode>       lock 유래 mode 덮어쓰기
 ACORN_HARNESS_ROOT=<path>     harnessRoot override
+ACORN_EXTRA_PROVIDERS=<paths> 사용자 정의 provider *.json 경로 (콜론/세미콜론 분리, v0.9.5+)
 ACORN_ALLOW_ANY_REPO=1        lock repo allowlist bypass (fork/dev용)
 
 우선순위: ACORN_GUARD_BYPASS > ACORN_PHASE_OVERRIDE > ACORN_GUARD_PATTERNS
@@ -135,6 +140,9 @@ acorn config                                       v0.3.0+: guard 요약
 acorn config guard.mode <block|warn|log> [--yes]   v0.3.0+
 acorn config guard.patterns <strict|moderate|minimal> [--yes]  v0.3.0+
 acorn config env.reset [--yes]                     v0.3.0+
+acorn config provider.allow-custom <true|false> [--yes]  v0.9.5+: 사용자 정의 provider 의 install_cmd 실행 허용 (기본 false)
+acorn provider list                                v0.9.5+: builtin + 사용자 정의 통합 목록
+acorn provider add <path> [--force]                v0.9.5+: *.json 검증 후 providers/ 로 복사
 acorn phase                                        v0.7.0+: 현재 phase 조회
 acorn phase <prototype|dev|production> [--yes]     v0.7.0+: phase 전환 + CLAUDE.md 동기화
 acorn uninstall [--yes]                            v0.9.0+: 전체 언인스톨 (7단계)

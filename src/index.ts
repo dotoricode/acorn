@@ -37,6 +37,11 @@ import {
 } from './commands/config.ts';
 import { runPhase, renderPhaseAction } from './commands/phase.ts';
 import { runPreset, renderPresetAction } from './commands/preset.ts';
+import {
+  runProviderList,
+  runProviderAdd,
+  renderProviderAction,
+} from './commands/provider.ts';
 import { VendorError } from './core/vendors.ts';
 import { AcornError, formatAcornError } from './core/errors.ts';
 
@@ -94,6 +99,7 @@ Commands:
   config         guard.mode / guard.patterns / env.reset 조작 (v0.3.0+)
   phase          현재 phase 조회 / 변경 (prototype|dev|production) (v0.7.0+)
   preset         현재 preset 조회 / 변경 (starter|builder|frontend|backend) (v0.10.0+)
+  provider       사용자 정의 provider 레지스트리 (list / add) (v0.9.5+)
 
 Global flags:
   -h, --help      도움말
@@ -129,6 +135,17 @@ phase 서브커맨드:
   acorn phase                         현재 phase 조회
   acorn phase <prototype|dev|production>  phase 변경 (Y/n 확인)
   acorn phase <value> --yes           확인 프롬프트 스킵
+
+provider 서브커맨드 (v0.9.5+):
+  acorn provider list                 builtin + env + 사용자 파일 통합 목록
+  acorn provider add <path>           <path> 의 *.json 을 검증 후
+                                      <harnessRoot>/providers/<name>.json 으로 복사
+  acorn provider add <path> --force   같은 이름이 이미 있으면 덮어쓰기
+
+config provider 키 (v0.9.5+):
+  acorn config provider.allow-custom              현재 정책 조회
+  acorn config provider.allow-custom <true|false> 사용자 정의 provider 의
+                                                  install_cmd 실행 허용 여부 (기본 false)
 
 uninstall flags:
   --yes              타이핑 확인 프롬프트 스킵 (non-TTY/CI 에서 필수)
@@ -228,6 +245,12 @@ function exitFor(e: unknown): number {
   if (ns === 'preset') {
     if (c === 'INVALID_VALUE') return EXIT.CONFIG;
     if (c === 'CONFIRM_REQUIRED') return EXIT.USAGE;
+  }
+  if (ns === 'provider') {
+    // v0.9.5+: PARSE/SCHEMA = lock-style → CONFIG, IO = 사용자 환경/입력 → USAGE,
+    // CUSTOM_BLOCKED = 정책 위반 → CONFIG (의도적 거부)
+    if (c === 'PARSE' || c === 'SCHEMA' || c === 'CUSTOM_BLOCKED') return EXIT.CONFIG;
+    if (c === 'IO') return EXIT.USAGE;
   }
   return EXIT.FAILURE;
 }
@@ -461,6 +484,8 @@ export function runCli(argv: readonly string[], io: CliIO = defaultIO): number {
       return cmdPhase(rest, io);
     case 'preset':
       return cmdPreset(rest, io);
+    case 'provider':
+      return cmdProvider(rest, io);
     default:
       io.stderr(`알 수 없는 커맨드: ${head}`);
       io.stderr('');
@@ -532,6 +557,42 @@ function cmdPhase(rest: readonly string[], io: CliIO): number {
     const action = runPhase(value, isTty ? { yes, confirm: confirmFn } : { yes });
     io.stdout(renderPhaseAction(action));
     return EXIT.OK;
+  } catch (e) {
+    io.stderr(formatError(e));
+    return exitFor(e);
+  }
+}
+
+/**
+ * v0.9.5+: `acorn provider <list|add>`.
+ * list   = read-only, builtin/env/user-file 통합 + warning 표시
+ * add    = 검증 후 <harnessRoot>/providers/<name>.json 으로 복사
+ */
+function cmdProvider(rest: readonly string[], io: CliIO): number {
+  const [sub, ...subRest] = rest;
+  if (!sub || sub === '-h' || sub === '--help') {
+    io.stdout('사용법: acorn provider <list|add> [args]');
+    io.stdout('');
+    io.stdout('서브커맨드:');
+    io.stdout('  list                builtin + env + 사용자 파일 통합 목록');
+    io.stdout('  add <path> [--force] *.json 검증 후 providers/ 로 복사');
+    return sub ? EXIT.OK : EXIT.USAGE;
+  }
+  try {
+    if (sub === 'list') {
+      const action = runProviderList();
+      io.stdout(renderProviderAction(action));
+      return EXIT.OK;
+    }
+    if (sub === 'add') {
+      const parsed = parseArgs(subRest);
+      const inputPath = parsed.positional[0];
+      const action = runProviderAdd(inputPath, { force: parsed.flags.has('force') });
+      io.stdout(renderProviderAction(action));
+      return EXIT.OK;
+    }
+    io.stderr(`알 수 없는 provider 서브커맨드: ${sub}`);
+    return EXIT.USAGE;
   } catch (e) {
     io.stderr(formatError(e));
     return exitFor(e);

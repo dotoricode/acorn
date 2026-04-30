@@ -4,7 +4,8 @@ Claude Code 하네스 CLI — **capability-first** 모델.
 
 원하는 기능(capability)을 선언하면 acorn 이 적합한 제공자(provider)를 격리 설치한다.
 
-> **Status**: **v0.9.0** — capability/provider/preset 모델 도입 (schema v3). `acorn uninstall` 도입.
+> **Status**: **v0.9.5** — capability/provider/preset 모델 (schema v3). `acorn uninstall` (v0.9.0+),
+> 사용자 정의 Provider 레지스트리 + `acorn provider list/add` (v0.9.5+).
 >
 > **일상 사용법**: [`docs/USAGE.md`](docs/USAGE.md) ← 처음이면 여기부터
 > 설계 문서: [`docs/acorn-v1-plan.md`](docs/acorn-v1-plan.md)
@@ -33,6 +34,37 @@ Claude Code 하네스 CLI — **capability-first** 모델.
 | superpowers | git-clone | planning, spec |
 | gsd | npx | planning, qa_headless |
 | claudekit | npx | hooks |
+
+#### 사용자 정의 Provider (v0.9.5+)
+
+내장 4 개 외 자체 도구를 등록하려면 `<harnessRoot>/providers/<name>.json` 에 정의를 두거나,
+`ACORN_EXTRA_PROVIDERS=path1[:path2]` 로 외부 경로를 지정한다.
+
+```json
+{
+  "name": "my-review-tool",
+  "displayName": "My Review Tool",
+  "capabilities": [{ "name": "review", "strength": "primary" }],
+  "strategies": ["npx"],
+  "primaryStrategy": "npx",
+  "packageName": "@me/my-review-tool",
+  "command": "my-review-tool"
+}
+```
+
+```bash
+acorn provider add ./my-review-tool.json   # 검증 후 providers/ 로 복사
+acorn provider list                        # builtin + 사용자 정의 통합 목록 + 충돌 warn
+```
+
+**보안**: 사용자 정의 provider 의 `install_cmd` (npx/npm-global 전략) 는 임의 shell 명령을
+실행할 수 있으므로 기본 차단이다. 명시 opt-in 후에만 실행:
+
+```bash
+acorn config provider.allow-custom true --yes
+```
+
+같은 `name` 이 builtin 과 사용자 정의에 모두 있으면 사용자 정의가 우선하고 warning 을 출력한다.
 
 ### Preset — 용도별 capability 묶음
 
@@ -118,6 +150,9 @@ acorn phase production --yes      # phase 변경 (v0.7.0+)
 acorn config                      # 현재 설정 요약 (v0.3.0+)
 acorn config guard.mode warn --yes       # guard 모드 변경 (v0.3.0+)
 acorn config guard.patterns minimal --yes # 패턴 레벨 변경
+acorn config provider.allow-custom true --yes # 사용자 정의 provider 의 install_cmd 실행 허용 (v0.9.5+)
+acorn provider list               # builtin + 사용자 정의 provider 목록 (v0.9.5+)
+acorn provider add ./my-tool.json # 사용자 정의 provider 등록 (v0.9.5+)
 acorn config env.reset --yes             # settings.json 에서 env 3키 제거 (수동 재설치 전 정리)
 ```
 
