@@ -92,7 +92,7 @@ ACORN_PHASE_OVERRIDE=<phase>  phase.txt 무시하고 강제 phase (v0.7.0+)
 ACORN_GUARD_PATTERNS=<level>  phase 유래 patterns 덮어쓰기 (v0.7.0+)
 ACORN_GUARD_MODE=<mode>       lock 유래 mode 덮어쓰기
 ACORN_HARNESS_ROOT=<path>     harnessRoot override
-ACORN_EXTRA_PROVIDERS=<paths> 사용자 정의 provider *.json 경로 (콜론/세미콜론 분리, v0.9.5+)
+ACORN_EXTRA_PROVIDERS=<paths> 사용자 정의 provider *.json 경로 (OS native delimiter — POSIX ":" / Windows ";", v0.9.5+)
 ACORN_ALLOW_ANY_REPO=1        lock repo allowlist bypass (fork/dev용)
 
 우선순위: ACORN_GUARD_BYPASS > ACORN_PHASE_OVERRIDE > ACORN_GUARD_PATTERNS

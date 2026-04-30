@@ -8,7 +8,7 @@ import {
   renameSync,
   unlinkSync,
 } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, delimiter as pathDelimiter, dirname, join } from 'node:path';
 import { defaultHarnessRoot } from './env.ts';
 import { stripBom } from './bom.ts';
 import { CAPABILITY_NAMES, type CapabilityName } from './lock.ts';
@@ -242,9 +242,10 @@ function listJsonFiles(dir: string): readonly string[] {
 }
 
 function parseEnvPaths(raw: string): readonly string[] {
-  // Split on `:` (POSIX) or `;` (Windows). 빈 토큰은 무시.
+  // OS native path delimiter (`;` on Windows, `:` on POSIX). Windows 에서
+  // `:` 로 split 하면 `C:\path` 의 드라이브 콜론이 잘리는 버그 (CI 적발).
   return raw
-    .split(/[:;]/)
+    .split(pathDelimiter)
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
 }

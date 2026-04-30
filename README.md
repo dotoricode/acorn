@@ -38,7 +38,8 @@ Claude Code 하네스 CLI — **capability-first** 모델.
 #### 사용자 정의 Provider (v0.9.5+)
 
 내장 4 개 외 자체 도구를 등록하려면 `<harnessRoot>/providers/<name>.json` 에 정의를 두거나,
-`ACORN_EXTRA_PROVIDERS=path1[:path2]` 로 외부 경로를 지정한다.
+`ACORN_EXTRA_PROVIDERS` 환경변수에 외부 경로를 OS native delimiter (POSIX `:` / Windows `;`)
+로 나열한다.
 
 ```json
 {

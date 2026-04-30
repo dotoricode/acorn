@@ -13,7 +13,7 @@ import {
   existsSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter as pathDelimiter, join } from 'node:path';
 import {
   loadProviders,
   validateProviderDef,
@@ -208,6 +208,46 @@ test('loadProviders: ACORN_EXTRA_PROVIDERS env → 등록 + builtin 우선', () 
     });
     const found = result.providers.find((p) => p.def.name === 'extra-tool');
     assert.equal(found?.source, 'env');
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('loadProviders: ACORN_EXTRA_PROVIDERS 다중 경로 (OS delimiter) → 모두 등록', () => {
+  const w = makeWS();
+  try {
+    const a = join(w.dir, 'a.json');
+    const b = join(w.dir, 'b.json');
+    writeFileSync(a, JSON.stringify({ ...VALID_DEF, name: 'tool-a' }, null, 2), 'utf8');
+    writeFileSync(b, JSON.stringify({ ...VALID_DEF, name: 'tool-b' }, null, 2), 'utf8');
+    // path.delimiter 사용 — POSIX `:` / Windows `;`. 둘 다 native delimiter 면 통과.
+    const result = loadProviders({
+      harnessRoot: w.harnessRoot,
+      env: { ACORN_EXTRA_PROVIDERS: `${a}${pathDelimiter}${b}` },
+      builtins: builtinProviders(),
+    });
+    const names = result.providers.map((p) => p.def.name);
+    assert.ok(names.includes('tool-a'), `tool-a 누락: ${names.join(',')}`);
+    assert.ok(names.includes('tool-b'), `tool-b 누락: ${names.join(',')}`);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test('loadProviders: 단일 절대경로 (Windows 드라이브 letter 포함 시뮬레이션) → 끊기지 않음', () => {
+  const w = makeWS();
+  try {
+    const single = join(w.dir, 'one.json');
+    writeFileSync(single, JSON.stringify({ ...VALID_DEF, name: 'one' }, null, 2), 'utf8');
+    // 단일 경로는 delimiter 가 들어 있어도 안 됨. POSIX 에선 `/`, Windows 에선 `C:\`
+    // 같은 드라이브 콜론이 split 으로 잘리지 않아야 함 — 회귀 확인.
+    const result = loadProviders({
+      harnessRoot: w.harnessRoot,
+      env: { ACORN_EXTRA_PROVIDERS: single },
+      builtins: builtinProviders(),
+    });
+    const found = result.providers.find((p) => p.def.name === 'one');
+    assert.ok(found, `Windows 드라이브 letter 의 ":" 로 split 되면 ENOENT — 회귀 가능`);
   } finally {
     w.cleanup();
   }
